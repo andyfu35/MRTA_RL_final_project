@@ -55,9 +55,35 @@ class SingleRunnerTrainer:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(ppo_cfg["learning_rate"]))
         self.current_round = 0
         self.metrics_path = self.output_dir / "metrics.jsonl"
+        self._collector_envs: list[SingleRunnerArena2D] = []
+        self._collector_obs: list[np.ndarray] = []
 
     def snapshot(self) -> dict[str, torch.Tensor]:
         return snapshot_model(self.model)
+
+    def _ensure_collectors(self) -> None:
+        """Create vector worlds once so unfinished episodes survive PPO update boundaries."""
+        if self._collector_envs:
+            return
+
+        profile = self.cfg["collection"]
+        n_envs = int(profile["parallel_envs"])
+        batches = int(profile["batches"])
+        base_seed = int(self.cfg.get("seed", 0))
+
+        for batch_index in range(batches):
+            # Keep sequential collector batches on disjoint seed ranges. Within each
+            # vector env, VectorArena2D derives each world's map seed from world id
+            # and episode count, so only a completed world advances to a new map.
+            env_seed = base_seed + batch_index * 1_000_000_000
+            env = SingleRunnerArena2D(
+                n_envs,
+                self.cfg["environment"],
+                self.cfg["single_runner_reward"],
+                seed=env_seed,
+            )
+            self._collector_envs.append(env)
+            self._collector_obs.append(env.observe())
 
     def _collect_round(self, round_index: int) -> tuple[RolloutBatch, dict[str, float | int]]:
         profile = self.cfg["collection"]
@@ -71,8 +97,10 @@ class SingleRunnerTrainer:
                 f"single runner collection produces {actual_samples} samples, expected {expected_samples}"
             )
 
-        base_seed = int(self.cfg.get("seed", 0)) + int(round_index) * 1_000_000
-        torch.manual_seed(base_seed)
+        self._ensure_collectors()
+        # Action sampling remains deterministic/reproducible for a given training
+        # seed and PPO round, while map seeds are driven only by world/episode.
+        torch.manual_seed(int(self.cfg.get("seed", 0)) + int(round_index) * 1_000_000)
 
         obs_parts: list[np.ndarray] = []
         action_parts: list[np.ndarray] = []
@@ -81,6 +109,7 @@ class SingleRunnerTrainer:
         advantage_parts: list[np.ndarray] = []
         reward_sum = 0.0
         collision_count = 0
+        timeout_count = 0
         episode_count = 0
         success_count = 0
         seen_map_seeds: set[int] = set()
@@ -89,14 +118,8 @@ class SingleRunnerTrainer:
         gae_lambda = float(self.cfg["ppo"]["gae_lambda"])
 
         for batch_index in range(batches):
-            env_seed = base_seed + batch_index * 10_000
-            env = SingleRunnerArena2D(
-                n_envs,
-                self.cfg["environment"],
-                self.cfg["single_runner_reward"],
-                seed=env_seed,
-            )
-            obs = env.reset(seed=env_seed)
+            env = self._collector_envs[batch_index]
+            obs = self._collector_obs[batch_index]
             seen_map_seeds.update(int(seed) for seed in env.map_seeds.tolist())
 
             obs_buf = np.zeros((rollout_steps, n_envs, self.obs_dim), dtype=np.float32)
@@ -121,20 +144,30 @@ class SingleRunnerTrainer:
                 reward_buf[t] = rewards
                 done_buf[t] = done
                 reward_sum += float(rewards.sum())
-                collision_count += int(info["collision"].sum())
+
+                # Terminal categories are mutually exclusive and follow the same
+                # precedence as the environment terminal reward: goal > collision > timeout.
+                goal_terminal = done & info["goal_reached"]
+                collision_terminal = done & info["collision"] & ~goal_terminal
+                timeout_terminal = done & info["timeout"] & ~goal_terminal & ~collision_terminal
+                success_count += int(goal_terminal.sum())
+                collision_count += int(collision_terminal.sum())
+                timeout_count += int(timeout_terminal.sum())
                 episode_count += int(done.sum())
-                success_count += int((done & info["goal_reached"]).sum())
 
                 with torch.no_grad():
                     next_obs_tensor = torch.from_numpy(next_obs).to(self.device)
                     next_value_buf[t] = self.model.value(next_obs_tensor).cpu().numpy()
 
                 if np.any(done):
+                    # Reset only completed worlds. Every unfinished world keeps its
+                    # pose, step counter, obstacle map, and episode seed across PPO rounds.
                     env.reset_indices(done)
                     seen_map_seeds.update(int(seed) for seed in env.map_seeds[done].tolist())
                     next_obs = env.observe()
                 obs = next_obs
 
+            self._collector_obs[batch_index] = obs
             advantages, returns = _gae(
                 reward_buf,
                 value_buf,
@@ -162,9 +195,14 @@ class SingleRunnerTrainer:
         metrics: dict[str, float | int] = {
             "samples": int(observations.shape[0]),
             "mean_step_reward": reward_sum / max(1, expected_samples),
+            # Preserve the historical per-sample collision metric for old plots.
             "collision_rate": collision_count / max(1, expected_samples),
             "episodes": int(episode_count),
+            "completed_episodes": int(episode_count),
             "successes": int(success_count),
+            "goals": int(success_count),
+            "collisions": int(collision_count),
+            "timeouts": int(timeout_count),
             "success_rate": success_count / max(1, episode_count),
             "parallel_envs": n_envs,
             "unique_map_seeds": len(seen_map_seeds),

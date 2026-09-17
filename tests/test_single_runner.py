@@ -113,3 +113,30 @@ def test_parallel_worlds_use_distinct_map_seeds_and_stochastic_rollout(tmp_path:
     assert metrics['unique_map_seeds'] >= 4
     # PPO training must sample from the policy distribution, not use deterministic means.
     assert metrics['stochastic_action_std'] > 0.0
+
+
+def test_parallel_worlds_persist_across_ppo_rounds_until_done(tmp_path: Path):
+    cfg = make_cfg()
+    cfg['environment']['max_steps'] = 6
+    cfg['training']['samples_per_update'] = 8
+    cfg['collection'] = {'parallel_envs': 2, 'rollout_steps': 4, 'batches': 1}
+    trainer = SingleRunnerTrainer(cfg, output_dir=tmp_path, device='cpu')
+
+    _, first = trainer._collect_round(round_index=0)
+    env = trainer._collector_envs[0]
+    first_seeds = env.map_seeds.copy()
+    assert env.steps.tolist() == [4, 4]
+    assert env.episode_counts.tolist() == [0, 0]
+    assert first['completed_episodes'] == 0
+
+    _, second = trainer._collect_round(round_index=1)
+    # Both worlds continue from step 4, timeout at step 6, reset independently,
+    # then collect the remaining two steps of the new episode.
+    assert trainer._collector_envs[0] is env
+    assert env.episode_counts.tolist() == [1, 1]
+    assert env.steps.tolist() == [2, 2]
+    assert np.all(env.map_seeds == first_seeds + 1)
+    assert second['completed_episodes'] == 2
+    assert second['timeouts'] == 2
+    assert second['goals'] == 0
+    assert second['collisions'] == 0

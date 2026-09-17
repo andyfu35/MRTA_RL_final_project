@@ -22,6 +22,12 @@ Formal baseline:
 - 8192 samples/update.
 - Stochastic action sampling during training.
 - Deterministic action during evaluation.
+- Parallel worlds persist across PPO update boundaries. An unfinished world keeps its pose, step counter, obstacle map, and episode seed into the next PPO round.
+- Only worlds that reach the goal, collide, or timeout are reset. Resetting one world advances only that world's episode/map seed; the other worlds continue unchanged.
+
+This means a PPO update boundary is only a rollout/training boundary, not an episode boundary. For example, with `max_steps=360` and `rollout_steps=256`, a world that is still active after round 1 continues from step 256 in round 2 instead of restarting from the spawn point.
+
+Training metrics include completed episodes, goals, collisions, and timeouts so the success rate is computed from actual terminal episodes rather than from rollout boundaries.
 
 ## Reward Ablation
 
