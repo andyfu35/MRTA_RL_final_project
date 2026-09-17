@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from marl2d import AGENT_IDS
@@ -57,3 +58,8 @@ def test_exchange_supports_explicit_two_agent_set():
     assert exchange.commit(1) is True
     assert exchange.version == 1
     assert set(exchange.get_committed_policy_set()) == set(ids)
+
+
+def test_exchange_rejects_explicit_empty_agent_set():
+    with pytest.raises(ValueError, match='agent_ids'):
+        MockPolicyExchange({}, version=0, agent_ids=[])
