@@ -41,6 +41,24 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("This prototype fixes lidar_rays=8 so observation size remains 21")
     if float(env["dt"]) <= 0 or float(env["wheel_base"]) <= 0 or float(env["wheel_radius"]) <= 0:
         raise ValueError("dt, wheel_base and wheel_radius must be positive")
+    if float(env["width"]) <= 0 or float(env["height"]) <= 0:
+        raise ValueError("environment width and height must be positive")
+
+    obstacles = env.get("obstacles", {})
+    if not isinstance(obstacles, dict):
+        raise ValueError("environment.obstacles must be a mapping")
+    count = int(obstacles.get("count", 0))
+    if count < 0:
+        raise ValueError("environment.obstacles.count must be >= 0")
+    if count > 0:
+        required_obstacle_keys = {"min_width", "max_width", "min_height", "max_height"}
+        missing_obstacle_keys = required_obstacle_keys - set(obstacles)
+        if missing_obstacle_keys:
+            raise ValueError(f"Missing obstacle settings: {sorted(missing_obstacle_keys)}")
+        if not 0 < float(obstacles["min_width"]) <= float(obstacles["max_width"]):
+            raise ValueError("Obstacle width range is invalid")
+        if not 0 < float(obstacles["min_height"]) <= float(obstacles["max_height"]):
+            raise ValueError("Obstacle height range is invalid")
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
