@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,57 @@ def compute_path_efficiency(direct_distance: float, actual_distance: float, succ
     if not success or actual_distance <= 0.0:
         return None
     return float(np.clip(float(direct_distance) / float(actual_distance), 0.0, 1.0))
+
+
+def validation_is_better(candidate: dict[str, Any], best: dict[str, Any] | None) -> bool:
+    """Prefer validation success, then lower collision rate, then higher reward."""
+    if best is None:
+        return True
+    candidate_key = (
+        float(candidate["success_rate"]),
+        -float(candidate["collision_rate"]),
+        float(candidate["mean_episode_reward"]),
+    )
+    best_key = (
+        float(best["success_rate"]),
+        -float(best["collision_rate"]),
+        float(best["mean_episode_reward"]),
+    )
+    return candidate_key > best_key
+
+
+def _snapshot_collector_env(env: SingleRunnerArena2D) -> dict[str, Any]:
+    state: dict[str, Any] = {}
+    for name in (
+        "base_seed",
+        "episode_counts",
+        "map_seeds",
+        "state",
+        "prev_action",
+        "collision",
+        "steps",
+        "obstacles",
+    ):
+        value = getattr(env, name)
+        state[name] = value.copy() if isinstance(value, np.ndarray) else copy.deepcopy(value)
+    state["rng_state"] = copy.deepcopy(env.rng.bit_generator.state)
+    return state
+
+
+def _restore_collector_env(env: SingleRunnerArena2D, state: dict[str, Any]) -> None:
+    env.base_seed = int(state["base_seed"])
+    for name in (
+        "episode_counts",
+        "map_seeds",
+        "state",
+        "prev_action",
+        "collision",
+        "steps",
+        "obstacles",
+    ):
+        target = getattr(env, name)
+        target[...] = np.asarray(state[name], dtype=target.dtype)
+    env.rng.bit_generator.state = copy.deepcopy(state["rng_state"])
 
 
 def _gae(
@@ -57,6 +109,7 @@ class SingleRunnerTrainer:
         self.metrics_path = self.output_dir / "metrics.jsonl"
         self._collector_envs: list[SingleRunnerArena2D] = []
         self._collector_obs: list[np.ndarray] = []
+        self.best_validation: dict[str, Any] | None = None
 
     def snapshot(self) -> dict[str, torch.Tensor]:
         return snapshot_model(self.model)
@@ -217,13 +270,63 @@ class SingleRunnerTrainer:
             {
                 "version": self.current_round,
                 "model": self.snapshot(),
+                "optimizer": self.optimizer.state_dict(),
                 "config": self.cfg,
                 "obs_dim": self.obs_dim,
                 "action_dim": self.action_dim,
+                "collector_states": [_snapshot_collector_env(env) for env in self._collector_envs],
+                "collector_obs": [obs.copy() for obs in self._collector_obs],
+                "best_validation": copy.deepcopy(self.best_validation),
+                "training_state_version": 1,
             },
             checkpoint_path,
         )
         return checkpoint_path
+
+    def resume_from_checkpoint(self, path: str | Path) -> str:
+        data = torch.load(Path(path), map_location=self.device, weights_only=False)
+        if int(data.get("obs_dim", self.obs_dim)) != self.obs_dim or int(
+            data.get("action_dim", self.action_dim)
+        ) != self.action_dim:
+            raise ValueError("Resume checkpoint observation/action dimensions do not match this trainer")
+
+        checkpoint_cfg = data.get("config", {})
+        checkpoint_mode = str(checkpoint_cfg.get("single_runner_reward", {}).get("mode", "")).upper()
+        current_mode = str(self.cfg.get("single_runner_reward", {}).get("mode", "")).upper()
+        if checkpoint_mode and current_mode and checkpoint_mode != current_mode:
+            raise ValueError(
+                f"Resume reward mode mismatch: checkpoint={checkpoint_mode}, current={current_mode}"
+            )
+
+        load_model_snapshot(self.model, data["model"])
+        self.current_round = int(data["version"])
+        self.best_validation = copy.deepcopy(data.get("best_validation"))
+
+        has_full_state = (
+            "optimizer" in data
+            and "collector_states" in data
+            and "collector_obs" in data
+            and int(data.get("training_state_version", 0)) >= 1
+        )
+        if not has_full_state:
+            self._collector_envs = []
+            self._collector_obs = []
+            return "legacy"
+
+        self.optimizer.load_state_dict(data["optimizer"])
+        collector_states = list(data["collector_states"])
+        collector_obs = list(data["collector_obs"])
+        expected_batches = int(self.cfg["collection"]["batches"])
+        if len(collector_states) != expected_batches or len(collector_obs) != expected_batches:
+            raise ValueError("Resume checkpoint collector batch count does not match current config")
+
+        self._collector_envs = []
+        self._collector_obs = []
+        self._ensure_collectors()
+        for env, env_state in zip(self._collector_envs, collector_states):
+            _restore_collector_env(env, env_state)
+        self._collector_obs = [np.asarray(obs, dtype=np.float32).copy() for obs in collector_obs]
+        return "full"
 
     def run(self, rounds: int | None = None) -> list[dict[str, float | int]]:
         if rounds is None:
@@ -244,10 +347,44 @@ class SingleRunnerTrainer:
                 **collection_metrics,
                 **update_metrics,
             }
+
+            is_best = False
+            validation_cfg = self.cfg.get("validation")
+            if validation_cfg:
+                validate_every = int(validation_cfg["every"])
+                if self.current_round % validate_every == 0:
+                    summary = evaluate_single_runner(
+                        self.cfg,
+                        self.snapshot(),
+                        episodes=int(validation_cfg["episodes"]),
+                        seed_start=int(validation_cfg["seed_start"]),
+                        device=str(self.device),
+                    )
+                    record.update(
+                        {
+                            "val_episodes": int(summary["episodes"]),
+                            "val_success_rate": float(summary["success_rate"]),
+                            "val_collision_rate": float(summary["collision_rate"]),
+                            "val_timeout_rate": float(summary["timeout_rate"]),
+                            "val_mean_episode_reward": float(summary["mean_episode_reward"]),
+                        }
+                    )
+                    candidate = {
+                        "round": self.current_round,
+                        "success_rate": float(summary["success_rate"]),
+                        "collision_rate": float(summary["collision_rate"]),
+                        "mean_episode_reward": float(summary["mean_episode_reward"]),
+                    }
+                    if validation_is_better(candidate, self.best_validation):
+                        self.best_validation = candidate
+                        is_best = True
+
             records.append(record)
             with self.metrics_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
             self.save_checkpoint()
+            if is_best:
+                self.save_checkpoint(self.output_dir / "best.pt")
             if self.current_round % checkpoint_every == 0:
                 self.save_checkpoint(self.output_dir / f"round_{self.current_round:05d}.pt")
         return records
@@ -332,12 +469,15 @@ def evaluate_single_runner(
             if efficiency is not None:
                 efficiencies.append(efficiency)
 
+    timeouts = episodes - successes - collision_episodes
     return {
         "episodes": episodes,
         "seeds": seeds,
         "successes": successes,
         "success_rate": successes / episodes,
         "collision_rate": collision_episodes / episodes,
+        "timeouts": timeouts,
+        "timeout_rate": timeouts / episodes,
         "mean_time_to_goal_s": float(np.mean(success_times)) if success_times else None,
         "mean_collisions": float(np.mean(collision_counts)),
         "mean_path_efficiency": float(np.mean(efficiencies)) if efficiencies else None,
