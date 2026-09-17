@@ -19,7 +19,7 @@ def clone_policy_set(
     policy_set: PolicySet,
     agent_ids: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, OrderedDict[str, torch.Tensor]]:
-    ids = tuple(agent_ids or AGENT_IDS)
+    ids = tuple(AGENT_IDS if agent_ids is None else agent_ids)
     return {agent_id: clone_snapshot(policy_set[agent_id]) for agent_id in ids}
 
 
@@ -32,7 +32,7 @@ class MockPolicyExchange:
         version: int = 0,
         agent_ids: tuple[str, ...] | list[str] | None = None,
     ) -> None:
-        self.agent_ids = tuple(agent_ids or AGENT_IDS)
+        self.agent_ids = tuple(AGENT_IDS if agent_ids is None else agent_ids)
         if not self.agent_ids or len(set(self.agent_ids)) != len(self.agent_ids):
             raise ValueError("agent_ids must contain unique agent identifiers")
         if set(initial_policy_set) != set(self.agent_ids):
