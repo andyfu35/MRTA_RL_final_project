@@ -41,6 +41,8 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("This prototype fixes lidar_rays=8 so observation size remains 21")
     if float(env["dt"]) <= 0 or float(env["wheel_base"]) <= 0 or float(env["wheel_radius"]) <= 0:
         raise ValueError("dt, wheel_base and wheel_radius must be positive")
+    if float(env["max_wheel_linear_speed"]) <= 0:
+        raise ValueError("max_wheel_linear_speed must be positive")
     if float(env["width"]) <= 0 or float(env["height"]) <= 0:
         raise ValueError("environment width and height must be positive")
 
@@ -68,4 +70,58 @@ def load_config(path: str | Path) -> dict[str, Any]:
     if not isinstance(cfg, dict):
         raise ValueError("Configuration root must be a mapping")
     validate_config(cfg)
+    return cfg
+
+
+def validate_single_runner_config(cfg: dict[str, Any]) -> None:
+    required = {"environment", "single_runner_reward", "training", "collection", "ppo", "evaluation"}
+    missing = required - set(cfg)
+    if missing:
+        raise ValueError(f"Missing single-runner config sections: {sorted(missing)}")
+
+    env = cfg["environment"]
+    if int(env["lidar_rays"]) != 8:
+        raise ValueError("Single-runner prototype fixes lidar_rays=8 so observation size remains 15")
+    if float(env["dt"]) <= 0 or float(env["wheel_base"]) <= 0 or float(env["wheel_radius"]) <= 0:
+        raise ValueError("dt, wheel_base and wheel_radius must be positive")
+    if float(env["max_wheel_linear_speed"]) <= 0:
+        raise ValueError("max_wheel_linear_speed must be positive")
+
+    reward = cfg["single_runner_reward"]
+    mode = str(reward["mode"]).upper()
+    if mode not in {"R0", "R1", "R2", "R3"}:
+        raise ValueError("single_runner_reward.mode must be one of R0, R1, R2, R3")
+    if float(reward["safety_distance"]) <= 0:
+        raise ValueError("single_runner_reward.safety_distance must be positive")
+    if float(reward["safety_scale"]) < 0:
+        raise ValueError("single_runner_reward.safety_scale must be >= 0")
+
+    samples = int(cfg["training"]["samples_per_update"])
+    if samples <= 0:
+        raise ValueError("training.samples_per_update must be > 0")
+    collection = cfg["collection"]
+    parallel_envs = int(collection["parallel_envs"])
+    rollout_steps = int(collection["rollout_steps"])
+    batches = int(collection["batches"])
+    if min(parallel_envs, rollout_steps, batches) <= 0:
+        raise ValueError("single-runner collection values must be > 0")
+    actual = parallel_envs * rollout_steps * batches
+    if actual != samples:
+        raise ValueError(
+            f"single runner collects {actual} samples/update, expected {samples}; "
+            "parallel_envs * rollout_steps * batches must match samples_per_update"
+        )
+
+    evaluation = cfg["evaluation"]
+    if int(evaluation["episodes"]) <= 0:
+        raise ValueError("evaluation.episodes must be positive")
+
+
+def load_single_runner_config(path: str | Path) -> dict[str, Any]:
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh)
+    if not isinstance(cfg, dict):
+        raise ValueError("Configuration root must be a mapping")
+    validate_single_runner_config(cfg)
     return cfg

@@ -6,6 +6,9 @@ Build a single-machine prototype of a future four-computer ROS2 distributed trai
 ## Scope for this prototype
 - No MuJoCo and no rigid-body physics.
 - Deterministic 2D differential-drive kinematics.
+- 20 x 20 m arena with per-environment random axis-aligned rectangular obstacles.
+- Obstacles avoid spawn/goal safety zones and maintain configurable spacing.
+- Renderer depicts each robot as a body with two explicit wheels and heading marker.
 - Four independent PPO policies: `runner_0`, `runner_1`, `blocker_0`, `blocker_1`.
 - One local process emulates four training computers.
 - Synchronous round-based updates: all four policies train exactly once from the same frozen policy-set version, then all four new policies are committed together.
@@ -15,7 +18,7 @@ Build a single-machine prototype of a future four-computer ROS2 distributed trai
 - Produce a 2D top-view GIF for inspection.
 
 ## Environment
-Robot state is `(x, y, theta)`. Each action is `(left_wheel, right_wheel)` in `[-1, 1]` and is converted to wheel angular velocity using `max_wheel_speed`.
+Robot state is `(x, y, theta)`. Each action is `(left_wheel, right_wheel)` in `[-1, 1]` and is mapped linearly to wheel ground speed using `max_wheel_linear_speed`.
 
 For wheel radius `r`, wheel base `L`, and timestep `dt`:
 
@@ -29,14 +32,14 @@ For wheel radius `r`, wheel base `L`, and timestep `dt`:
 
 `theta_next = wrap(theta + theta_dot*dt)`
 
-Robot-obstacle and robot-robot collision are geometric. A colliding move is rolled back to the previous position and the collision flag is set.
+Robot-obstacle and robot-robot collision are geometric. Obstacles are axis-aligned rectangles; each robot uses a circular collision footprint. A colliding move is rolled back to the previous position and the collision flag is set.
 
 ## Observation
 Each agent receives a fixed-size vector containing:
 - goal position relative to itself in its body frame: 2
 - own heading as `sin(theta), cos(theta)`: 2
 - each of the other three robots as relative body-frame `(dx, dy)`: 6
-- 8 deterministic lidar-like range values against walls and circular obstacles: 8
+- 8 deterministic lidar-like range values against walls and rectangular obstacles: 8
 - collision flag: 1
 - previous wheel action: 2
 

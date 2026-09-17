@@ -9,7 +9,9 @@ environment:
   # Differential-drive kinematics.
   wheel_radius: 0.10
   wheel_base: 0.50
-  max_wheel_speed: 6.0
+  # PPO outputs normalized wheel commands in [-1, 1].
+  # Each command maps linearly to wheel ground speed in m/s.
+  max_wheel_linear_speed: 2.0
 
   # Collision footprint + renderer dimensions.
   robot_radius: 0.30

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import json
 from pathlib import Path
 
 from . import AGENT_IDS
-from .config import load_config
+from .config import load_config, load_single_runner_config, validate_single_runner_config
 from .render import render_policy_set_gif
+from .single_runner import SingleRunnerTrainer, evaluate_single_runner, load_single_runner_checkpoint
 from .trainer import DistributedTrainer, load_checkpoint
 
 
@@ -25,6 +28,20 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--max-steps", type=int, default=None)
     render.add_argument("--device", default="cpu")
     render.add_argument("--config", default=None, help="Optional config override; normally checkpoint config is used")
+
+    single_train = sub.add_parser("single-train", help="Train Experiment 1 single-runner PPO navigation")
+    single_train.add_argument("--config", default="config/single_runner.yaml")
+    single_train.add_argument("--rounds", type=int, default=None)
+    single_train.add_argument("--output", default="runs/single_runner")
+    single_train.add_argument("--device", default="cpu")
+    single_train.add_argument("--reward-mode", choices=("R0", "R1", "R2", "R3"), default=None)
+
+    single_eval = sub.add_parser("single-eval", help="Evaluate a single-runner checkpoint on held-out maps")
+    single_eval.add_argument("--checkpoint", required=True)
+    single_eval.add_argument("--episodes", type=int, default=None)
+    single_eval.add_argument("--seed-start", type=int, default=None)
+    single_eval.add_argument("--device", default="cpu")
+    single_eval.add_argument("--output", default=None, help="Optional JSON file for evaluation summary")
 
     return parser
 
@@ -53,6 +70,51 @@ def main(argv: list[str] | None = None) -> int:
             _print_round(record)
         print(f"\nCheckpoint: {Path(args.output) / 'latest.pt'}")
         print(f"Metrics:    {Path(args.output) / 'metrics.jsonl'}")
+        return 0
+
+    if args.command == "single-train":
+        cfg = load_single_runner_config(args.config)
+        if args.reward_mode is not None:
+            cfg = copy.deepcopy(cfg)
+            cfg["single_runner_reward"]["mode"] = args.reward_mode
+            validate_single_runner_config(cfg)
+        trainer = SingleRunnerTrainer(cfg, output_dir=args.output, device=args.device)
+        records = trainer.run(rounds=args.rounds)
+        for record in records:
+            print(
+                f"round={int(record['round']):4d} "
+                f"samples={int(record['samples']):5d} "
+                f"reward={record['mean_step_reward']:+.4f} "
+                f"episodes={int(record['episodes']):4d} "
+                f"success={record['success_rate']:.3f} "
+                f"maps={int(record['unique_map_seeds']):4d} "
+                f"action_std={record['stochastic_action_std']:.3f}"
+            )
+        print(f"\nReward mode: {cfg['single_runner_reward']['mode']}")
+        print(f"Checkpoint:  {Path(args.output) / 'latest.pt'}")
+        print(f"Metrics:     {Path(args.output) / 'metrics.jsonl'}")
+        return 0
+
+    if args.command == "single-eval":
+        version, snapshot, cfg = load_single_runner_checkpoint(args.checkpoint)
+        evaluation_cfg = cfg["evaluation"]
+        episodes = int(args.episodes if args.episodes is not None else evaluation_cfg["episodes"])
+        seed_start = int(args.seed_start if args.seed_start is not None else evaluation_cfg["seed_start"])
+        summary = evaluate_single_runner(
+            cfg,
+            snapshot,
+            episodes=episodes,
+            seed_start=seed_start,
+            device=args.device,
+        )
+        summary["policy_version"] = version
+        summary["reward_mode"] = cfg["single_runner_reward"]["mode"]
+        text = json.dumps(summary, ensure_ascii=False, indent=2)
+        print(text)
+        if args.output:
+            output_path = Path(args.output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(text + "\n", encoding="utf-8")
         return 0
 
     version, policy_set, checkpoint_cfg = load_checkpoint(args.checkpoint)
