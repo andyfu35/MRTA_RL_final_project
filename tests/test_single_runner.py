@@ -1,12 +1,14 @@
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from marl2d.single_runner import (
     SingleRunnerTrainer,
     compute_path_efficiency,
     evaluate_single_runner,
     load_single_runner_checkpoint,
+    validation_is_better,
 )
 
 
@@ -56,6 +58,15 @@ def make_cfg():
     }
 
 
+def _optimizer_tensors(state_dict):
+    tensors = []
+    for state in state_dict['state'].values():
+        for value in state.values():
+            if torch.is_tensor(value):
+                tensors.append(value.detach().cpu().clone())
+    return tensors
+
+
 def test_single_runner_one_update_writes_checkpoint_and_metrics(tmp_path: Path):
     cfg = make_cfg()
     trainer = SingleRunnerTrainer(cfg, output_dir=tmp_path, device='cpu')
@@ -89,6 +100,8 @@ def test_single_runner_evaluation_uses_held_out_seed_range(tmp_path: Path):
     assert summary['seeds'] == [10000, 10001, 10002]
     assert 0.0 <= summary['success_rate'] <= 1.0
     assert 0.0 <= summary['collision_rate'] <= 1.0
+    assert 0.0 <= summary['timeout_rate'] <= 1.0
+    assert summary['successes'] + summary['timeouts'] <= summary['episodes']
     assert summary['mean_collisions'] >= 0.0
     assert np.isfinite(summary['mean_episode_reward'])
     assert summary['mean_min_clearance_m'] is not None
@@ -140,3 +153,104 @@ def test_parallel_worlds_persist_across_ppo_rounds_until_done(tmp_path: Path):
     assert second['timeouts'] == 2
     assert second['goals'] == 0
     assert second['collisions'] == 0
+
+
+def test_full_resume_restores_optimizer_round_and_persistent_world_state(tmp_path: Path):
+    cfg = make_cfg()
+    cfg['environment']['max_steps'] = 20
+    trainer = SingleRunnerTrainer(cfg, output_dir=tmp_path / 'first', device='cpu')
+    trainer.run(rounds=1)
+    checkpoint = trainer.save_checkpoint(tmp_path / 'resume.pt')
+
+    expected_round = trainer.current_round
+    expected_steps = [env.steps.copy() for env in trainer._collector_envs]
+    expected_episode_counts = [env.episode_counts.copy() for env in trainer._collector_envs]
+    expected_optimizer = _optimizer_tensors(trainer.optimizer.state_dict())
+    assert expected_optimizer
+
+    resumed = SingleRunnerTrainer(cfg, output_dir=tmp_path / 'resumed', device='cpu')
+    mode = resumed.resume_from_checkpoint(checkpoint)
+
+    assert mode == 'full'
+    assert resumed.current_round == expected_round
+    for env, steps, counts in zip(resumed._collector_envs, expected_steps, expected_episode_counts):
+        np.testing.assert_array_equal(env.steps, steps)
+        np.testing.assert_array_equal(env.episode_counts, counts)
+    actual_optimizer = _optimizer_tensors(resumed.optimizer.state_dict())
+    assert len(actual_optimizer) == len(expected_optimizer)
+    for actual, expected in zip(actual_optimizer, expected_optimizer):
+        torch.testing.assert_close(actual, expected)
+
+
+def test_full_resume_reproduces_next_round_exactly(tmp_path: Path):
+    cfg = make_cfg()
+    cfg['environment']['max_steps'] = 20
+    trainer = SingleRunnerTrainer(cfg, output_dir=tmp_path / 'first', device='cpu')
+    trainer.run(rounds=1)
+    checkpoint = trainer.save_checkpoint(tmp_path / 'resume.pt')
+
+    original_record = trainer.run(rounds=1)[0]
+    original_snapshot = trainer.snapshot()
+
+    resumed = SingleRunnerTrainer(cfg, output_dir=tmp_path / 'resumed', device='cpu')
+    assert resumed.resume_from_checkpoint(checkpoint) == 'full'
+    resumed_record = resumed.run(rounds=1)[0]
+
+    for key in ('mean_step_reward', 'success_rate', 'stochastic_action_std', 'policy_loss', 'value_loss'):
+        assert np.isclose(resumed_record[key], original_record[key])
+    for key, expected in original_snapshot.items():
+        torch.testing.assert_close(resumed.snapshot()[key], expected)
+
+
+def test_legacy_resume_loads_model_and_round_with_fresh_training_state(tmp_path: Path):
+    cfg = make_cfg()
+    trainer = SingleRunnerTrainer(cfg, output_dir=tmp_path / 'source', device='cpu')
+    legacy = tmp_path / 'legacy.pt'
+    torch.save(
+        {
+            'version': 50,
+            'model': trainer.snapshot(),
+            'config': cfg,
+            'obs_dim': trainer.obs_dim,
+            'action_dim': trainer.action_dim,
+        },
+        legacy,
+    )
+
+    resumed = SingleRunnerTrainer(cfg, output_dir=tmp_path / 'resumed', device='cpu')
+    mode = resumed.resume_from_checkpoint(legacy)
+
+    assert mode == 'legacy'
+    assert resumed.current_round == 50
+    assert resumed._collector_envs == []
+    assert resumed._collector_obs == []
+
+
+def test_validation_comparator_uses_success_then_collision_then_reward():
+    best = {'success_rate': 0.20, 'collision_rate': 0.10, 'mean_episode_reward': 4.0}
+    assert validation_is_better(
+        {'success_rate': 0.21, 'collision_rate': 0.99, 'mean_episode_reward': -99.0}, best
+    )
+    assert validation_is_better(
+        {'success_rate': 0.20, 'collision_rate': 0.09, 'mean_episode_reward': -99.0}, best
+    )
+    assert validation_is_better(
+        {'success_rate': 0.20, 'collision_rate': 0.10, 'mean_episode_reward': 4.1}, best
+    )
+    assert not validation_is_better(
+        {'success_rate': 0.19, 'collision_rate': 0.0, 'mean_episode_reward': 999.0}, best
+    )
+
+
+def test_validation_runs_on_schedule_and_writes_best_checkpoint(tmp_path: Path):
+    cfg = make_cfg()
+    cfg['validation'] = {'every': 1, 'episodes': 2, 'seed_start': 9000}
+    trainer = SingleRunnerTrainer(cfg, output_dir=tmp_path, device='cpu')
+    record = trainer.run(rounds=1)[0]
+
+    assert record['val_episodes'] == 2
+    assert 0.0 <= record['val_success_rate'] <= 1.0
+    assert 0.0 <= record['val_collision_rate'] <= 1.0
+    assert 0.0 <= record['val_timeout_rate'] <= 1.0
+    assert np.isfinite(record['val_mean_episode_reward'])
+    assert (tmp_path / 'best.pt').exists()
