@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 
 from . import AGENT_IDS
+from .two_runner import TWO_RUNNER_IDS
 
 
 def validate_config(cfg: dict[str, Any]) -> None:
@@ -134,4 +135,81 @@ def load_single_runner_config(path: str | Path) -> dict[str, Any]:
     if not isinstance(cfg, dict):
         raise ValueError("Configuration root must be a mapping")
     validate_single_runner_config(cfg)
+    return cfg
+
+
+def validate_two_runner_config(cfg: dict[str, Any]) -> None:
+    required = {
+        "environment",
+        "two_runner_reward",
+        "training",
+        "collection_profiles",
+        "ppo",
+        "validation",
+        "evaluation",
+        "final_test",
+    }
+    missing = required - set(cfg)
+    if missing:
+        raise ValueError(f"Missing two-runner config sections: {sorted(missing)}")
+
+    env = cfg["environment"]
+    if int(env["lidar_rays"]) != 8:
+        raise ValueError("Two-runner prototype fixes lidar_rays=8 so observation size remains 18")
+    for key in ("dt", "wheel_base", "wheel_radius", "max_wheel_linear_speed", "width", "height"):
+        if float(env[key]) <= 0:
+            raise ValueError(f"environment.{key} must be positive")
+
+    obstacles = env.get("obstacles", {})
+    if not isinstance(obstacles, dict):
+        raise ValueError("environment.obstacles must be a mapping")
+    if int(obstacles.get("count", 0)) < 0:
+        raise ValueError("environment.obstacles.count must be >= 0")
+
+    reward = cfg["two_runner_reward"]
+    required_reward = {
+        "team_success_bonus",
+        "collision_penalty",
+        "timeout_penalty",
+        "self_progress_scale",
+        "team_progress_scale",
+        "step_penalty",
+        "safety_distance",
+        "safety_scale",
+    }
+    missing_reward = required_reward - set(reward)
+    if missing_reward:
+        raise ValueError(f"Missing two-runner reward settings: {sorted(missing_reward)}")
+    if float(reward["safety_distance"]) <= 0:
+        raise ValueError("two_runner_reward.safety_distance must be positive")
+    if float(reward["safety_scale"]) < 0:
+        raise ValueError("two_runner_reward.safety_scale must be >= 0")
+
+    samples = int(cfg["training"]["samples_per_update"])
+    if samples <= 0:
+        raise ValueError("training.samples_per_update must be positive")
+    profiles = cfg["collection_profiles"]
+    if set(profiles) != set(TWO_RUNNER_IDS):
+        raise ValueError(f"collection_profiles must contain exactly {TWO_RUNNER_IDS}")
+    for agent_id in TWO_RUNNER_IDS:
+        if int(profiles[agent_id]["parallel_envs"]) <= 0:
+            raise ValueError(f"{agent_id}.parallel_envs must be positive")
+
+    validation = cfg["validation"]
+    if int(validation["every"]) <= 0:
+        raise ValueError("validation.every must be positive")
+    for section in ("validation", "evaluation", "final_test"):
+        entry = cfg[section]
+        if int(entry["episodes"]) <= 0:
+            raise ValueError(f"{section}.episodes must be positive")
+        int(entry["seed_start"])
+
+
+def load_two_runner_config(path: str | Path) -> dict[str, Any]:
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh)
+    if not isinstance(cfg, dict):
+        raise ValueError("Configuration root must be a mapping")
+    validate_two_runner_config(cfg)
     return cfg

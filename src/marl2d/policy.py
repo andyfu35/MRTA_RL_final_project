@@ -65,3 +65,32 @@ def snapshot_model(model: nn.Module) -> OrderedDict[str, torch.Tensor]:
 
 def load_model_snapshot(model: nn.Module, snapshot: dict[str, torch.Tensor]) -> None:
     model.load_state_dict(snapshot, strict=True)
+
+
+def expand_observation_snapshot(
+    snapshot: dict[str, torch.Tensor],
+    old_obs_dim: int = 15,
+    new_obs_dim: int = 18,
+) -> OrderedDict[str, torch.Tensor]:
+    """Expand the first ActorCritic input layer without changing learned behavior."""
+    old_obs_dim = int(old_obs_dim)
+    new_obs_dim = int(new_obs_dim)
+    if new_obs_dim < old_obs_dim:
+        raise ValueError("new_obs_dim must be >= old_obs_dim")
+    result = OrderedDict((key, value.detach().cpu().clone()) for key, value in snapshot.items())
+    key = "backbone.0.weight"
+    if key not in result:
+        raise ValueError(f"snapshot missing {key}")
+    weight = result[key]
+    if weight.ndim != 2 or int(weight.shape[1]) != old_obs_dim:
+        raise ValueError(
+            f"expected {key} input dimension {old_obs_dim}, got shape {tuple(weight.shape)}"
+        )
+    expanded = torch.zeros(
+        (int(weight.shape[0]), new_obs_dim),
+        dtype=weight.dtype,
+        device=weight.device,
+    )
+    expanded[:, :old_obs_dim] = weight
+    result[key] = expanded
+    return result

@@ -1,0 +1,646 @@
+from __future__ import annotations
+
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Callable
+
+import numpy as np
+import torch
+
+from .policy import ActorCritic, load_model_snapshot, snapshot_model
+from .ppo import RolloutBatch, ppo_update
+from .two_runner_env import TwoRunnerArena2D
+
+TWO_RUNNER_IDS = ("runner_0", "runner_1")
+
+
+@dataclass
+class TargetTransition:
+    observation: np.ndarray
+    action: np.ndarray
+    old_log_prob: float
+    reward: float
+    value: float
+    next_value: float
+
+
+@dataclass
+class FinalizedSample:
+    observation: np.ndarray
+    action: np.ndarray
+    old_log_prob: float
+    reward: float
+    value: float
+    next_value: float
+    done: bool
+    advantage: float
+    return_value: float
+
+
+def finalize_target_trajectory(
+    transitions: list[TargetTransition],
+    *,
+    delayed_team_success: bool,
+    team_success_bonus: float,
+    gamma: float,
+    gae_lambda: float,
+) -> list[FinalizedSample]:
+    if not transitions:
+        return []
+    rewards = [float(item.reward) for item in transitions]
+    if delayed_team_success:
+        rewards[-1] += float(team_success_bonus)
+
+    advantages = [0.0] * len(transitions)
+    gae = 0.0
+    for index in range(len(transitions) - 1, -1, -1):
+        item = transitions[index]
+        done = index == len(transitions) - 1
+        not_done = 0.0 if done else 1.0
+        next_value = 0.0 if done else float(item.next_value)
+        delta = rewards[index] + float(gamma) * next_value * not_done - float(item.value)
+        gae = delta + float(gamma) * float(gae_lambda) * not_done * gae
+        advantages[index] = gae
+
+    finalized: list[FinalizedSample] = []
+    for index, item in enumerate(transitions):
+        done = index == len(transitions) - 1
+        advantage = float(advantages[index])
+        finalized.append(
+            FinalizedSample(
+                observation=np.asarray(item.observation, dtype=np.float32).copy(),
+                action=np.asarray(item.action, dtype=np.float32).copy(),
+                old_log_prob=float(item.old_log_prob),
+                reward=float(rewards[index]),
+                value=float(item.value),
+                next_value=0.0 if done else float(item.next_value),
+                done=done,
+                advantage=advantage,
+                return_value=advantage + float(item.value),
+            )
+        )
+    return finalized
+
+
+class TwoRunnerWorker:
+    obs_dim = 18
+    action_dim = 2
+
+    def __init__(
+        self,
+        agent_id: str,
+        cfg: dict[str, Any],
+        device: str = "cpu",
+        env_factory: Callable[..., Any] = TwoRunnerArena2D,
+    ) -> None:
+        if agent_id not in TWO_RUNNER_IDS:
+            raise ValueError(f"Unknown two-runner agent_id: {agent_id}")
+        self.agent_id = agent_id
+        self.agent_index = TWO_RUNNER_IDS.index(agent_id)
+        self.cfg = cfg
+        self.device = torch.device(device)
+        self.env_factory = env_factory
+        ppo_cfg = cfg["ppo"]
+        self.model = ActorCritic(self.obs_dim, self.action_dim, ppo_cfg["hidden_sizes"]).to(self.device)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(ppo_cfg["learning_rate"]))
+        self._collector_env: Any | None = None
+        self._collector_obs: np.ndarray | None = None
+        self.pending_trajectories: list[list[TargetTransition]] = []
+        self.finalized_queue: deque[FinalizedSample] = deque()
+
+    def _ensure_collector(self) -> None:
+        if self._collector_env is not None:
+            return
+        n_envs = int(self.cfg["collection_profiles"][self.agent_id]["parallel_envs"])
+        base_seed = int(self.cfg.get("seed", 0)) + self.agent_index * 100_000
+        self._collector_env = self.env_factory(
+            n_envs,
+            self.cfg["environment"],
+            self.cfg["two_runner_reward"],
+            seed=base_seed,
+        )
+        self._collector_obs = self._collector_env.observe()
+        self.pending_trajectories = [[] for _ in range(n_envs)]
+
+    def _models_from_policy_set(self, policy_set: dict[str, dict[str, torch.Tensor]]) -> dict[str, ActorCritic]:
+        if set(policy_set) != set(TWO_RUNNER_IDS):
+            raise ValueError(f"policy_set must contain exactly {TWO_RUNNER_IDS}")
+        result: dict[str, ActorCritic] = {}
+        hidden = self.cfg["ppo"]["hidden_sizes"]
+        for agent_id in TWO_RUNNER_IDS:
+            model = ActorCritic(self.obs_dim, self.action_dim, hidden).to(self.device)
+            load_model_snapshot(model, policy_set[agent_id])
+            model.eval()
+            result[agent_id] = model
+        return result
+
+    def _finalize_env(self, env_index: int, delayed_team_success: bool) -> int:
+        trajectory = self.pending_trajectories[env_index]
+        finalized = finalize_target_trajectory(
+            trajectory,
+            delayed_team_success=bool(delayed_team_success),
+            team_success_bonus=float(self.cfg["two_runner_reward"]["team_success_bonus"]),
+            gamma=float(self.cfg["ppo"]["gamma"]),
+            gae_lambda=float(self.cfg["ppo"]["gae_lambda"]),
+        )
+        self.finalized_queue.extend(finalized)
+        self.pending_trajectories[env_index] = []
+        return len(finalized)
+
+    def collect_round(
+        self,
+        frozen_policy_set: dict[str, dict[str, torch.Tensor]],
+        round_index: int,
+    ) -> tuple[RolloutBatch, dict[str, float | int]]:
+        expected_samples = int(self.cfg["training"]["samples_per_update"])
+        if expected_samples <= 0:
+            raise ValueError("training.samples_per_update must be positive")
+        self._ensure_collector()
+        assert self._collector_env is not None and self._collector_obs is not None
+        env = self._collector_env
+
+        # A PPO round must never consume samples generated by an older frozen
+        # policy set. Round boundaries are therefore clean: pending trajectories
+        # are drained before the previous round returns, and surplus samples are
+        # discarded instead of carried into the next update.
+        if self.finalized_queue or any(self.pending_trajectories):
+            raise RuntimeError("two-runner collector crossed a PPO round boundary with stale samples")
+
+        models = self._models_from_policy_set(frozen_policy_set)
+        target_model = models[self.agent_id]
+        round_seed = int(self.cfg.get("seed", 0)) + self.agent_index * 100_000 + int(round_index) * 1_000_000
+        torch.manual_seed(round_seed)
+
+        simulator_steps = 0
+        completed_team_episodes = 0
+        target_deaths = 0
+        target_goal_contributions = 0
+        delayed_team_credits = 0
+        unique_map_seeds: set[int] = set()
+        draining = False
+        active_episode_mask = np.ones(int(env.num_envs), dtype=bool)
+
+        while True:
+            obs = self._collector_obs
+            alive_before = np.asarray(env.alive, dtype=bool).copy()
+            n_envs = int(env.num_envs)
+            step_mask = active_episode_mask if draining else np.ones(n_envs, dtype=bool)
+            all_actions = np.zeros((n_envs, 2, 2), dtype=np.float32)
+            target_actions = np.zeros((n_envs, 2), dtype=np.float32)
+            target_log_probs = np.zeros(n_envs, dtype=np.float32)
+            target_values = np.zeros(n_envs, dtype=np.float32)
+
+            for agent_index, agent_id in enumerate(TWO_RUNNER_IDS):
+                alive_mask = alive_before[:, agent_index] & step_mask
+                if not np.any(alive_mask):
+                    continue
+                obs_tensor = torch.from_numpy(obs[alive_mask, agent_index, :]).to(self.device)
+                with torch.no_grad():
+                    action, log_prob, value = models[agent_id].sample(obs_tensor)
+                action_np = action.cpu().numpy()
+                all_actions[alive_mask, agent_index, :] = action_np
+                if agent_index == self.agent_index:
+                    target_actions[alive_mask] = action_np
+                    target_log_probs[alive_mask] = log_prob.cpu().numpy()
+                    target_values[alive_mask] = value.cpu().numpy()
+
+            next_obs, rewards, done, info = env.step(all_actions)
+            simulator_steps += n_envs
+            unique_map_seeds.update(int(x) for x in np.asarray(info.get("map_seed", env.map_seeds)).tolist())
+
+            with torch.no_grad():
+                next_values = target_model.value(
+                    torch.from_numpy(next_obs[:, self.agent_index, :]).to(self.device)
+                ).cpu().numpy()
+
+            target_alive_before = (
+                np.asarray(info["alive_before"], dtype=bool)[:, self.agent_index] & step_mask
+            )
+            for env_index in np.flatnonzero(target_alive_before):
+                self.pending_trajectories[int(env_index)].append(
+                    TargetTransition(
+                        observation=obs[env_index, self.agent_index, :],
+                        action=target_actions[env_index],
+                        old_log_prob=float(target_log_probs[env_index]),
+                        reward=float(rewards[env_index, self.agent_index]),
+                        value=float(target_values[env_index]),
+                        next_value=float(next_values[env_index]),
+                    )
+                )
+
+            new_death = np.asarray(info["new_death"], dtype=bool)[:, self.agent_index] & step_mask
+            target_deaths += int(new_death.sum())
+            goal_reached = np.asarray(info["goal_reached"], dtype=bool)[:, self.agent_index] & step_mask
+            target_goal_contributions += int(goal_reached.sum())
+
+            effective_done = np.asarray(done, dtype=bool) & step_mask
+            for env_index in np.flatnonzero(effective_done):
+                env_index = int(env_index)
+                completed_team_episodes += 1
+                team_success = bool(np.asarray(info["team_success"])[env_index])
+                target_was_alive = bool(np.asarray(info["alive_before"])[env_index, self.agent_index])
+                delayed = team_success and not target_was_alive
+                if delayed:
+                    delayed_team_credits += 1
+                self._finalize_env(env_index, delayed_team_success=delayed)
+
+            if not draining and len(self.finalized_queue) >= expected_samples:
+                # Do not launch any new episodes after the round has enough
+                # finalized data. Existing episodes are allowed to terminate so
+                # delayed team credit becomes known under this same policy set.
+                draining = True
+                active_episode_mask = ~effective_done
+                if not np.any(active_episode_mask):
+                    self._collector_obs = next_obs
+                    break
+            elif draining:
+                active_episode_mask &= ~effective_done
+                if not np.any(active_episode_mask):
+                    self._collector_obs = next_obs
+                    break
+            else:
+                if np.any(effective_done):
+                    env.reset_indices(effective_done)
+                    next_obs = env.observe()
+
+            self._collector_obs = next_obs
+
+        if any(self.pending_trajectories):
+            raise RuntimeError("drain-at-boundary ended with unfinished target trajectories")
+        if len(self.finalized_queue) < expected_samples:
+            raise RuntimeError("collector drained without enough finalized samples")
+
+        sample_pool = list(self.finalized_queue)
+        pool_size = len(sample_pool)
+        selection_rng = np.random.default_rng(round_seed + 1)
+        selected_indices = selection_rng.choice(
+            pool_size, size=expected_samples, replace=False
+        )
+        consumed = [sample_pool[int(index)] for index in selected_indices]
+        discarded_surplus = pool_size - expected_samples
+        self.finalized_queue.clear()
+
+        # Every pre-boundary episode is terminal now. Start the next round from
+        # fresh episodes only after the current frozen-policy sample pool is sealed.
+        reset_mask = np.ones(int(env.num_envs), dtype=bool)
+        env.reset_indices(reset_mask)
+        self._collector_obs = env.observe()
+
+        observations = torch.from_numpy(np.stack([x.observation for x in consumed])).to(self.device)
+        actions = torch.from_numpy(np.stack([x.action for x in consumed])).to(self.device)
+        old_log_probs = torch.tensor([x.old_log_prob for x in consumed], dtype=torch.float32, device=self.device)
+        returns = torch.tensor([x.return_value for x in consumed], dtype=torch.float32, device=self.device)
+        advantages = torch.tensor([x.advantage for x in consumed], dtype=torch.float32, device=self.device)
+        batch = RolloutBatch(observations, actions, old_log_probs, returns, advantages)
+        metrics: dict[str, float | int] = {
+            "samples": expected_samples,
+            "simulator_steps": simulator_steps,
+            "completed_team_episodes": completed_team_episodes,
+            "target_deaths": target_deaths,
+            "target_goal_contributions": target_goal_contributions,
+            "delayed_team_credits": delayed_team_credits,
+            "sample_pool_size": pool_size,
+            "discarded_surplus_samples": discarded_surplus,
+            "queued_surplus_samples": 0,
+            "unique_map_seeds": len(unique_map_seeds),
+            "stochastic_action_std": float(actions.detach().cpu().numpy().std()),
+        }
+        return batch, metrics
+
+    def train_round(self, frozen_policy_set, round_index: int):
+        load_model_snapshot(self.model, frozen_policy_set[self.agent_id])
+        self.model.train()
+        batch, collection_metrics = self.collect_round(frozen_policy_set, round_index)
+        update_metrics = ppo_update(self.model, self.optimizer, batch, self.cfg["ppo"])
+        return snapshot_model(self.model), {**collection_metrics, **update_metrics}
+
+# --- Experiment 2 trainer / checkpoint / evaluation ---
+import copy
+import json
+from pathlib import Path
+
+from .coordinator import SynchronousCoordinator
+from .exchange import MockPolicyExchange
+from .policy import expand_observation_snapshot
+
+
+def _clone_pending(pending):
+    return copy.deepcopy(pending)
+
+
+def _worker_snapshot_training_state(worker: TwoRunnerWorker) -> dict[str, Any]:
+    worker._ensure_collector()
+    assert worker._collector_env is not None and worker._collector_obs is not None
+    if not hasattr(worker._collector_env, "snapshot_state"):
+        raise ValueError("collector environment does not support snapshot_state")
+    return {
+        "optimizer": copy.deepcopy(worker.optimizer.state_dict()),
+        "collector_state": worker._collector_env.snapshot_state(),
+        "collector_obs": worker._collector_obs.copy(),
+        "pending_trajectories": _clone_pending(worker.pending_trajectories),
+        "finalized_queue": copy.deepcopy(list(worker.finalized_queue)),
+    }
+
+
+def _worker_restore_training_state(worker: TwoRunnerWorker, state: dict[str, Any]) -> None:
+    worker.optimizer.load_state_dict(state["optimizer"])
+    worker._ensure_collector()
+    assert worker._collector_env is not None
+    if not hasattr(worker._collector_env, "restore_state"):
+        raise ValueError("collector environment does not support restore_state")
+    worker._collector_env.restore_state(state["collector_state"])
+    worker._collector_obs = np.asarray(state["collector_obs"], dtype=np.float32).copy()
+    worker.pending_trajectories = _clone_pending(state["pending_trajectories"])
+    worker.finalized_queue = deque(copy.deepcopy(state["finalized_queue"]))
+
+
+def two_runner_validation_is_better(
+    candidate: dict[str, Any],
+    best: dict[str, Any] | None,
+    collision_limit: float = 0.10,
+) -> bool:
+    if best is None:
+        return True
+    limit = float(collision_limit)
+    c_safe = float(candidate["any_collision_rate"]) <= limit
+    b_safe = float(best["any_collision_rate"]) <= limit
+    if c_safe != b_safe:
+        return c_safe
+    if c_safe:
+        c_key = (
+            float(candidate["team_success_rate"]),
+            -float(candidate["both_dead_rate"]),
+            float(candidate["mean_team_episode_reward"]),
+        )
+        b_key = (
+            float(best["team_success_rate"]),
+            -float(best["both_dead_rate"]),
+            float(best["mean_team_episode_reward"]),
+        )
+        return c_key > b_key
+    c_key = (
+        -float(candidate["any_collision_rate"]),
+        float(candidate["team_success_rate"]),
+        -float(candidate["both_dead_rate"]),
+        float(candidate["mean_team_episode_reward"]),
+    )
+    b_key = (
+        -float(best["any_collision_rate"]),
+        float(best["team_success_rate"]),
+        -float(best["both_dead_rate"]),
+        float(best["mean_team_episode_reward"]),
+    )
+    return c_key > b_key
+
+
+def evaluate_two_runner(
+    cfg: dict[str, Any],
+    policy_set: dict[str, dict[str, torch.Tensor]],
+    episodes: int,
+    seed_start: int,
+    device: str = "cpu",
+) -> dict[str, Any]:
+    episodes = int(episodes)
+    if episodes <= 0:
+        raise ValueError("episodes must be positive")
+    dev = torch.device(device)
+    hidden = cfg["ppo"]["hidden_sizes"]
+    models: dict[str, ActorCritic] = {}
+    for aid in TWO_RUNNER_IDS:
+        model = ActorCritic(18, 2, hidden).to(dev)
+        load_model_snapshot(model, policy_set[aid])
+        model.eval()
+        models[aid] = model
+
+    successes = timeouts = both_dead_count = any_collision_count = 0
+    deaths = np.zeros(2, dtype=np.int64)
+    goals = np.zeros(2, dtype=np.int64)
+    prior_death_success = 0
+    goal_times: list[float] = []
+    episode_rewards = np.zeros((episodes, 2), dtype=np.float64)
+    min_clearances = np.full((episodes, 2), np.inf, dtype=np.float64)
+    efficiencies: list[float] = []
+    seeds: list[int] = []
+
+    for episode in range(episodes):
+        seed = int(seed_start) + episode
+        seeds.append(seed)
+        env = TwoRunnerArena2D(1, cfg["environment"], cfg["two_runner_reward"], seed=seed)
+        obs = env.observe()
+        start_positions = env.state[0, :, :2].copy()
+        path_lengths = np.zeros(2, dtype=np.float64)
+        ever_dead = np.zeros(2, dtype=bool)
+        ep_any_collision = False
+
+        while True:
+            alive_before = env.alive[0].copy()
+            before = env.state[0, :, :2].copy()
+            actions = np.zeros((1, 2, 2), dtype=np.float32)
+            for idx, aid in enumerate(TWO_RUNNER_IDS):
+                if not alive_before[idx]:
+                    continue
+                with torch.no_grad():
+                    act = models[aid].deterministic(torch.from_numpy(obs[:, idx, :]).to(dev))
+                actions[:, idx, :] = act.cpu().numpy()
+            next_obs, rewards, done, info = env.step(actions)
+            after = env.state[0, :, :2].copy()
+            for idx in range(2):
+                if alive_before[idx]:
+                    path_lengths[idx] += float(np.linalg.norm(after[idx] - before[idx]))
+            episode_rewards[episode] += rewards[0]
+            min_clearances[episode] = np.minimum(min_clearances[episode], info["min_clearance"][0])
+            new_death = info["new_death"][0]
+            deaths += new_death.astype(np.int64)
+            ever_dead |= new_death
+            ep_any_collision = ep_any_collision or bool(new_death.any())
+            goals += info["goal_reached"][0].astype(np.int64)
+            obs = next_obs
+
+            if bool(done[0]):
+                success = bool(info["team_success"][0])
+                if success:
+                    successes += 1
+                    if ever_dead.any():
+                        prior_death_success += 1
+                        bonus = float(cfg["two_runner_reward"]["team_success_bonus"])
+                        for idx in range(2):
+                            if ever_dead[idx] and not bool(info["alive_before"][0, idx]):
+                                episode_rewards[episode, idx] += bonus
+                    goal_times.append(float(env.steps[0]) * float(env.dt))
+                    winner_indices = np.flatnonzero(info["goal_reached"][0])
+                    if winner_indices.size:
+                        winner = int(winner_indices[0])
+                        direct = float(np.linalg.norm(env.goal - start_positions[winner]))
+                        if path_lengths[winner] > 0:
+                            efficiencies.append(float(np.clip(direct / path_lengths[winner], 0.0, 1.0)))
+                elif bool(info["both_dead"][0]):
+                    both_dead_count += 1
+                elif bool(info["timeout"][0]):
+                    timeouts += 1
+                if ep_any_collision:
+                    any_collision_count += 1
+                break
+
+    mean_team_reward = float(np.mean(episode_rewards.mean(axis=1)))
+    return {
+        "episodes": episodes,
+        "seeds": seeds,
+        "team_successes": int(successes),
+        "team_success_rate": successes / episodes,
+        "timeouts": int(timeouts),
+        "timeout_rate": timeouts / episodes,
+        "both_dead_count": int(both_dead_count),
+        "both_dead_rate": both_dead_count / episodes,
+        "any_collision_count": int(any_collision_count),
+        "any_collision_rate": any_collision_count / episodes,
+        "runner_0_death_rate": float(deaths[0] / episodes),
+        "runner_1_death_rate": float(deaths[1] / episodes),
+        "runner_0_goal_count": int(goals[0]),
+        "runner_1_goal_count": int(goals[1]),
+        "team_success_with_prior_death_count": int(prior_death_success),
+        "team_success_with_prior_death_rate": prior_death_success / episodes,
+        "mean_time_to_team_goal_s": float(np.mean(goal_times)) if goal_times else None,
+        "mean_episode_reward_runner_0": float(np.mean(episode_rewards[:, 0])),
+        "mean_episode_reward_runner_1": float(np.mean(episode_rewards[:, 1])),
+        "mean_team_episode_reward": mean_team_reward,
+        "mean_min_clearance_runner_0_m": float(np.mean(min_clearances[:, 0])),
+        "mean_min_clearance_runner_1_m": float(np.mean(min_clearances[:, 1])),
+        "mean_winner_path_efficiency": float(np.mean(efficiencies)) if efficiencies else None,
+    }
+
+
+class TwoRunnerTrainer:
+    def __init__(
+        self,
+        cfg: dict[str, Any],
+        output_dir: str | Path,
+        device: str = "cpu",
+        worker_env_factory: Callable[..., Any] = TwoRunnerArena2D,
+    ) -> None:
+        self.cfg = cfg
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.device = device
+        self.worker_env_factory = worker_env_factory
+        seed = int(cfg.get("seed", 0))
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        self.workers = {
+            aid: TwoRunnerWorker(aid, cfg, device=device, env_factory=worker_env_factory)
+            for aid in TWO_RUNNER_IDS
+        }
+        initial = {aid: snapshot_model(self.workers[aid].model) for aid in TWO_RUNNER_IDS}
+        self.exchange = MockPolicyExchange(initial, version=0, agent_ids=TWO_RUNNER_IDS)
+        self.coordinator = SynchronousCoordinator(self.exchange)
+        self.best_validation: dict[str, Any] | None = None
+        self.metrics_path = self.output_dir / "metrics.jsonl"
+
+    @property
+    def current_round(self) -> int:
+        return self.coordinator.current_round
+
+    def policy_set(self):
+        return self.exchange.get_committed_policy_set()
+
+    def initialize_from_single_runner_checkpoint(self, path: str | Path) -> None:
+        data = torch.load(Path(path), map_location="cpu", weights_only=False)
+        if int(data.get("obs_dim", 15)) != 15 or int(data.get("action_dim", 2)) != 2:
+            raise ValueError("single-runner checkpoint dimensions are incompatible")
+        expanded = expand_observation_snapshot(data["model"], old_obs_dim=15, new_obs_dim=18)
+        initial = {}
+        for aid in TWO_RUNNER_IDS:
+            load_model_snapshot(self.workers[aid].model, expanded)
+            # Keep the fresh optimizer intentionally; Experiment 1 Adam state is not reused.
+            initial[aid] = snapshot_model(self.workers[aid].model)
+        self.exchange = MockPolicyExchange(initial, version=0, agent_ids=TWO_RUNNER_IDS)
+        self.coordinator = SynchronousCoordinator(self.exchange)
+        self.best_validation = None
+
+    def save_checkpoint(self, path: str | Path | None = None) -> Path:
+        checkpoint = Path(path) if path is not None else self.output_dir / "latest.pt"
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "version": self.current_round,
+                "policy_set": self.policy_set(),
+                "config": self.cfg,
+                "obs_dim": 18,
+                "action_dim": 2,
+                "worker_states": {aid: _worker_snapshot_training_state(self.workers[aid]) for aid in TWO_RUNNER_IDS},
+                "best_validation": copy.deepcopy(self.best_validation),
+                "training_state_version": 1,
+            },
+            checkpoint,
+        )
+        return checkpoint
+
+    def resume_from_checkpoint(self, path: str | Path) -> str:
+        data = torch.load(Path(path), map_location="cpu", weights_only=False)
+        if int(data.get("obs_dim", 18)) != 18 or int(data.get("action_dim", 2)) != 2:
+            raise ValueError("two-runner checkpoint dimensions do not match")
+        policies = data["policy_set"]
+        version = int(data["version"])
+        self.exchange = MockPolicyExchange(policies, version=version, agent_ids=TWO_RUNNER_IDS)
+        self.coordinator = SynchronousCoordinator(self.exchange)
+        for aid in TWO_RUNNER_IDS:
+            load_model_snapshot(self.workers[aid].model, policies[aid])
+        if int(data.get("training_state_version", 0)) < 1 or "worker_states" not in data:
+            return "legacy"
+        for aid in TWO_RUNNER_IDS:
+            _worker_restore_training_state(self.workers[aid], data["worker_states"][aid])
+        self.best_validation = copy.deepcopy(data.get("best_validation"))
+        return "full"
+
+    def _append_metrics(self, record: dict[str, Any]) -> None:
+        with self.metrics_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def run(self, rounds: int | None = None, *, run_validation: bool = True) -> list[dict[str, Any]]:
+        if rounds is None:
+            rounds = int(self.cfg["training"]["rounds"])
+        records: list[dict[str, Any]] = []
+        checkpoint_every = max(1, int(self.cfg["training"].get("checkpoint_every", 1)))
+        for _ in range(int(rounds)):
+            current = self.current_round
+            next_version = current + 1
+            frozen = self.policy_set()
+            round_metrics: dict[str, dict[str, Any]] = {}
+            for aid in TWO_RUNNER_IDS:
+                snapshot, metrics = self.workers[aid].train_round(frozen, current)
+                round_metrics[aid] = metrics
+                self.coordinator.submit_update(aid, next_version, snapshot, metrics)
+            if not self.coordinator.try_commit(next_version):
+                raise RuntimeError(f"Two-runner synchronous commit failed: {self.coordinator.ready_status(next_version)}")
+            record: dict[str, Any] = {"round": next_version, "agents": round_metrics}
+
+            validation_cfg = self.cfg.get("validation") if run_validation else None
+            if validation_cfg and next_version % int(validation_cfg["every"]) == 0:
+                summary = evaluate_two_runner(
+                    self.cfg,
+                    self.policy_set(),
+                    episodes=int(validation_cfg["episodes"]),
+                    seed_start=int(validation_cfg["seed_start"]),
+                    device=self.device,
+                )
+                record["validation"] = summary
+                candidate = {
+                    "round": next_version,
+                    "team_success_rate": float(summary["team_success_rate"]),
+                    "any_collision_rate": float(summary["any_collision_rate"]),
+                    "both_dead_rate": float(summary["both_dead_rate"]),
+                    "mean_team_episode_reward": float(summary["mean_team_episode_reward"]),
+                }
+                if two_runner_validation_is_better(candidate, self.best_validation):
+                    self.best_validation = candidate
+                    self.save_checkpoint(self.output_dir / "best.pt")
+
+            records.append(record)
+            self._append_metrics(record)
+            self.save_checkpoint(self.output_dir / "latest.pt")
+            if next_version % checkpoint_every == 0:
+                self.save_checkpoint(self.output_dir / f"round_{next_version:05d}.pt")
+        return records
+
+def load_two_runner_checkpoint(path: str | Path):
+    data = torch.load(Path(path), map_location="cpu", weights_only=False)
+    return int(data["version"]), data["policy_set"], data["config"]
