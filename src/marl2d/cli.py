@@ -31,10 +31,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     single_train = sub.add_parser("single-train", help="Train Experiment 1 single-runner PPO navigation")
     single_train.add_argument("--config", default="config/single_runner.yaml")
-    single_train.add_argument("--rounds", type=int, default=None)
+    single_train.add_argument("--rounds", type=int, default=None, help="Additional PPO rounds to run")
     single_train.add_argument("--output", default="runs/single_runner")
     single_train.add_argument("--device", default="cpu")
     single_train.add_argument("--reward-mode", choices=("R0", "R1", "R2", "R3"), default=None)
+    single_train.add_argument(
+        "--resume",
+        default=None,
+        help="Resume from a single-runner checkpoint. New-format checkpoints restore full training state.",
+    )
 
     single_eval = sub.add_parser("single-eval", help="Evaluate a single-runner checkpoint on held-out maps")
     single_eval.add_argument("--checkpoint", required=True)
@@ -79,8 +84,25 @@ def main(argv: list[str] | None = None) -> int:
             cfg["single_runner_reward"]["mode"] = args.reward_mode
             validate_single_runner_config(cfg)
         trainer = SingleRunnerTrainer(cfg, output_dir=args.output, device=args.device)
+        if args.resume:
+            resume_mode = trainer.resume_from_checkpoint(args.resume)
+            if resume_mode == "full":
+                print(f"Resumed full training state from round {trainer.current_round}: {args.resume}")
+            else:
+                print(
+                    f"Resumed legacy checkpoint from round {trainer.current_round}: {args.resume}\n"
+                    "WARNING: this older checkpoint has no optimizer/world state; "
+                    "optimizer and persistent worlds were reinitialized."
+                )
         records = trainer.run(rounds=args.rounds)
         for record in records:
+            validation_text = ""
+            if "val_success_rate" in record:
+                validation_text = (
+                    f" val_success={record['val_success_rate']:.3f}"
+                    f" val_collision={record['val_collision_rate']:.3f}"
+                    f" val_timeout={record['val_timeout_rate']:.3f}"
+                )
             print(
                 f"round={int(record['round']):4d} "
                 f"samples={int(record['samples']):5d} "
@@ -89,9 +111,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"success={record['success_rate']:.3f} "
                 f"maps={int(record['unique_map_seeds']):4d} "
                 f"action_std={record['stochastic_action_std']:.3f}"
+                f"{validation_text}"
             )
         print(f"\nReward mode: {cfg['single_runner_reward']['mode']}")
         print(f"Checkpoint:  {Path(args.output) / 'latest.pt'}")
+        if (Path(args.output) / "best.pt").exists():
+            print(f"Best:        {Path(args.output) / 'best.pt'}")
         print(f"Metrics:     {Path(args.output) / 'metrics.jsonl'}")
         return 0
 
