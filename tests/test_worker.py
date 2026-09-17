@@ -15,7 +15,7 @@ def make_cfg():
             'wheel_radius': 0.1, 'wheel_base': 0.4, 'max_wheel_speed': 5.0,
             'robot_radius': 0.18, 'goal': [9.0, 3.0], 'goal_radius': 0.5,
             'max_steps': 50, 'lidar_rays': 8, 'lidar_range': 4.0,
-            'reset_jitter': 0.05, 'obstacles': [],
+            'reset_jitter': 0.05, 'obstacles': {'count': 0},
         },
         'reward': {
             'runner': {'goal_bonus': 20.0, 'team_progress': 2.0, 'self_progress': 0.5, 'collision': -1.0, 'step': -0.01},
