@@ -54,6 +54,7 @@ class ActorCritic(nn.Module):
         action = actions.clamp(-0.999999, 0.999999)
         raw = torch.atanh(action)
         log_prob = self._squashed_log_prob(dist, raw, action)
+        # Exact tanh-policy entropy has no simple closed form; Normal entropy is a stable PPO bonus proxy.
         entropy = dist.entropy().sum(dim=-1)
         return log_prob, entropy, value
 
