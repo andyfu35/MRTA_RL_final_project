@@ -113,6 +113,30 @@ def _print_round(record: dict) -> None:
         )
 
 
+def _format_two_runner_record(record: dict) -> str:
+    pieces = [f"round={int(record['round']):4d}"]
+    for agent_id in TWO_RUNNER_IDS:
+        metrics = record["agents"][agent_id]
+        pieces.append(
+            f"{agent_id}:samples={int(metrics['samples'])} "
+            f"sim={int(metrics['simulator_steps'])} "
+            f"ep={int(metrics.get('completed_team_episodes', 0))} "
+            f"succ_ep={int(metrics.get('team_success_episodes', 0))} "
+            f"sel_succ={int(metrics.get('selected_success_transitions', 0))}/{int(metrics['samples'])} "
+            f"pool={int(metrics.get('sample_pool_size', metrics['samples']))} "
+            f"discard={int(metrics.get('discarded_surplus_samples', 0))} "
+            f"kl={float(metrics.get('approx_kl', 0.0)):.5f}"
+        )
+    if "validation" in record:
+        validation = record["validation"]
+        pieces.append(
+            f"val_success={validation['team_success_rate']:.3f} "
+            f"val_collision={validation['any_collision_rate']:.3f} "
+            f"val_both_dead={validation['both_dead_rate']:.3f}"
+        )
+    return " ".join(pieces)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "train":
@@ -207,25 +231,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             trainer.initialize_from_single_runner_checkpoint(args.init_single_runner_checkpoint)
             print(f"Initialized both runners from: {args.init_single_runner_checkpoint}")
-        records = trainer.run(rounds=args.rounds)
-        for record in records:
-            pieces = [f"round={int(record['round']):4d}"]
-            for agent_id in TWO_RUNNER_IDS:
-                metrics = record["agents"][agent_id]
-                pieces.append(
-                    f"{agent_id}:samples={int(metrics['samples'])} "
-                    f"sim={int(metrics['simulator_steps'])} "
-                    f"deaths={int(metrics['target_deaths'])} "
-                    f"discard={int(metrics.get('discarded_surplus_samples', 0))}"
-                )
-            if "validation" in record:
-                validation = record["validation"]
-                pieces.append(
-                    f"val_success={validation['team_success_rate']:.3f} "
-                    f"val_collision={validation['any_collision_rate']:.3f} "
-                    f"val_both_dead={validation['both_dead_rate']:.3f}"
-                )
-            print(" ".join(pieces))
+        rounds_to_run = int(args.rounds if args.rounds is not None else cfg["training"]["rounds"])
+        for _ in range(rounds_to_run):
+            record = trainer.run(rounds=1)[0]
+            print(_format_two_runner_record(record), flush=True)
         print(f"\nCheckpoint: {Path(args.output) / 'latest.pt'}")
         if (Path(args.output) / "best.pt").exists():
             print(f"Best:       {Path(args.output) / 'best.pt'}")
