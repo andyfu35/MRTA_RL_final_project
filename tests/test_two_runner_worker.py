@@ -78,12 +78,12 @@ class DeathThenSuccessEnv:
     def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
         assert num_envs == 1
         self.num_envs = 1
-        self.alive = np.ones((1, 2), dtype=bool)
+        self.alive = np.ones((1,2), dtype=bool)
         self.step_count = 0
         self.map_seeds = np.array([seed], dtype=np.int64)
     def observe(self):
-        out = np.zeros((1, 2, 18), np.float32)
-        out[:, :, 17] = self.alive[:, ::-1]
+        out = np.zeros((1,2,18), np.float32)
+        out[:,:,17] = self.alive[:,::-1]
         return out
     def reset_indices(self, mask):
         if bool(mask[0]):
@@ -91,27 +91,27 @@ class DeathThenSuccessEnv:
             self.step_count = 0
     def step(self, actions):
         self.step_count += 1
-        rewards = np.zeros((1, 2), np.float32)
-        collision = np.zeros((1, 2), bool)
-        new_death = np.zeros((1, 2), bool)
-        goal = np.zeros((1, 2), bool)
+        rewards = np.zeros((1,2), np.float32)
+        collision = np.zeros((1,2), bool)
+        new_death = np.zeros((1,2), bool)
+        goal = np.zeros((1,2), bool)
         success = np.zeros(1, bool)
         done = np.zeros(1, bool)
         alive_before = self.alive.copy()
         if self.step_count == 2:
-            collision[0, 0] = new_death[0, 0] = True
-            rewards[0, 0] = -100.0
-            self.alive[0, 0] = False
+            collision[0,0] = new_death[0,0] = True
+            rewards[0,0] = -100.0
+            self.alive[0,0] = False
         elif self.step_count == 4:
-            goal[0, 1] = True
+            goal[0,1] = True
             success[0] = done[0] = True
-            rewards[0, 1] = 100.0
+            rewards[0,1] = 100.0
         info = {
             'collision': collision, 'new_death': new_death,
             'goal_reached': goal, 'team_success': success,
-            'both_dead': np.zeros(1, bool), 'timeout': np.zeros(1, bool),
+            'both_dead': np.zeros(1,bool), 'timeout': np.zeros(1,bool),
             'alive_before': alive_before, 'alive_after': self.alive.copy(),
-            'min_clearance': np.ones((1, 2), np.float32),
+            'min_clearance': np.ones((1,2),np.float32),
             'map_seed': self.map_seeds.copy(),
         }
         return self.observe(), rewards, done, info
@@ -132,37 +132,96 @@ class AlwaysSuccessEnv:
     observation_dim = 18
     def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
         self.num_envs = num_envs
-        self.alive = np.ones((num_envs, 2), bool)
-        self.map_seeds = np.arange(num_envs, dtype=np.int64) + seed
-    def observe(self):
-        return np.zeros((self.num_envs, 2, 18), np.float32)
-    def reset_indices(self, mask):
-        self.alive[mask] = True
+        self.alive = np.ones((num_envs,2),bool)
+        self.map_seeds = np.arange(num_envs,dtype=np.int64)+seed
+    def observe(self): return np.zeros((self.num_envs,2,18),np.float32)
+    def reset_indices(self, mask): self.alive[mask] = True
     def step(self, actions):
-        n = self.num_envs
+        n=self.num_envs; alive_before=self.alive.copy(); rewards=np.full((n,2),100.0,np.float32); done=np.ones(n,bool)
+        info={'collision':np.zeros((n,2),bool),'new_death':np.zeros((n,2),bool),'goal_reached':np.ones((n,2),bool),'team_success':np.ones(n,bool),'both_dead':np.zeros(n,bool),'timeout':np.zeros(n,bool),'alive_before':alive_before,'alive_after':self.alive.copy(),'min_clearance':np.ones((n,2),np.float32),'map_seed':self.map_seeds.copy()}
+        return self.observe(),rewards,done,info
+
+
+def test_collect_round_consumes_exact_valid_sample_count_and_discards_same_round_surplus():
+    cfg=tiny_cfg(samples=3,parallel_envs=2)
+    worker=TwoRunnerWorker('runner_0',cfg,device='cpu',env_factory=AlwaysSuccessEnv)
+    batch,metrics=worker.collect_round(policy_set(cfg),round_index=0)
+    assert batch.observations.shape[0] == 3
+    assert metrics['samples'] == 3
+    assert metrics['simulator_steps'] == 4
+    assert metrics['discarded_surplus_samples'] == 1
+    assert len(worker.finalized_queue) == 0
+
+
+def test_round_boundary_discards_surplus_instead_of_carrying_samples_across_policy_versions():
+    cfg = tiny_cfg(samples=3, parallel_envs=2)
+    worker = TwoRunnerWorker('runner_0', cfg, device='cpu', env_factory=AlwaysSuccessEnv)
+    first_batch, first_metrics = worker.collect_round(policy_set(cfg), round_index=0)
+    assert first_batch.observations.shape[0] == 3
+    assert first_metrics['samples'] == 3
+    assert first_metrics['discarded_surplus_samples'] == 1
+    assert len(worker.finalized_queue) == 0
+    assert all(len(items) == 0 for items in worker.pending_trajectories)
+
+    second_batch, second_metrics = worker.collect_round(policy_set(cfg), round_index=1)
+    assert second_batch.observations.shape[0] == 3
+    assert second_metrics['samples'] == 3
+    assert second_metrics['discarded_surplus_samples'] == 1
+    assert len(worker.finalized_queue) == 0
+
+
+class UnevenEpisodeEnv:
+    observation_dim = 18
+
+    def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
+        assert num_envs == 2
+        self.num_envs = 2
+        self.alive = np.ones((2, 2), dtype=bool)
+        self.map_seeds = np.arange(2, dtype=np.int64) + seed
+        self.step_counts = np.zeros(2, dtype=np.int64)
+        self.reset_calls = []
+
+    def observe(self):
+        return np.zeros((2, 2, 18), np.float32)
+
+    def reset_indices(self, mask):
+        mask = np.asarray(mask, dtype=bool)
+        self.reset_calls.append(mask.copy())
+        self.step_counts[mask] = 0
+        self.alive[mask] = True
+
+    def step(self, actions):
+        self.step_counts += 1
         alive_before = self.alive.copy()
-        rewards = np.full((n, 2), 100.0, np.float32)
-        done = np.ones(n, bool)
+        done = np.array([self.step_counts[0] >= 1, self.step_counts[1] >= 3], dtype=bool)
+        success = done.copy()
+        rewards = np.zeros((2, 2), np.float32)
+        rewards[done] = 100.0
+        goal = np.zeros((2, 2), dtype=bool)
+        goal[done, 0] = True
         info = {
-            'collision': np.zeros((n, 2), bool),
-            'new_death': np.zeros((n, 2), bool),
-            'goal_reached': np.ones((n, 2), bool),
-            'team_success': np.ones(n, bool),
-            'both_dead': np.zeros(n, bool),
-            'timeout': np.zeros(n, bool),
+            'collision': np.zeros((2, 2), bool),
+            'new_death': np.zeros((2, 2), bool),
+            'goal_reached': goal,
+            'team_success': success,
+            'both_dead': np.zeros(2, bool),
+            'timeout': np.zeros(2, bool),
             'alive_before': alive_before,
             'alive_after': self.alive.copy(),
-            'min_clearance': np.ones((n, 2), np.float32),
+            'min_clearance': np.ones((2, 2), np.float32),
             'map_seed': self.map_seeds.copy(),
         }
         return self.observe(), rewards, done, info
 
 
-def test_collect_round_consumes_exact_valid_sample_count_and_keeps_surplus():
-    cfg = tiny_cfg(samples=3, parallel_envs=2)
-    worker = TwoRunnerWorker('runner_0', cfg, device='cpu', env_factory=AlwaysSuccessEnv)
+def test_after_sample_target_is_reached_worker_drains_existing_episodes_without_launching_new_ones():
+    cfg = tiny_cfg(samples=1, parallel_envs=2)
+    worker = TwoRunnerWorker('runner_0', cfg, device='cpu', env_factory=UnevenEpisodeEnv)
     batch, metrics = worker.collect_round(policy_set(cfg), round_index=0)
-    assert batch.observations.shape[0] == 3
-    assert metrics['samples'] == 3
-    assert metrics['simulator_steps'] == 4
-    assert len(worker.finalized_queue) == 1
+    assert batch.observations.shape[0] == 1
+    assert metrics['simulator_steps'] == 6
+    assert metrics['completed_team_episodes'] == 2
+    assert len(worker._collector_env.reset_calls) == 1
+    np.testing.assert_array_equal(worker._collector_env.reset_calls[0], np.array([True, True]))
+    assert len(worker.finalized_queue) == 0
+    assert all(len(items) == 0 for items in worker.pending_trajectories)
