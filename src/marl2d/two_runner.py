@@ -168,7 +168,8 @@ class TwoRunnerWorker:
 
         models = self._models_from_policy_set(frozen_policy_set)
         target_model = models[self.agent_id]
-        torch.manual_seed(int(self.cfg.get("seed", 0)) + self.agent_index * 100_000 + int(round_index) * 1_000_000)
+        round_seed = int(self.cfg.get("seed", 0)) + self.agent_index * 100_000 + int(round_index) * 1_000_000
+        torch.manual_seed(round_seed)
 
         simulator_steps = 0
         completed_team_episodes = 0
@@ -269,8 +270,14 @@ class TwoRunnerWorker:
         if len(self.finalized_queue) < expected_samples:
             raise RuntimeError("collector drained without enough finalized samples")
 
-        consumed = [self.finalized_queue.popleft() for _ in range(expected_samples)]
-        discarded_surplus = len(self.finalized_queue)
+        sample_pool = list(self.finalized_queue)
+        pool_size = len(sample_pool)
+        selection_rng = np.random.default_rng(round_seed + 1)
+        selected_indices = selection_rng.choice(
+            pool_size, size=expected_samples, replace=False
+        )
+        consumed = [sample_pool[int(index)] for index in selected_indices]
+        discarded_surplus = pool_size - expected_samples
         self.finalized_queue.clear()
 
         # Every pre-boundary episode is terminal now. Start the next round from
@@ -292,6 +299,7 @@ class TwoRunnerWorker:
             "target_deaths": target_deaths,
             "target_goal_contributions": target_goal_contributions,
             "delayed_team_credits": delayed_team_credits,
+            "sample_pool_size": pool_size,
             "discarded_surplus_samples": discarded_surplus,
             "queued_surplus_samples": 0,
             "unique_map_seeds": len(unique_map_seeds),
