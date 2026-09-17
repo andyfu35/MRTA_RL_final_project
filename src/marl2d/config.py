@@ -116,6 +116,16 @@ def validate_single_runner_config(cfg: dict[str, Any]) -> None:
     if int(evaluation["episodes"]) <= 0:
         raise ValueError("evaluation.episodes must be positive")
 
+    validation = cfg.get("validation")
+    if validation is not None:
+        if not isinstance(validation, dict):
+            raise ValueError("validation must be a mapping")
+        if int(validation["every"]) <= 0:
+            raise ValueError("validation.every must be positive")
+        if int(validation["episodes"]) <= 0:
+            raise ValueError("validation.episodes must be positive")
+        int(validation["seed_start"])
+
 
 def load_single_runner_config(path: str | Path) -> dict[str, Any]:
     path = Path(path)
