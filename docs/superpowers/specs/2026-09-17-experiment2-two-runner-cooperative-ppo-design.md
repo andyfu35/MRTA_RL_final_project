@@ -99,7 +99,7 @@ Copy all remaining compatible parameters exactly:
 - critic head
 - `log_std`
 
-This ensures the initial Experiment 2 deterministic behavior matches the learned Experiment 1 navigation behavior when the new cooperative inputs initially have zero influence.
+This ensures the initial Experiment 2 deterministic behavior matches the learned Experiment 1 navigation behavior because the appended cooperative inputs initially have zero weight.
 
 Do not restore the Experiment 1 Adam optimizer. Experiment 2 starts new optimizers because the task and network input size changed.
 
@@ -112,18 +112,20 @@ The reward has two concepts:
 1. shared team objective
 2. individual navigation/safety shaping
 
-For an alive Runner `i`, before terminal events:
+For a Runner `i` that is alive at the start of timestep `t`, before terminal events:
 
 `r_i = 3 * self_progress_i + 2 * team_progress - 0.01 - 3 * danger_i^2`
 
 where:
 
-- `self_progress_i = d_i(t-1) - d_i(t)`
-- `team_distance = min(d_0, d_1)` among the physical Runner positions
-- `team_progress = team_distance(t-1) - team_distance(t)`
+- `self_progress_i = d_i(t) - d_i(t+1)`
+- `A_t` is the set of Runners alive at the start of timestep `t`
+- `team_progress = min_{j in A_t} d_j(t) - min_{j in A_t} d_j(t+1)`
 - `danger_i = max(0, (0.5 - clearance_i) / 0.5)`
 
-`clearance_i` includes walls, static obstacles, and the teammate body.
+Using the same start-of-step alive set on both sides of `team_progress` prevents a death event from creating an artificial positive or negative progress jump merely because team membership changed. On the next timestep, a dead Runner is absent from `A_t`, so it cannot freeze the surviving Runner's team-progress signal from its final position.
+
+`clearance_i` includes walls, static obstacles, and the teammate body, whether the teammate is alive or dead.
 
 The `3 + 2` split keeps the progress-reward scale close to Experiment 1 for the currently leading Runner while giving both policies a direct cooperative signal. Individual progress remains present to reduce trivial free-riding.
 
@@ -145,7 +147,7 @@ The collision does not terminate the team episode unless both Runners are dead.
 If either alive Runner reaches the goal:
 
 - `team_success = true`
-- both policies receive a `+100` team-success bonus for that episode
+- both policies receive a `+100` team-success credit for that episode
 - the team episode terminates
 
 This includes a Runner that died earlier in the same episode: the dead Runner must still receive the shared team-success credit because the research objective is explicitly team-level, not individual goal ownership.
@@ -178,7 +180,7 @@ so a goal reached on the same step is counted as team success.
 
 ## 8. Delayed team credit for a dead Runner
 
-A dead Runner must not generate fake PPO transitions while its teammate continues.
+A dead Runner must not generate fake PPO action transitions while its teammate continues.
 
 Each worker therefore maintains pending per-environment episode data for its target agent. Valid transitions are recorded only while the target agent is alive, including the collision transition that kills it.
 
@@ -186,14 +188,14 @@ If the target agent dies before the team episode ends, its valid trajectory rema
 
 When the team episode ends:
 
-- on team success, add the shared `+100` success credit to the target agent's final valid transition even if that agent died earlier
+- on team success, add the shared `+100` episodic team-success credit to the target agent's final valid transition even if that agent died earlier
 - on target-agent collision, retain the `-100` collision term on that transition
 - on timeout, apply `-20` only if the target agent was still alive at timeout
 - mark the target trajectory terminal for GAE/return construction
 
 No dead-period dummy actions are included in PPO actor samples.
 
-A consequence is that a dead Runner can receive both collision cost and later team-success credit in the same episode. This is intentional: `team objective + individual safety cost` are separate signals.
+The `+100` credit is intentionally an episode-level shared terminal credit and is not reduced simply because the target Runner died several simulator steps before its teammate reached the goal. This matches the stated Experiment 2 objective that either Runner reaching the goal is a high-score outcome for both models. Individual collision cost remains separate, so a dead Runner can receive both `-100` collision cost and `+100` team-success credit in the same episode.
 
 ## 9. Sample-count semantics and persistent worlds
 
@@ -217,16 +219,15 @@ If a worker has more finalized valid samples than needed for the current 8192-sa
 
 ## 10. Collection profiles
 
-The default Experiment 2 configuration uses equal sample count with potentially heterogeneous collection profiles:
+The default Experiment 2 configuration preserves the heterogeneous-machine idea while making the sample count the invariant:
 
-- `runner_0`: 32 parallel worlds x 256 rollout target samples equivalent
-- `runner_1`: 16 parallel worlds with sequential batching sufficient to reach the same 8192 valid samples
+- `runner_0`: 32 parallel worlds
+- `runner_1`: 16 parallel worlds
+- both workers: exactly 8192 valid target-agent samples per PPO update
 
-The exact batching implementation may use a valid-sample queue rather than a fixed rectangular `parallel_envs * rollout_steps` tensor because death creates variable-length target trajectories.
+Because death creates variable-length target trajectories, Experiment 2 does not require the old fixed identity `parallel_envs * rollout_steps * batches = samples_per_update`. Each worker advances its persistent worlds in chunks until its finalized valid-sample queue contains at least 8192 samples, consumes exactly 8192, and carries any excess into the next round.
 
-The invariant is:
-
-`valid target samples per PPO update = 8192` for each Runner.
+This preserves the intended future behavior: faster machines can use more parallel worlds, slower machines can use fewer, but every policy performs the same number of PPO updates from the same number of valid samples.
 
 ## 11. Checkpoint and resume
 
@@ -391,7 +392,7 @@ Do not refactor unrelated Experiment 1 code.
 At minimum verify:
 
 1. observation is exactly 18-D and first 15 values match the equivalent single-runner features when teammate effects are excluded
-2. 15->18 warm start produces the same action/value as the Experiment 1 model when appended cooperative inputs have zero influence
+2. 15->18 warm start produces the same action/value as the Experiment 1 model because appended cooperative input weights are zero
 3. either Runner reaching the goal terminates the team episode and credits both target policies with team success
 4. one Runner collision kills only that Runner and the other continues
 5. dead Runner action is forced to zero and dead periods create no actor samples
@@ -399,13 +400,14 @@ At minimum verify:
 7. both dead terminates immediately without an extra duplicate failure penalty
 8. timeout penalizes only Runners alive at timeout
 9. runner-to-runner collision is detected
-10. each worker consumes exactly 8192 valid samples per update
-11. both policies are frozen consistently during a collection round and commit only after both updates are ready
-12. persistent worlds and pending trajectories survive checkpoint/resume
-13. full resume reproduces the next round
-14. validation seeds and final seeds remain disjoint
-15. safety-constrained `best.pt` selection follows the specified rule
-16. existing Experiment 1 and four-agent tests remain green
+10. alive-set changes do not create artificial team-progress jumps
+11. each worker consumes exactly 8192 valid samples per update
+12. both policies are frozen consistently during a collection round and commit only after both updates are ready
+13. persistent worlds and pending trajectories survive checkpoint/resume
+14. full resume reproduces the next round
+15. validation seeds and final seeds remain disjoint
+16. safety-constrained `best.pt` selection follows the specified rule
+17. existing Experiment 1 and four-agent tests remain green
 
 ## 18. Success criterion for Experiment 2 v1
 
