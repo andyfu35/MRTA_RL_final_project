@@ -29,3 +29,22 @@ def test_two_runner_config_rejects_wrong_agent_profiles():
         assert 'collection_profiles' in str(exc)
     else:
         raise AssertionError('expected ValueError')
+
+
+def test_large_batch_config_preserves_total_used_samples_and_changes_only_batch_schedule():
+    baseline = load_two_runner_config('config/two_runner.yaml')
+    large = load_two_runner_config('config/two_runner_large_batch.yaml')
+
+    assert baseline['training']['samples_per_update'] == 8192
+    assert baseline['training']['rounds'] == 100
+    assert large['training']['samples_per_update'] == 32768
+    assert large['training']['rounds'] == 25
+    assert baseline['training']['samples_per_update'] * baseline['training']['rounds'] == (
+        large['training']['samples_per_update'] * large['training']['rounds']
+    )
+    assert large['training']['checkpoint_every'] == 1
+    assert large['validation'] == {'every': 1, 'episodes': 200, 'seed_start': 40000}
+    assert large['environment'] == baseline['environment']
+    assert large['two_runner_reward'] == baseline['two_runner_reward']
+    assert large['collection_profiles'] == baseline['collection_profiles']
+    assert large['ppo'] == baseline['ppo']
