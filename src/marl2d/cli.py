@@ -40,6 +40,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Resume from a single-runner checkpoint. New-format checkpoints restore full training state.",
     )
+    single_train.add_argument(
+        "--reset-best-validation",
+        action="store_true",
+        help=(
+            "Reset inherited best-checkpoint selection history after resume. "
+            "Use this when forking a new experiment from an existing checkpoint."
+        ),
+    )
 
     single_eval = sub.add_parser("single-eval", help="Evaluate a single-runner checkpoint on held-out maps")
     single_eval.add_argument("--checkpoint", required=True)
@@ -86,6 +94,9 @@ def main(argv: list[str] | None = None) -> int:
         trainer = SingleRunnerTrainer(cfg, output_dir=args.output, device=args.device)
         if args.resume:
             resume_mode = trainer.resume_from_checkpoint(args.resume)
+            if args.reset_best_validation:
+                trainer.best_validation = None
+                print("Reset inherited best-validation history for this experiment fork.")
             if resume_mode == "full":
                 print(f"Resumed full training state from round {trainer.current_round}: {args.resume}")
             else:
@@ -94,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
                     "WARNING: this older checkpoint has no optimizer/world state; "
                     "optimizer and persistent worlds were reinitialized."
                 )
+        elif args.reset_best_validation:
+            trainer.best_validation = None
         records = trainer.run(rounds=args.rounds)
         for record in records:
             validation_text = ""
