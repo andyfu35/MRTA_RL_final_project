@@ -125,6 +125,7 @@ def test_dead_period_steps_create_no_actor_samples_but_team_success_still_credit
     assert metrics['samples'] == 2
     assert metrics['simulator_steps'] == 4
     assert metrics['target_deaths'] == 1
+    # The collision transition receives delayed +100, so its final immediate reward is zero.
     assert metrics['delayed_team_credits'] == 1
 
 
@@ -193,6 +194,7 @@ class UnevenEpisodeEnv:
     def step(self, actions):
         self.step_counts += 1
         alive_before = self.alive.copy()
+        # env 0 finishes after one step; env 1 needs three steps.
         done = np.array([self.step_counts[0] >= 1, self.step_counts[1] >= 3], dtype=bool)
         success = done.copy()
         rewards = np.zeros((2, 2), np.float32)
@@ -219,9 +221,65 @@ def test_after_sample_target_is_reached_worker_drains_existing_episodes_without_
     worker = TwoRunnerWorker('runner_0', cfg, device='cpu', env_factory=UnevenEpisodeEnv)
     batch, metrics = worker.collect_round(policy_set(cfg), round_index=0)
     assert batch.observations.shape[0] == 1
+    # The fast environment reaches success at step 1, but the slow environment is
+    # allowed to finish its already-running episode at step 3 before the round ends.
     assert metrics['simulator_steps'] == 6
     assert metrics['completed_team_episodes'] == 2
+    # No new episode is launched while draining; only one all-env reset occurs at
+    # the round boundary after both old episodes are terminal.
     assert len(worker._collector_env.reset_calls) == 1
     np.testing.assert_array_equal(worker._collector_env.reset_calls[0], np.array([True, True]))
     assert len(worker.finalized_queue) == 0
     assert all(len(items) == 0 for items in worker.pending_trajectories)
+
+
+class MarkerSuccessEnv:
+    observation_dim = 18
+
+    def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
+        assert num_envs == 2
+        self.num_envs = 2
+        self.alive = np.ones((2, 2), dtype=bool)
+        self.map_seeds = np.arange(2, dtype=np.int64) + seed
+        self.generation = np.zeros(2, dtype=np.int64)
+
+    def observe(self):
+        obs = np.zeros((2, 2, 18), np.float32)
+        markers = self.generation * 10 + np.arange(2)
+        obs[:, :, 0] = markers[:, None]
+        return obs
+
+    def reset_indices(self, mask):
+        mask = np.asarray(mask, dtype=bool)
+        self.generation[mask] += 1
+        self.alive[mask] = True
+
+    def step(self, actions):
+        alive_before = self.alive.copy()
+        rewards = np.full((2, 2), 100.0, np.float32)
+        done = np.ones(2, bool)
+        info = {
+            'collision': np.zeros((2, 2), bool),
+            'new_death': np.zeros((2, 2), bool),
+            'goal_reached': np.ones((2, 2), bool),
+            'team_success': np.ones(2, bool),
+            'both_dead': np.zeros(2, bool),
+            'timeout': np.zeros(2, bool),
+            'alive_before': alive_before,
+            'alive_after': self.alive.copy(),
+            'min_clearance': np.ones((2, 2), np.float32),
+            'map_seed': self.map_seeds.copy(),
+        }
+        return self.observe(), rewards, done, info
+
+
+def test_same_round_surplus_is_uniformly_subsampled_instead_of_always_dropping_tail_episodes():
+    cfg = tiny_cfg(samples=3, parallel_envs=2)
+    worker = TwoRunnerWorker('runner_0', cfg, device='cpu', env_factory=MarkerSuccessEnv)
+    batch, metrics = worker.collect_round(policy_set(cfg), round_index=0)
+    markers = set(batch.observations[:, 0].cpu().numpy().astype(int).tolist())
+    # Round seed is 7 for runner_0/round0. The dedicated selection RNG uses
+    # seed+1=8, whose 3-of-4 choice is indices [0, 1, 3]. The pool markers are
+    # [0, 1, 10, 11], so the selected batch must include the later episode 11.
+    assert markers == {0, 1, 11}
+    assert metrics['discarded_surplus_samples'] == 1
