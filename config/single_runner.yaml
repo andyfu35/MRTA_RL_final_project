@@ -72,6 +72,13 @@ ppo:
   epochs: 4
   minibatch_size: 256
 
+# Fixed deterministic validation set. Keep this separate from the final
+# held-out evaluation seeds so best-checkpoint selection does not leak test data.
+validation:
+  every: 5
+  episodes: 50
+  seed_start: 9000
+
 evaluation:
   episodes: 100
   seed_start: 10000

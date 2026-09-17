@@ -13,6 +13,18 @@ def test_single_train_cli_accepts_reward_ablation_mode():
     assert args.rounds == 2
 
 
+def test_single_train_cli_accepts_resume_checkpoint():
+    args = build_parser().parse_args([
+        'single-train',
+        '--config', 'config/single_runner.yaml',
+        '--resume', 'runs/exp1/latest.pt',
+        '--rounds', '50',
+    ])
+    assert args.command == 'single-train'
+    assert args.resume == 'runs/exp1/latest.pt'
+    assert args.rounds == 50
+
+
 def test_single_eval_cli_accepts_held_out_seed_controls():
     args = build_parser().parse_args([
         'single-eval',
