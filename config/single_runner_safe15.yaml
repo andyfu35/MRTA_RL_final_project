@@ -1,0 +1,80 @@
+seed: 42
+
+environment:
+  width: 20.0
+  height: 20.0
+  dt: 0.10
+  wheel_radius: 0.10
+  wheel_base: 0.50
+  # PPO outputs normalized left/right wheel commands in [-1, 1].
+  # Each wheel command maps linearly to [-2, 2] m/s ground speed.
+  max_wheel_linear_speed: 2.0
+  robot_radius: 0.30
+  body_length: 0.70
+  body_width: 0.44
+  wheel_length: 0.34
+  wheel_width: 0.10
+  goal: [18.0, 10.0]
+  goal_radius: 0.70
+  max_steps: 360
+  lidar_rays: 8
+  lidar_range: 6.0
+  reset_jitter: 0.18
+  obstacles:
+    count: 14
+    min_width: 0.8
+    max_width: 1.8
+    min_height: 0.8
+    max_height: 1.8
+    min_spacing: 0.65
+    spawn_clearance: 1.8
+    goal_clearance: 2.0
+    border_margin: 0.35
+    max_attempts: 4000
+
+# R2 safety-reward ablation: identical to the formal R2 baseline except
+# safety_scale=1.5 and a larger fixed validation set.
+single_runner_reward:
+  mode: R2
+  goal_bonus: 100.0
+  collision_penalty: -100.0
+  timeout_penalty: -20.0
+  progress_scale: 5.0
+  step_penalty: -0.01
+  safety_distance: 0.50
+  safety_scale: 1.50
+  heading_scale: 0.02
+
+training:
+  samples_per_update: 8192
+  rounds: 200
+  checkpoint_every: 20
+
+# One shared PPO policy, 32 parallel worlds, each world using its own map seed
+# and stochastic action trajectory. 32 * 256 * 1 = 8192 samples/update.
+collection:
+  parallel_envs: 32
+  rollout_steps: 256
+  batches: 1
+
+ppo:
+  hidden_sizes: [64, 64]
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  value_coef: 0.5
+  entropy_coef: 0.005
+  max_grad_norm: 0.5
+  epochs: 4
+  minibatch_size: 256
+
+# Safety ablations use the same 200-map validation split for model selection.
+validation:
+  every: 5
+  episodes: 200
+  seed_start: 9000
+
+evaluation:
+  episodes: 100
+  seed_start: 10000
