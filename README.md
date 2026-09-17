@@ -20,12 +20,12 @@
 
 ## 1. 安裝
 
-建議 Python 3.11 或 3.12。
+目前以 **Python 3.13** 作為本專案本地驗證環境。
 
 ### macOS / Linux
 
 ```bash
-python3 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
@@ -35,7 +35,7 @@ pip install -e .
 ### Windows PowerShell
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
@@ -231,3 +231,165 @@ src/marl2d/render.py      兩輪車 + 隨機方塊地圖 GIF renderer
 src/marl2d/cli.py         train/render CLI
 tests/                    自動測試
 ```
+
+## 10. Experiment 1：Single Runner Navigation（正式基線）
+
+目前已加入單車避障到終點的 PPO 實驗模式。此模式與未來 2v2 分開，目的先驗證單一 policy 是否能在未見過的隨機矩形地圖中穩定導航。
+
+### Python 版本
+
+目前本專案已在 **Python 3.13** 使用以下指令通過本地測試：
+
+```bash
+python -m pytest -q
+```
+
+macOS / Linux 建議：
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+pip install -e .
+```
+
+Windows：
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+pip install -e .
+```
+
+### Action 與速度限制
+
+PPO 輸出：
+
+```text
+[left_wheel, right_wheel] in [-1, 1]
+```
+
+每個輪子的 ground speed 線性映射到：
+
+```text
+[-2.0, 2.0] m/s
+```
+
+因此 `[1, 1]` 對應車體最高直線速度 2 m/s；20 m 橫向距離的理論最低時間為 10 s。
+
+### 多世界 PPO
+
+正式設定在 `config/single_runner.yaml`：
+
+```yaml
+training:
+  samples_per_update: 8192
+
+collection:
+  parallel_envs: 32
+  rollout_steps: 256
+  batches: 1
+```
+
+即：
+
+```text
+32 worlds * 256 steps = 8192 samples / PPO update
+```
+
+32 個 world 共用同一個 Actor-Critic，但每個 world 使用不同且可重現的 map seed，episode 結束後該 world 立即換下一個 seed。訓練 action 使用 stochastic policy sampling；evaluation 使用 deterministic mean action。
+
+### Reward Ablation
+
+`single_runner_reward.mode` 支援四種模式：
+
+```text
+R0 = sparse terminal only
+R1 = R0 + progress + time penalty
+R2 = R1 + obstacle/wall safety shaping   <- formal baseline
+R3 = R2 + small heading shaping
+```
+
+R2 非 terminal reward：
+
+```text
+R = 5 * (d_prev - d_now)
+    - 0.01
+    - 0.5 * max(0, (0.5 - clearance) / 0.5)^2
+```
+
+Terminal reward 會覆蓋 shaping：
+
+```text
+Goal      = +100
+Collision = -100 and episode terminates
+Timeout   = -20
+```
+
+R3 額外加入：
+
+```text
++ 0.02 * cos(heading_error)
+```
+
+### 開始訓練
+
+正式 R2 baseline：
+
+```bash
+python -m marl2d single-train \
+  --config config/single_runner.yaml \
+  --reward-mode R2 \
+  --rounds 200 \
+  --output runs/exp1_r2 \
+  --device cpu
+```
+
+先做短 smoke test：
+
+```bash
+python -m marl2d single-train \
+  --config config/single_runner.yaml \
+  --reward-mode R2 \
+  --rounds 1 \
+  --output runs/exp1_smoke \
+  --device cpu
+```
+
+### Held-out Evaluation
+
+訓練 seed 與 evaluation seed 分開。預設 evaluation 從 10000 開始：
+
+```bash
+python -m marl2d single-eval \
+  --checkpoint runs/exp1_r2/latest.pt \
+  --episodes 100 \
+  --seed-start 10000 \
+  --output runs/exp1_r2/eval.json \
+  --device cpu
+```
+
+主要指標：
+
+- `success_rate`
+- `collision_rate`
+- `mean_time_to_goal_s`
+- `mean_path_efficiency`
+- `mean_episode_reward`
+- `mean_min_clearance_m`
+
+### Reward ablation 實驗
+
+建議使用相同 seed、PPO 超參數與 samples/update，僅改 reward mode：
+
+```bash
+python -m marl2d single-train --config config/single_runner.yaml --reward-mode R0 --rounds 200 --output runs/exp1_r0
+python -m marl2d single-train --config config/single_runner.yaml --reward-mode R1 --rounds 200 --output runs/exp1_r1
+python -m marl2d single-train --config config/single_runner.yaml --reward-mode R2 --rounds 200 --output runs/exp1_r2
+python -m marl2d single-train --config config/single_runner.yaml --reward-mode R3 --rounds 200 --output runs/exp1_r3
+```
+
+再各自以完全相同的 held-out seed range 評估，才能公平比較 reward shaping 對成功率、碰撞率、時間與路徑效率的影響。

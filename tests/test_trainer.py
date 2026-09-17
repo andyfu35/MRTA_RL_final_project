@@ -12,7 +12,7 @@ def make_cfg():
         'seed': 123,
         'environment': {
             'width': 10.0, 'height': 6.0, 'dt': 0.1,
-            'wheel_radius': 0.1, 'wheel_base': 0.4, 'max_wheel_speed': 5.0,
+            'wheel_radius': 0.1, 'wheel_base': 0.4, 'max_wheel_linear_speed': 2.0,
             'robot_radius': 0.18, 'goal': [9.0, 3.0], 'goal_radius': 0.5,
             'max_steps': 20, 'lidar_rays': 8, 'lidar_range': 4.0,
             'reset_jitter': 0.02, 'obstacles': {'count': 0},
