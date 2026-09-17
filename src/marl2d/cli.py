@@ -6,10 +6,21 @@ import json
 from pathlib import Path
 
 from . import AGENT_IDS
-from .config import load_config, load_single_runner_config, validate_single_runner_config
+from .config import (
+    load_config,
+    load_single_runner_config,
+    load_two_runner_config,
+    validate_single_runner_config,
+)
 from .render import render_policy_set_gif
 from .single_runner import SingleRunnerTrainer, evaluate_single_runner, load_single_runner_checkpoint
 from .trainer import DistributedTrainer, load_checkpoint
+from .two_runner import (
+    TWO_RUNNER_IDS,
+    TwoRunnerTrainer,
+    evaluate_two_runner,
+    load_two_runner_checkpoint,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -55,6 +66,35 @@ def build_parser() -> argparse.ArgumentParser:
     single_eval.add_argument("--seed-start", type=int, default=None)
     single_eval.add_argument("--device", default="cpu")
     single_eval.add_argument("--output", default=None, help="Optional JSON file for evaluation summary")
+
+    two_train = sub.add_parser("two-train", help="Train Experiment 2 cooperative two-runner PPO")
+    two_train.add_argument("--config", default="config/two_runner.yaml")
+    two_train.add_argument("--rounds", type=int, default=None, help="Additional PPO rounds to run")
+    two_train.add_argument("--output", default="runs/exp2_two_runner")
+    two_train.add_argument("--device", default="cpu")
+    source = two_train.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--init-single-runner-checkpoint",
+        default=None,
+        help="Start Experiment 2 from the finalized 15-D single-runner checkpoint.",
+    )
+    source.add_argument(
+        "--resume",
+        default=None,
+        help="Resume a full Experiment 2 checkpoint.",
+    )
+    two_train.add_argument(
+        "--reset-best-validation",
+        action="store_true",
+        help="Reset inherited Experiment 2 best-validation history after resume.",
+    )
+
+    two_eval = sub.add_parser("two-eval", help="Evaluate an Experiment 2 two-runner checkpoint")
+    two_eval.add_argument("--checkpoint", required=True)
+    two_eval.add_argument("--episodes", type=int, default=None)
+    two_eval.add_argument("--seed-start", type=int, default=None)
+    two_eval.add_argument("--device", default="cpu")
+    two_eval.add_argument("--output", default=None, help="Optional JSON file for evaluation summary")
 
     return parser
 
@@ -147,6 +187,64 @@ def main(argv: list[str] | None = None) -> int:
         )
         summary["policy_version"] = version
         summary["reward_mode"] = cfg["single_runner_reward"]["mode"]
+        text = json.dumps(summary, ensure_ascii=False, indent=2)
+        print(text)
+        if args.output:
+            output_path = Path(args.output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(text + "\n", encoding="utf-8")
+        return 0
+
+    if args.command == "two-train":
+        cfg = load_two_runner_config(args.config)
+        trainer = TwoRunnerTrainer(cfg, output_dir=args.output, device=args.device)
+        if args.resume:
+            resume_mode = trainer.resume_from_checkpoint(args.resume)
+            if args.reset_best_validation:
+                trainer.best_validation = None
+                print("Reset inherited Experiment 2 best-validation history.")
+            print(f"Resumed {resume_mode} two-runner state from round {trainer.current_round}: {args.resume}")
+        else:
+            trainer.initialize_from_single_runner_checkpoint(args.init_single_runner_checkpoint)
+            print(f"Initialized both runners from: {args.init_single_runner_checkpoint}")
+        records = trainer.run(rounds=args.rounds)
+        for record in records:
+            pieces = [f"round={int(record['round']):4d}"]
+            for agent_id in TWO_RUNNER_IDS:
+                metrics = record["agents"][agent_id]
+                pieces.append(
+                    f"{agent_id}:samples={int(metrics['samples'])} "
+                    f"sim={int(metrics['simulator_steps'])} "
+                    f"deaths={int(metrics['target_deaths'])} "
+                    f"discard={int(metrics.get('discarded_surplus_samples', 0))}"
+                )
+            if "validation" in record:
+                validation = record["validation"]
+                pieces.append(
+                    f"val_success={validation['team_success_rate']:.3f} "
+                    f"val_collision={validation['any_collision_rate']:.3f} "
+                    f"val_both_dead={validation['both_dead_rate']:.3f}"
+                )
+            print(" ".join(pieces))
+        print(f"\nCheckpoint: {Path(args.output) / 'latest.pt'}")
+        if (Path(args.output) / "best.pt").exists():
+            print(f"Best:       {Path(args.output) / 'best.pt'}")
+        print(f"Metrics:    {Path(args.output) / 'metrics.jsonl'}")
+        return 0
+
+    if args.command == "two-eval":
+        version, policy_set, cfg = load_two_runner_checkpoint(args.checkpoint)
+        evaluation_cfg = cfg["evaluation"]
+        episodes = int(args.episodes if args.episodes is not None else evaluation_cfg["episodes"])
+        seed_start = int(args.seed_start if args.seed_start is not None else evaluation_cfg["seed_start"])
+        summary = evaluate_two_runner(
+            cfg,
+            policy_set,
+            episodes=episodes,
+            seed_start=seed_start,
+            device=args.device,
+        )
+        summary["policy_version"] = version
         text = json.dumps(summary, ensure_ascii=False, indent=2)
         print(text)
         if args.output:
