@@ -25,6 +25,18 @@ def test_single_train_cli_accepts_resume_checkpoint():
     assert args.rounds == 50
 
 
+def test_single_train_cli_can_reset_inherited_best_validation():
+    args = build_parser().parse_args([
+        'single-train',
+        '--config', 'config/single_runner_safe15.yaml',
+        '--resume', 'runs/exp1/best.pt',
+        '--reset-best-validation',
+        '--rounds', '30',
+    ])
+    assert args.command == 'single-train'
+    assert args.reset_best_validation is True
+
+
 def test_single_eval_cli_accepts_held_out_seed_controls():
     args = build_parser().parse_args([
         'single-eval',
