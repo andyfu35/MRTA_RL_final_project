@@ -42,3 +42,18 @@ def test_all_four_matching_versions_commit_exactly_once():
         for key in updates[aid]:
             torch.testing.assert_close(committed[aid][key], updates[aid][key])
     assert coordinator.try_commit(1) is False
+
+
+def test_exchange_supports_explicit_two_agent_set():
+    ids = ('runner_0', 'runner_1')
+    snapshot = {'w': torch.tensor([1.0])}
+    exchange = MockPolicyExchange({aid: snapshot for aid in ids}, version=0, agent_ids=ids)
+
+    assert exchange.ready_status(1) == {'runner_0': False, 'runner_1': False}
+    exchange.publish('runner_0', 1, snapshot)
+    assert exchange.ready_status(1) == {'runner_0': True, 'runner_1': False}
+    assert exchange.commit(1) is False
+    exchange.publish('runner_1', 1, snapshot)
+    assert exchange.commit(1) is True
+    assert exchange.version == 1
+    assert set(exchange.get_committed_policy_set()) == set(ids)
