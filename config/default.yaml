@@ -1,24 +1,46 @@
 seed: 42
 
 environment:
-  width: 10.0
-  height: 6.0
+  # Large deterministic 2D arena. Physics noise is intentionally disabled.
+  width: 20.0
+  height: 20.0
   dt: 0.10
-  wheel_radius: 0.10
-  wheel_base: 0.40
-  max_wheel_speed: 5.0
-  robot_radius: 0.18
-  goal: [9.0, 3.0]
-  goal_radius: 0.50
-  max_steps: 160
-  lidar_rays: 8
-  lidar_range: 4.0
-  reset_jitter: 0.12
-  obstacles:
-    - [4.0, 1.35, 0.45]
-    - [4.8, 3.00, 0.55]
-    - [4.0, 4.65, 0.45]
 
+  # Differential-drive kinematics.
+  wheel_radius: 0.10
+  wheel_base: 0.50
+  max_wheel_speed: 6.0
+
+  # Collision footprint + renderer dimensions.
+  robot_radius: 0.30
+  body_length: 0.70
+  body_width: 0.44
+  wheel_length: 0.34
+  wheel_width: 0.10
+
+  goal: [18.0, 10.0]
+  goal_radius: 0.70
+  max_steps: 360
+
+  lidar_rays: 8
+  lidar_range: 6.0
+  reset_jitter: 0.18
+
+  # Every environment generates its own random axis-aligned rectangular map.
+  # A fixed seed reproduces the same maps exactly.
+  obstacles:
+    count: 14
+    min_width: 0.8
+    max_width: 1.8
+    min_height: 0.8
+    max_height: 1.8
+    min_spacing: 0.65
+    spawn_clearance: 1.8
+    goal_clearance: 2.0
+    border_margin: 0.35
+    max_attempts: 4000
+
+# Reward is intentionally unchanged for now. We will tune it separately.
 reward:
   runner:
     goal_bonus: 100.0
@@ -39,6 +61,8 @@ training:
   rounds: 10
   checkpoint_every: 5
 
+# Different machines may use different collection profiles, but every PPO
+# update must collect exactly training.samples_per_update samples.
 collection_profiles:
   runner_0:
     parallel_envs: 32
@@ -69,6 +93,8 @@ ppo:
   epochs: 4
   minibatch_size: 256
 
+# Mock mode runs all four workers on one computer. ROS2 transport will replace
+# this layer later without changing the trainer/worker contract.
 network:
   mode: mock
   coordinator:
