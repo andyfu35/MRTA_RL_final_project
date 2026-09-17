@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: marl2d
+Version: 0.1.0
+Summary: Deterministic 2D synchronous multi-agent PPO prototype
+Requires-Python: >=3.11
+Requires-Dist: numpy>=1.26
+Requires-Dist: torch>=2.2
+Requires-Dist: PyYAML>=6.0
+Requires-Dist: Pillow>=10.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
