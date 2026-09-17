@@ -107,6 +107,8 @@ class TwoRunnerWorker:
         self._collector_obs: np.ndarray | None = None
         self.pending_trajectories: list[list[TargetTransition]] = []
         self.finalized_queue: deque[FinalizedSample] = deque()
+        self.finalized_outcomes: deque[str] = deque()
+        self.finalized_trajectory_ids: deque[int] = deque()
 
     def _ensure_collector(self) -> None:
         if self._collector_env is not None:
@@ -134,7 +136,14 @@ class TwoRunnerWorker:
             result[agent_id] = model
         return result
 
-    def _finalize_env(self, env_index: int, delayed_team_success: bool) -> int:
+    def _finalize_env(
+        self,
+        env_index: int,
+        delayed_team_success: bool,
+        *,
+        outcome: str,
+        trajectory_id: int,
+    ) -> int:
         trajectory = self.pending_trajectories[env_index]
         finalized = finalize_target_trajectory(
             trajectory,
@@ -144,6 +153,8 @@ class TwoRunnerWorker:
             gae_lambda=float(self.cfg["ppo"]["gae_lambda"]),
         )
         self.finalized_queue.extend(finalized)
+        self.finalized_outcomes.extend([str(outcome)] * len(finalized))
+        self.finalized_trajectory_ids.extend([int(trajectory_id)] * len(finalized))
         self.pending_trajectories[env_index] = []
         return len(finalized)
 
@@ -163,7 +174,12 @@ class TwoRunnerWorker:
         # policy set. Round boundaries are therefore clean: pending trajectories
         # are drained before the previous round returns, and surplus samples are
         # discarded instead of carried into the next update.
-        if self.finalized_queue or any(self.pending_trajectories):
+        if (
+            self.finalized_queue
+            or self.finalized_outcomes
+            or self.finalized_trajectory_ids
+            or any(self.pending_trajectories)
+        ):
             raise RuntimeError("two-runner collector crossed a PPO round boundary with stale samples")
 
         models = self._models_from_policy_set(frozen_policy_set)
@@ -177,6 +193,14 @@ class TwoRunnerWorker:
         target_goal_contributions = 0
         delayed_team_credits = 0
         unique_map_seeds: set[int] = set()
+        outcome_episode_counts = {"success": 0, "timeout": 0, "both_dead": 0, "other": 0}
+        outcome_trajectory_lengths: dict[str, list[int]] = {
+            "success": [],
+            "timeout": [],
+            "both_dead": [],
+            "other": [],
+        }
+        trajectory_serial = 0
         draining = False
         active_episode_mask = np.ones(int(env.num_envs), dtype=bool)
 
@@ -238,11 +262,30 @@ class TwoRunnerWorker:
                 env_index = int(env_index)
                 completed_team_episodes += 1
                 team_success = bool(np.asarray(info["team_success"])[env_index])
+                both_dead = bool(np.asarray(info["both_dead"])[env_index])
+                timed_out = bool(np.asarray(info["timeout"])[env_index])
+                if team_success:
+                    outcome = "success"
+                elif both_dead:
+                    outcome = "both_dead"
+                elif timed_out:
+                    outcome = "timeout"
+                else:
+                    outcome = "other"
                 target_was_alive = bool(np.asarray(info["alive_before"])[env_index, self.agent_index])
                 delayed = team_success and not target_was_alive
                 if delayed:
                     delayed_team_credits += 1
-                self._finalize_env(env_index, delayed_team_success=delayed)
+                trajectory_length = len(self.pending_trajectories[env_index])
+                outcome_episode_counts[outcome] += 1
+                outcome_trajectory_lengths[outcome].append(trajectory_length)
+                self._finalize_env(
+                    env_index,
+                    delayed_team_success=delayed,
+                    outcome=outcome,
+                    trajectory_id=trajectory_serial,
+                )
+                trajectory_serial += 1
 
             if not draining and len(self.finalized_queue) >= expected_samples:
                 # Do not launch any new episodes after the round has enough
@@ -271,14 +314,22 @@ class TwoRunnerWorker:
             raise RuntimeError("collector drained without enough finalized samples")
 
         sample_pool = list(self.finalized_queue)
+        outcome_pool = list(self.finalized_outcomes)
+        trajectory_id_pool = list(self.finalized_trajectory_ids)
         pool_size = len(sample_pool)
+        if not (pool_size == len(outcome_pool) == len(trajectory_id_pool)):
+            raise RuntimeError("two-runner diagnostic sidecars are not aligned with finalized samples")
         selection_rng = np.random.default_rng(round_seed + 1)
         selected_indices = selection_rng.choice(
             pool_size, size=expected_samples, replace=False
         )
         consumed = [sample_pool[int(index)] for index in selected_indices]
+        selected_outcomes = [outcome_pool[int(index)] for index in selected_indices]
+        selected_trajectory_ids = [trajectory_id_pool[int(index)] for index in selected_indices]
         discarded_surplus = pool_size - expected_samples
         self.finalized_queue.clear()
+        self.finalized_outcomes.clear()
+        self.finalized_trajectory_ids.clear()
 
         # Every pre-boundary episode is terminal now. Start the next round from
         # fresh episodes only after the current frozen-policy sample pool is sealed.
@@ -292,14 +343,68 @@ class TwoRunnerWorker:
         returns = torch.tensor([x.return_value for x in consumed], dtype=torch.float32, device=self.device)
         advantages = torch.tensor([x.advantage for x in consumed], dtype=torch.float32, device=self.device)
         batch = RolloutBatch(observations, actions, old_log_probs, returns, advantages)
+        success_pool_mask = np.asarray([x == "success" for x in outcome_pool], dtype=bool)
+        success_selected_mask = np.asarray([x == "success" for x in selected_outcomes], dtype=bool)
+        selected_advantages = np.asarray([x.advantage for x in consumed], dtype=np.float64)
+
+        def _mean(values: list[int] | np.ndarray) -> float:
+            return float(np.mean(values)) if len(values) else 0.0
+
+        def _masked_mean_std(mask: np.ndarray) -> tuple[float, float]:
+            values = selected_advantages[mask]
+            if values.size == 0:
+                return 0.0, 0.0
+            return float(values.mean()), float(values.std())
+
+        success_adv_mean, success_adv_std = _masked_mean_std(success_selected_mask)
+        failure_adv_mean, failure_adv_std = _masked_mean_std(~success_selected_mask)
+        success_lengths = outcome_trajectory_lengths["success"]
+        failure_lengths = (
+            outcome_trajectory_lengths["timeout"]
+            + outcome_trajectory_lengths["both_dead"]
+            + outcome_trajectory_lengths["other"]
+        )
+        gae_decay = float(self.cfg["ppo"]["gamma"]) * float(self.cfg["ppo"]["gae_lambda"])
+        success_credit_weights = [
+            gae_decay ** max(int(length) - 1, 0)
+            for length in success_lengths
+        ]
+
         metrics: dict[str, float | int] = {
             "samples": expected_samples,
             "simulator_steps": simulator_steps,
             "completed_team_episodes": completed_team_episodes,
+            "team_success_episodes": outcome_episode_counts["success"],
+            "timeout_episodes": outcome_episode_counts["timeout"],
+            "both_dead_episodes": outcome_episode_counts["both_dead"],
             "target_deaths": target_deaths,
             "target_goal_contributions": target_goal_contributions,
             "delayed_team_credits": delayed_team_credits,
             "sample_pool_size": pool_size,
+            "sample_pool_success_transitions": int(success_pool_mask.sum()),
+            "sample_pool_failure_transitions": int((~success_pool_mask).sum()),
+            "sample_pool_success_fraction": float(success_pool_mask.mean()) if pool_size else 0.0,
+            "selected_success_transitions": int(success_selected_mask.sum()),
+            "selected_failure_transitions": int((~success_selected_mask).sum()),
+            "selected_success_fraction": float(success_selected_mask.mean()),
+            "selected_unique_trajectories": len(set(selected_trajectory_ids)),
+            "selected_success_trajectories": len({
+                selected_trajectory_ids[i]
+                for i in range(len(selected_trajectory_ids))
+                if success_selected_mask[i]
+            }),
+            "selected_failure_trajectories": len({
+                selected_trajectory_ids[i]
+                for i in range(len(selected_trajectory_ids))
+                if not success_selected_mask[i]
+            }),
+            "mean_success_target_trajectory_steps": _mean(success_lengths),
+            "mean_failure_target_trajectory_steps": _mean(failure_lengths),
+            "mean_success_terminal_credit_weight_at_start": _mean(success_credit_weights),
+            "selected_success_advantage_mean": success_adv_mean,
+            "selected_success_advantage_std": success_adv_std,
+            "selected_failure_advantage_mean": failure_adv_mean,
+            "selected_failure_advantage_std": failure_adv_std,
             "discarded_surplus_samples": discarded_surplus,
             "queued_surplus_samples": 0,
             "unique_map_seeds": len(unique_map_seeds),
@@ -339,6 +444,8 @@ def _worker_snapshot_training_state(worker: TwoRunnerWorker) -> dict[str, Any]:
         "collector_obs": worker._collector_obs.copy(),
         "pending_trajectories": _clone_pending(worker.pending_trajectories),
         "finalized_queue": copy.deepcopy(list(worker.finalized_queue)),
+        "finalized_outcomes": list(worker.finalized_outcomes),
+        "finalized_trajectory_ids": list(worker.finalized_trajectory_ids),
     }
 
 
@@ -352,6 +459,8 @@ def _worker_restore_training_state(worker: TwoRunnerWorker, state: dict[str, Any
     worker._collector_obs = np.asarray(state["collector_obs"], dtype=np.float32).copy()
     worker.pending_trajectories = _clone_pending(state["pending_trajectories"])
     worker.finalized_queue = deque(copy.deepcopy(state["finalized_queue"]))
+    worker.finalized_outcomes = deque(copy.deepcopy(state.get("finalized_outcomes", [])))
+    worker.finalized_trajectory_ids = deque(copy.deepcopy(state.get("finalized_trajectory_ids", [])))
 
 
 def two_runner_validation_is_better(
