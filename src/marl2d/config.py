@@ -185,6 +185,10 @@ def validate_two_runner_config(cfg: dict[str, Any]) -> None:
     if float(reward["safety_scale"]) < 0:
         raise ValueError("two_runner_reward.safety_scale must be >= 0")
 
+    target_kl = cfg["ppo"].get("target_kl")
+    if target_kl is not None and float(target_kl) <= 0.0:
+        raise ValueError("ppo.target_kl must be > 0 when configured")
+
     samples = int(cfg["training"]["samples_per_update"])
     if samples <= 0:
         raise ValueError("training.samples_per_update must be positive")

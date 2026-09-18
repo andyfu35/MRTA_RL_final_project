@@ -12,7 +12,7 @@ from .config import (
     load_two_runner_config,
     validate_single_runner_config,
 )
-from .render import render_policy_set_gif
+from .render import find_two_runner_demo_seed, render_policy_set_gif, render_two_runner_gif
 from .single_runner import SingleRunnerTrainer, evaluate_single_runner, load_single_runner_checkpoint
 from .trainer import DistributedTrainer, load_checkpoint
 from .two_runner import (
@@ -96,6 +96,33 @@ def build_parser() -> argparse.ArgumentParser:
     two_eval.add_argument("--device", default="cpu")
     two_eval.add_argument("--output", default=None, help="Optional JSON file for evaluation summary")
 
+    two_render = sub.add_parser(
+        "two-render",
+        help="Render one deterministic Experiment 2 episode as a top-view GIF",
+    )
+    two_render.add_argument("--checkpoint", required=True)
+    two_render.add_argument("--output", default="two_runner_demo.gif")
+    two_render.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Render this exact seed. If omitted, search validation seeds for a collision-free success.",
+    )
+    two_render.add_argument(
+        "--seed-start",
+        type=int,
+        default=None,
+        help="Seed search start. Defaults to the checkpoint validation seed_start.",
+    )
+    two_render.add_argument(
+        "--search-episodes",
+        type=int,
+        default=200,
+        help="How many deterministic seeds to search when --seed is omitted.",
+    )
+    two_render.add_argument("--max-steps", type=int, default=None)
+    two_render.add_argument("--device", default="cpu")
+
     return parser
 
 
@@ -125,7 +152,10 @@ def _format_two_runner_record(record: dict) -> str:
             f"sel_succ={int(metrics.get('selected_success_transitions', 0))}/{int(metrics['samples'])} "
             f"pool={int(metrics.get('sample_pool_size', metrics['samples']))} "
             f"discard={int(metrics.get('discarded_surplus_samples', 0))} "
-            f"kl={float(metrics.get('approx_kl', 0.0)):.5f}"
+            f"kl={float(metrics.get('approx_kl', 0.0)):.5f} "
+            f"guard_kl={float(metrics.get('max_guard_kl', 0.0)):.5f} "
+            f"opt={int(metrics.get('optimizer_steps', 0))} "
+            f"stop={int(metrics.get('early_stopped', 0))}"
         )
     if "validation" in record:
         validation = record["validation"]
@@ -260,6 +290,44 @@ def main(argv: list[str] | None = None) -> int:
             output_path = Path(args.output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(text + "\n", encoding="utf-8")
+        return 0
+
+    if args.command == "two-render":
+        version, policy_set, cfg = load_two_runner_checkpoint(args.checkpoint)
+        if args.seed is None:
+            validation_cfg = cfg.get("validation", {})
+            seed_start = int(
+                args.seed_start
+                if args.seed_start is not None
+                else validation_cfg.get("seed_start", 40000)
+            )
+            seed, found = find_two_runner_demo_seed(
+                cfg,
+                policy_set,
+                seed_start=seed_start,
+                search_episodes=int(args.search_episodes),
+                device=args.device,
+                max_steps=args.max_steps,
+            )
+            clean_text = "collision-free" if not found["any_collision"] else "successful"
+            print(
+                f"Found {clean_text} deterministic demo seed {seed}: "
+                f"steps={found['steps']} collision={found['any_collision']}"
+            )
+        else:
+            seed = int(args.seed)
+
+        summary = render_two_runner_gif(
+            cfg,
+            policy_set,
+            args.output,
+            seed=seed,
+            max_steps=args.max_steps,
+            device=args.device,
+        )
+        summary["policy_version"] = version
+        print(f"Rendered two-runner policy version {version} seed={seed} -> {args.output}")
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     version, policy_set, checkpoint_cfg = load_checkpoint(args.checkpoint)

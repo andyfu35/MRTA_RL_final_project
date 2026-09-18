@@ -48,3 +48,30 @@ def test_large_batch_config_preserves_total_used_samples_and_changes_only_batch_
     assert large['two_runner_reward'] == baseline['two_runner_reward']
     assert large['collection_profiles'] == baseline['collection_profiles']
     assert large['ppo'] == baseline['ppo']
+
+
+def test_kl_guard_config_changes_only_target_kl_from_large_batch():
+    large = load_two_runner_config('config/two_runner_large_batch.yaml')
+    guarded = load_two_runner_config('config/two_runner_large_batch_kl_guard.yaml')
+
+    assert guarded['training'] == large['training']
+    assert guarded['collection_profiles'] == large['collection_profiles']
+    assert guarded['environment'] == large['environment']
+    assert guarded['two_runner_reward'] == large['two_runner_reward']
+    assert guarded['validation'] == large['validation']
+
+    large_ppo = dict(large['ppo'])
+    guarded_ppo = dict(guarded['ppo'])
+    assert guarded_ppo.pop('target_kl') == 0.015
+    assert guarded_ppo == large_ppo
+
+
+def test_two_runner_config_rejects_nonpositive_target_kl():
+    cfg = yaml.safe_load(Path('config/two_runner_large_batch.yaml').read_text(encoding='utf-8'))
+    cfg['ppo']['target_kl'] = 0.0
+    try:
+        validate_two_runner_config(cfg)
+    except ValueError as exc:
+        assert 'target_kl' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')
