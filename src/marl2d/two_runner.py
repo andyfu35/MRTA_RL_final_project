@@ -1206,6 +1206,14 @@ class TwoRunnerTrainer:
             aid: TwoRunnerWorker(aid, cfg, device=device, env_factory=worker_env_factory)
             for aid in TWO_RUNNER_IDS
         }
+        joint_cfg = cfg.get("joint_collection", {})
+        self.shared_collector: SharedTwoRunnerCollector | None = None
+        if bool(joint_cfg.get("enabled", False)):
+            self.shared_collector = SharedTwoRunnerCollector(
+                cfg,
+                device=device,
+                env_factory=worker_env_factory,
+            )
         initial = {aid: snapshot_model(self.workers[aid].model) for aid in TWO_RUNNER_IDS}
         self.exchange = MockPolicyExchange(initial, version=0, agent_ids=TWO_RUNNER_IDS)
         self.coordinator = SynchronousCoordinator(self.exchange)
@@ -1236,6 +1244,27 @@ class TwoRunnerTrainer:
     def save_checkpoint(self, path: str | Path | None = None) -> Path:
         checkpoint = Path(path) if path is not None else self.output_dir / "latest.pt"
         checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        if self.shared_collector is None:
+            worker_states = {
+                aid: _worker_snapshot_training_state(self.workers[aid])
+                for aid in TWO_RUNNER_IDS
+            }
+            shared_state = None
+            training_state_version = 1
+            collection_mode = "independent"
+        else:
+            worker_states = {
+                aid: {
+                    "optimizer": copy.deepcopy(
+                        self.workers[aid].optimizer.state_dict()
+                    )
+                }
+                for aid in TWO_RUNNER_IDS
+            }
+            shared_state = self.shared_collector.snapshot_state()
+            training_state_version = 2
+            collection_mode = "shared_joint"
+
         torch.save(
             {
                 "version": self.current_round,
@@ -1243,9 +1272,11 @@ class TwoRunnerTrainer:
                 "config": self.cfg,
                 "obs_dim": 18,
                 "action_dim": 2,
-                "worker_states": {aid: _worker_snapshot_training_state(self.workers[aid]) for aid in TWO_RUNNER_IDS},
+                "worker_states": worker_states,
+                "shared_collector_state": shared_state,
+                "collection_mode": collection_mode,
                 "best_validation": copy.deepcopy(self.best_validation),
-                "training_state_version": 1,
+                "training_state_version": training_state_version,
             },
             checkpoint,
         )
@@ -1263,8 +1294,31 @@ class TwoRunnerTrainer:
             load_model_snapshot(self.workers[aid].model, policies[aid])
         if int(data.get("training_state_version", 0)) < 1 or "worker_states" not in data:
             return "legacy"
-        for aid in TWO_RUNNER_IDS:
-            _worker_restore_training_state(self.workers[aid], data["worker_states"][aid])
+
+        state_version = int(data.get("training_state_version", 0))
+        collection_mode = str(data.get("collection_mode", "independent"))
+        if state_version >= 2 and collection_mode == "shared_joint":
+            if self.shared_collector is None:
+                raise ValueError(
+                    "checkpoint uses shared_joint collection but current config does not"
+                )
+            for aid in TWO_RUNNER_IDS:
+                self.workers[aid].optimizer.load_state_dict(
+                    data["worker_states"][aid]["optimizer"]
+                )
+            shared_state = data.get("shared_collector_state")
+            if shared_state is None:
+                raise ValueError("shared_joint checkpoint missing shared_collector_state")
+            self.shared_collector.restore_state(shared_state)
+        else:
+            if self.shared_collector is not None:
+                raise ValueError(
+                    "independent-collector checkpoint cannot resume into shared_joint mode"
+                )
+            for aid in TWO_RUNNER_IDS:
+                _worker_restore_training_state(
+                    self.workers[aid], data["worker_states"][aid]
+                )
         self.best_validation = copy.deepcopy(data.get("best_validation"))
         return "full"
 
@@ -1282,10 +1336,42 @@ class TwoRunnerTrainer:
             next_version = current + 1
             frozen = self.policy_set()
             round_metrics: dict[str, dict[str, Any]] = {}
-            for aid in TWO_RUNNER_IDS:
-                snapshot, metrics = self.workers[aid].train_round(frozen, current)
-                round_metrics[aid] = metrics
-                self.coordinator.submit_update(aid, next_version, snapshot, metrics)
+            if self.shared_collector is None:
+                for aid in TWO_RUNNER_IDS:
+                    snapshot, metrics = self.workers[aid].train_round(
+                        frozen, current
+                    )
+                    round_metrics[aid] = metrics
+                    self.coordinator.submit_update(
+                        aid, next_version, snapshot, metrics
+                    )
+            else:
+                # One joint rollout is collected under exactly one frozen
+                # policy version. Both agents then update from that same set of
+                # team episodes, commit together, and the next round recollects
+                # under the newly committed joint policy.
+                batches, collection_metrics = self.shared_collector.collect_round(
+                    frozen, current
+                )
+                for aid in TWO_RUNNER_IDS:
+                    worker = self.workers[aid]
+                    load_model_snapshot(worker.model, frozen[aid])
+                    worker.model.train()
+                    update_metrics = ppo_update(
+                        worker.model,
+                        worker.optimizer,
+                        batches[aid],
+                        self.cfg["ppo"],
+                    )
+                    metrics = {
+                        **collection_metrics[aid],
+                        **update_metrics,
+                    }
+                    snapshot = snapshot_model(worker.model)
+                    round_metrics[aid] = metrics
+                    self.coordinator.submit_update(
+                        aid, next_version, snapshot, metrics
+                    )
             if not self.coordinator.try_commit(next_version):
                 raise RuntimeError(f"Two-runner synchronous commit failed: {self.coordinator.ready_status(next_version)}")
             record: dict[str, Any] = {"round": next_version, "agents": round_metrics}
