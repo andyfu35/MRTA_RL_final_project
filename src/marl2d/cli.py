@@ -125,7 +125,10 @@ def _format_two_runner_record(record: dict) -> str:
             f"sel_succ={int(metrics.get('selected_success_transitions', 0))}/{int(metrics['samples'])} "
             f"pool={int(metrics.get('sample_pool_size', metrics['samples']))} "
             f"discard={int(metrics.get('discarded_surplus_samples', 0))} "
-            f"kl={float(metrics.get('approx_kl', 0.0)):.5f}"
+            f"kl={float(metrics.get('approx_kl', 0.0)):.5f} "
+            f"guard_kl={float(metrics.get('max_guard_kl', 0.0)):.5f} "
+            f"opt={int(metrics.get('optimizer_steps', 0))} "
+            f"stop={int(metrics.get('early_stopped', 0))}"
         )
     if "validation" in record:
         validation = record["validation"]
