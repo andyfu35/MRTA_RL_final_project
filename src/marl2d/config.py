@@ -167,23 +167,36 @@ def validate_two_runner_config(cfg: dict[str, Any]) -> None:
         raise ValueError("environment.obstacles.count must be >= 0")
 
     reward = cfg["two_runner_reward"]
-    required_reward = {
-        "team_success_bonus",
-        "collision_penalty",
-        "timeout_penalty",
-        "self_progress_scale",
-        "team_progress_scale",
-        "step_penalty",
-        "safety_distance",
-        "safety_scale",
-    }
-    missing_reward = required_reward - set(reward)
-    if missing_reward:
-        raise ValueError(f"Missing two-runner reward settings: {sorted(missing_reward)}")
-    if float(reward["safety_distance"]) <= 0:
-        raise ValueError("two_runner_reward.safety_distance must be positive")
-    if float(reward["safety_scale"]) < 0:
-        raise ValueError("two_runner_reward.safety_scale must be >= 0")
+    if "plugin_path" in reward:
+        if not str(reward["plugin_path"]).strip():
+            raise ValueError("two_runner_reward.plugin_path must be non-empty")
+        params = reward.get("params", {})
+        if not isinstance(params, dict):
+            raise ValueError("two_runner_reward.params must be a mapping")
+        if "safety_distance" in params and float(params["safety_distance"]) <= 0:
+            raise ValueError(
+                "two_runner_reward.params.safety_distance must be positive"
+            )
+    else:
+        required_reward = {
+            "team_success_bonus",
+            "collision_penalty",
+            "timeout_penalty",
+            "self_progress_scale",
+            "team_progress_scale",
+            "step_penalty",
+            "safety_distance",
+            "safety_scale",
+        }
+        missing_reward = required_reward - set(reward)
+        if missing_reward:
+            raise ValueError(
+                f"Missing two-runner reward settings: {sorted(missing_reward)}"
+            )
+        if float(reward["safety_distance"]) <= 0:
+            raise ValueError("two_runner_reward.safety_distance must be positive")
+        if float(reward["safety_scale"]) < 0:
+            raise ValueError("two_runner_reward.safety_scale must be >= 0")
 
     target_kl = cfg["ppo"].get("target_kl")
     if target_kl is not None and float(target_kl) <= 0.0:
