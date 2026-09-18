@@ -131,3 +131,63 @@ def test_full_checkpoint_resume_reproduces_next_round(tmp_path: Path):
     for aid in TWO_RUNNER_IDS:
         for key, value in original_policy[aid].items():
             torch.testing.assert_close(resumed.policy_set()[aid][key], value)
+
+
+class CountingJointSuccessEnv(SerializableAlwaysSuccessEnv):
+    instances_created = 0
+
+    def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
+        type(self).instances_created += 1
+        super().__init__(num_envs, env_cfg, reward_cfg, seed=seed)
+
+
+def fresh_joint_cfg(samples=3, parallel_envs=2):
+    c = cfg(samples=samples)
+    c['joint_collection'] = {'enabled': True, 'parallel_envs': parallel_envs}
+    c['ppo']['epochs'] = 1
+    c['ppo']['minibatch_size'] = 2
+    return c
+
+
+def test_shared_joint_rollout_uses_one_environment_pool_for_both_agents(tmp_path: Path):
+    CountingJointSuccessEnv.instances_created = 0
+    c = fresh_joint_cfg(samples=3, parallel_envs=2)
+    trainer = TwoRunnerTrainer(
+        c,
+        tmp_path / 'joint',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    record = trainer.run(rounds=1, run_validation=False)[0]
+
+    # R0 and R1 are collected from the same shared physical worlds, not from
+    # separate per-agent environment pools.
+    assert CountingJointSuccessEnv.instances_created == 1
+    r0 = record['agents']['runner_0']
+    r1 = record['agents']['runner_1']
+    assert r0['shared_joint_rollout'] == 1
+    assert r1['shared_joint_rollout'] == 1
+    assert r0['shared_team_episodes'] == r1['shared_team_episodes']
+    assert r0['samples'] == r1['samples'] == 3
+    assert r0['rollout_policy_version'] == r1['rollout_policy_version'] == 0
+    assert r0['optimizer_steps'] == r1['optimizer_steps'] == 2
+
+
+def test_shared_joint_rollout_recollects_after_each_committed_policy_update(tmp_path: Path):
+    CountingJointSuccessEnv.instances_created = 0
+    c = fresh_joint_cfg(samples=2, parallel_envs=1)
+    trainer = TwoRunnerTrainer(
+        c,
+        tmp_path / 'fresh',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    records = trainer.run(rounds=2, run_validation=False)
+
+    assert [r['round'] for r in records] == [1, 2]
+    assert records[0]['agents']['runner_0']['rollout_policy_version'] == 0
+    assert records[1]['agents']['runner_0']['rollout_policy_version'] == 1
+    assert records[0]['agents']['runner_1']['rollout_policy_version'] == 0
+    assert records[1]['agents']['runner_1']['rollout_policy_version'] == 1
+    assert all(r['agents']['runner_0']['ppo_data_epochs'] == 1 for r in records)
+    assert all(r['agents']['runner_1']['ppo_data_epochs'] == 1 for r in records)
