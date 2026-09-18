@@ -131,3 +131,137 @@ def test_full_checkpoint_resume_reproduces_next_round(tmp_path: Path):
     for aid in TWO_RUNNER_IDS:
         for key, value in original_policy[aid].items():
             torch.testing.assert_close(resumed.policy_set()[aid][key], value)
+
+
+class CountingJointSuccessEnv(SerializableAlwaysSuccessEnv):
+    instances_created = 0
+
+    def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
+        type(self).instances_created += 1
+        super().__init__(num_envs, env_cfg, reward_cfg, seed=seed)
+
+
+def fresh_joint_cfg(samples=2, parallel_envs=2, rollout_steps=1):
+    c = cfg(samples=samples)
+    c['joint_collection'] = {
+        'enabled': True,
+        'parallel_envs': parallel_envs,
+        'rollout_steps': rollout_steps,
+    }
+    c['ppo']['epochs'] = 1
+    c['ppo']['minibatch_size'] = 2
+    return c
+
+
+def test_shared_joint_rollout_uses_one_environment_pool_for_both_agents(tmp_path: Path):
+    CountingJointSuccessEnv.instances_created = 0
+    c = fresh_joint_cfg(samples=2, parallel_envs=2, rollout_steps=1)
+    trainer = TwoRunnerTrainer(
+        c,
+        tmp_path / 'joint',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    record = trainer.run(rounds=1, run_validation=False)[0]
+
+    # R0 and R1 are collected from the same shared physical worlds, not from
+    # separate per-agent environment pools.
+    assert CountingJointSuccessEnv.instances_created == 1
+    r0 = record['agents']['runner_0']
+    r1 = record['agents']['runner_1']
+    assert r0['shared_joint_rollout'] == 1
+    assert r1['shared_joint_rollout'] == 1
+    assert r0['shared_team_episodes'] == r1['shared_team_episodes']
+    assert r0['samples'] == r1['samples'] == 2
+    assert r0['rollout_policy_version'] == r1['rollout_policy_version'] == 0
+    assert r0['optimizer_steps'] == r1['optimizer_steps'] == 1
+
+
+def test_shared_joint_rollout_recollects_after_each_committed_policy_update(tmp_path: Path):
+    CountingJointSuccessEnv.instances_created = 0
+    c = fresh_joint_cfg(samples=2, parallel_envs=1, rollout_steps=2)
+    trainer = TwoRunnerTrainer(
+        c,
+        tmp_path / 'fresh',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    records = trainer.run(rounds=2, run_validation=False)
+
+    assert [r['round'] for r in records] == [1, 2]
+    assert records[0]['agents']['runner_0']['rollout_policy_version'] == 0
+    assert records[1]['agents']['runner_0']['rollout_policy_version'] == 1
+    assert records[0]['agents']['runner_1']['rollout_policy_version'] == 0
+    assert records[1]['agents']['runner_1']['rollout_policy_version'] == 1
+    assert all(r['agents']['runner_0']['ppo_data_epochs'] == 1 for r in records)
+    assert all(r['agents']['runner_1']['ppo_data_epochs'] == 1 for r in records)
+
+
+def test_shared_joint_checkpoint_resume_reproduces_next_round(tmp_path: Path):
+    c = fresh_joint_cfg(samples=2, parallel_envs=1, rollout_steps=2)
+    first = TwoRunnerTrainer(
+        c,
+        tmp_path / 'shared_first',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    first.run(rounds=1, run_validation=False)
+    checkpoint = first.save_checkpoint(tmp_path / 'shared_resume.pt')
+    original = first.run(rounds=1, run_validation=False)[0]
+    original_policy = first.policy_set()
+
+    resumed = TwoRunnerTrainer(
+        c,
+        tmp_path / 'shared_resumed',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    assert resumed.resume_from_checkpoint(checkpoint) == 'full'
+    replay = resumed.run(rounds=1, run_validation=False)[0]
+
+    assert replay['round'] == original['round']
+    assert replay['agents']['runner_0']['rollout_policy_version'] == 1
+    assert replay['agents']['runner_1']['rollout_policy_version'] == 1
+    for aid in TWO_RUNNER_IDS:
+        for key, value in original_policy[aid].items():
+            torch.testing.assert_close(resumed.policy_set()[aid][key], value)
+
+
+class NeverDoneJointEnv(SerializableAlwaysSuccessEnv):
+    def step(self, actions):
+        self.step_count += 1
+        n = self.num_envs
+        alive_before = self.alive.copy()
+        rewards = np.full((n, 2), 0.25, np.float32)
+        done = np.zeros(n, bool)
+        info = {
+            'collision': np.zeros((n, 2), bool),
+            'new_death': np.zeros((n, 2), bool),
+            'goal_reached': np.zeros((n, 2), bool),
+            'team_success': np.zeros(n, bool),
+            'both_dead': np.zeros(n, bool),
+            'timeout': np.zeros(n, bool),
+            'alive_before': alive_before,
+            'alive_after': self.alive.copy(),
+            'min_clearance': np.ones((n, 2), np.float32),
+            'map_seed': self.map_seeds.copy(),
+        }
+        return self.observe(), rewards, done, info
+
+
+def test_shared_joint_collector_stops_at_exact_fixed_horizon_without_episode_drain(tmp_path: Path):
+    c = fresh_joint_cfg(samples=6, parallel_envs=2, rollout_steps=3)
+    trainer = TwoRunnerTrainer(
+        c,
+        tmp_path / 'fixed_horizon',
+        device='cpu',
+        worker_env_factory=NeverDoneJointEnv,
+    )
+    record = trainer.run(rounds=1, run_validation=False)[0]
+    for aid in TWO_RUNNER_IDS:
+        metrics = record['agents'][aid]
+        assert metrics['simulator_steps'] == 6
+        assert metrics['samples'] == 6
+        assert metrics['discarded_surplus_samples'] == 0
+        assert metrics['rollout_steps'] == 3
+        assert metrics['horizon_bootstrap_fragments'] == 2

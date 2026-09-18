@@ -12,7 +12,7 @@ from .config import (
     load_two_runner_config,
     validate_single_runner_config,
 )
-from .render import render_policy_set_gif
+from .render import find_two_runner_demo_seed, render_policy_set_gif, render_two_runner_gif
 from .single_runner import SingleRunnerTrainer, evaluate_single_runner, load_single_runner_checkpoint
 from .trainer import DistributedTrainer, load_checkpoint
 from .two_runner import (
@@ -74,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
     two_train.add_argument("--device", default="cpu")
     source = two_train.add_mutually_exclusive_group(required=True)
     source.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="Start Experiment 2 from fresh random Actor-Critic weights with no inherited policy.",
+    )
+    source.add_argument(
         "--init-single-runner-checkpoint",
         default=None,
         help="Start Experiment 2 from the finalized 15-D single-runner checkpoint.",
@@ -96,6 +101,33 @@ def build_parser() -> argparse.ArgumentParser:
     two_eval.add_argument("--device", default="cpu")
     two_eval.add_argument("--output", default=None, help="Optional JSON file for evaluation summary")
 
+    two_render = sub.add_parser(
+        "two-render",
+        help="Render one deterministic Experiment 2 episode as a top-view GIF",
+    )
+    two_render.add_argument("--checkpoint", required=True)
+    two_render.add_argument("--output", default="two_runner_demo.gif")
+    two_render.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Render this exact seed. If omitted, search validation seeds for a collision-free success.",
+    )
+    two_render.add_argument(
+        "--seed-start",
+        type=int,
+        default=None,
+        help="Seed search start. Defaults to the checkpoint validation seed_start.",
+    )
+    two_render.add_argument(
+        "--search-episodes",
+        type=int,
+        default=200,
+        help="How many deterministic seeds to search when --seed is omitted.",
+    )
+    two_render.add_argument("--max-steps", type=int, default=None)
+    two_render.add_argument("--device", default="cpu")
+
     return parser
 
 
@@ -111,6 +143,41 @@ def _print_round(record: dict) -> None:
             f"value_loss={m['value_loss']:.4f} "
             f"coll={m['collision_rate']:.3f}"
         )
+
+
+def _format_two_runner_record(record: dict) -> str:
+    pieces = [f"round={int(record['round']):4d}"]
+    for agent_id in TWO_RUNNER_IDS:
+        metrics = record["agents"][agent_id]
+        freshness = ""
+        if int(metrics.get("shared_joint_rollout", 0)):
+            freshness = (
+                f" joint=1"
+                f" pv={int(metrics.get('rollout_policy_version', -1))}"
+                f" dataep={int(metrics.get('ppo_data_epochs', 0))}"
+            )
+        pieces.append(
+            f"{agent_id}:samples={int(metrics['samples'])} "
+            f"sim={int(metrics['simulator_steps'])} "
+            f"ep={int(metrics.get('completed_team_episodes', 0))} "
+            f"succ_ep={int(metrics.get('team_success_episodes', 0))} "
+            f"sel_succ={int(metrics.get('selected_success_transitions', 0))}/{int(metrics['samples'])} "
+            f"pool={int(metrics.get('sample_pool_size', metrics['samples']))} "
+            f"discard={int(metrics.get('discarded_surplus_samples', 0))} "
+            f"kl={float(metrics.get('approx_kl', 0.0)):.5f} "
+            f"guard_kl={float(metrics.get('max_guard_kl', 0.0)):.5f} "
+            f"opt={int(metrics.get('optimizer_steps', 0))} "
+            f"stop={int(metrics.get('early_stopped', 0))}"
+            f"{freshness}"
+        )
+    if "validation" in record:
+        validation = record["validation"]
+        pieces.append(
+            f"val_success={validation['team_success_rate']:.3f} "
+            f"val_collision={validation['any_collision_rate']:.3f} "
+            f"val_both_dead={validation['both_dead_rate']:.3f}"
+        )
+    return " ".join(pieces)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -204,28 +271,15 @@ def main(argv: list[str] | None = None) -> int:
                 trainer.best_validation = None
                 print("Reset inherited Experiment 2 best-validation history.")
             print(f"Resumed {resume_mode} two-runner state from round {trainer.current_round}: {args.resume}")
+        elif args.from_scratch:
+            print("Initialized both runners from fresh random weights (from scratch).")
         else:
             trainer.initialize_from_single_runner_checkpoint(args.init_single_runner_checkpoint)
             print(f"Initialized both runners from: {args.init_single_runner_checkpoint}")
-        records = trainer.run(rounds=args.rounds)
-        for record in records:
-            pieces = [f"round={int(record['round']):4d}"]
-            for agent_id in TWO_RUNNER_IDS:
-                metrics = record["agents"][agent_id]
-                pieces.append(
-                    f"{agent_id}:samples={int(metrics['samples'])} "
-                    f"sim={int(metrics['simulator_steps'])} "
-                    f"deaths={int(metrics['target_deaths'])} "
-                    f"discard={int(metrics.get('discarded_surplus_samples', 0))}"
-                )
-            if "validation" in record:
-                validation = record["validation"]
-                pieces.append(
-                    f"val_success={validation['team_success_rate']:.3f} "
-                    f"val_collision={validation['any_collision_rate']:.3f} "
-                    f"val_both_dead={validation['both_dead_rate']:.3f}"
-                )
-            print(" ".join(pieces))
+        rounds_to_run = int(args.rounds if args.rounds is not None else cfg["training"]["rounds"])
+        for _ in range(rounds_to_run):
+            record = trainer.run(rounds=1)[0]
+            print(_format_two_runner_record(record), flush=True)
         print(f"\nCheckpoint: {Path(args.output) / 'latest.pt'}")
         if (Path(args.output) / "best.pt").exists():
             print(f"Best:       {Path(args.output) / 'best.pt'}")
@@ -251,6 +305,44 @@ def main(argv: list[str] | None = None) -> int:
             output_path = Path(args.output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(text + "\n", encoding="utf-8")
+        return 0
+
+    if args.command == "two-render":
+        version, policy_set, cfg = load_two_runner_checkpoint(args.checkpoint)
+        if args.seed is None:
+            validation_cfg = cfg.get("validation", {})
+            seed_start = int(
+                args.seed_start
+                if args.seed_start is not None
+                else validation_cfg.get("seed_start", 40000)
+            )
+            seed, found = find_two_runner_demo_seed(
+                cfg,
+                policy_set,
+                seed_start=seed_start,
+                search_episodes=int(args.search_episodes),
+                device=args.device,
+                max_steps=args.max_steps,
+            )
+            clean_text = "collision-free" if not found["any_collision"] else "successful"
+            print(
+                f"Found {clean_text} deterministic demo seed {seed}: "
+                f"steps={found['steps']} collision={found['any_collision']}"
+            )
+        else:
+            seed = int(args.seed)
+
+        summary = render_two_runner_gif(
+            cfg,
+            policy_set,
+            args.output,
+            seed=seed,
+            max_steps=args.max_steps,
+            device=args.device,
+        )
+        summary["policy_version"] = version
+        print(f"Rendered two-runner policy version {version} seed={seed} -> {args.output}")
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     version, policy_set, checkpoint_cfg = load_checkpoint(args.checkpoint)

@@ -167,23 +167,60 @@ def validate_two_runner_config(cfg: dict[str, Any]) -> None:
         raise ValueError("environment.obstacles.count must be >= 0")
 
     reward = cfg["two_runner_reward"]
-    required_reward = {
-        "team_success_bonus",
-        "collision_penalty",
-        "timeout_penalty",
-        "self_progress_scale",
-        "team_progress_scale",
-        "step_penalty",
-        "safety_distance",
-        "safety_scale",
-    }
-    missing_reward = required_reward - set(reward)
-    if missing_reward:
-        raise ValueError(f"Missing two-runner reward settings: {sorted(missing_reward)}")
-    if float(reward["safety_distance"]) <= 0:
-        raise ValueError("two_runner_reward.safety_distance must be positive")
-    if float(reward["safety_scale"]) < 0:
-        raise ValueError("two_runner_reward.safety_scale must be >= 0")
+    if "plugin_path" in reward:
+        if not str(reward["plugin_path"]).strip():
+            raise ValueError("two_runner_reward.plugin_path must be non-empty")
+        params = reward.get("params", {})
+        if not isinstance(params, dict):
+            raise ValueError("two_runner_reward.params must be a mapping")
+        if "safety_distance" in params and float(params["safety_distance"]) <= 0:
+            raise ValueError(
+                "two_runner_reward.params.safety_distance must be positive"
+            )
+    else:
+        required_reward = {
+            "team_success_bonus",
+            "collision_penalty",
+            "timeout_penalty",
+            "self_progress_scale",
+            "team_progress_scale",
+            "step_penalty",
+            "safety_distance",
+            "safety_scale",
+        }
+        missing_reward = required_reward - set(reward)
+        if missing_reward:
+            raise ValueError(
+                f"Missing two-runner reward settings: {sorted(missing_reward)}"
+            )
+        if float(reward["safety_distance"]) <= 0:
+            raise ValueError("two_runner_reward.safety_distance must be positive")
+        if float(reward["safety_scale"]) < 0:
+            raise ValueError("two_runner_reward.safety_scale must be >= 0")
+
+    target_kl = cfg["ppo"].get("target_kl")
+    if target_kl is not None and float(target_kl) <= 0.0:
+        raise ValueError("ppo.target_kl must be > 0 when configured")
+
+    joint_collection = cfg.get("joint_collection")
+    if joint_collection is not None:
+        if not isinstance(joint_collection, dict):
+            raise ValueError("joint_collection must be a mapping")
+        if bool(joint_collection.get("enabled", False)):
+            parallel_envs = int(joint_collection.get("parallel_envs", 0))
+            rollout_steps = int(joint_collection.get("rollout_steps", 0))
+            if parallel_envs <= 0:
+                raise ValueError("joint_collection.parallel_envs must be positive when enabled")
+            if rollout_steps <= 0:
+                raise ValueError("joint_collection.rollout_steps must be positive when enabled")
+            expected_samples = parallel_envs * rollout_steps
+            configured_samples = int(cfg["training"]["samples_per_update"])
+            if configured_samples != expected_samples:
+                raise ValueError(
+                    "training.samples_per_update must equal "
+                    "joint_collection.parallel_envs * joint_collection.rollout_steps "
+                    f"({expected_samples}) when fixed-horizon joint collection is enabled"
+                )
 
     samples = int(cfg["training"]["samples_per_update"])
     if samples <= 0:

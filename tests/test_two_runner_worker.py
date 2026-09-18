@@ -6,6 +6,7 @@ from marl2d.two_runner import (
     TWO_RUNNER_IDS,
     TargetTransition,
     TwoRunnerWorker,
+    finalize_target_fragment,
     finalize_target_trajectory,
 )
 
@@ -283,3 +284,117 @@ def test_same_round_surplus_is_uniformly_subsampled_instead_of_always_dropping_t
     # [0, 1, 10, 11], so the selected batch must include the later episode 11.
     assert markers == {0, 1, 11}
     assert metrics['discarded_surplus_samples'] == 1
+
+
+class MixedOutcomeEnv:
+    observation_dim = 18
+
+    def __init__(self, num_envs, env_cfg, reward_cfg, seed=0):
+        assert num_envs == 2
+        self.num_envs = 2
+        self.alive = np.ones((2, 2), dtype=bool)
+        self.map_seeds = np.arange(2, dtype=np.int64) + seed
+
+    def observe(self):
+        return np.zeros((2, 2, 18), np.float32)
+
+    def reset_indices(self, mask):
+        self.alive[np.asarray(mask, dtype=bool)] = True
+
+    def step(self, actions):
+        alive_before = self.alive.copy()
+        rewards = np.zeros((2, 2), np.float32)
+        rewards[0] = 100.0
+        rewards[1] = -20.0
+        done = np.ones(2, dtype=bool)
+        info = {
+            'collision': np.zeros((2, 2), bool),
+            'new_death': np.zeros((2, 2), bool),
+            'goal_reached': np.array([[True, False], [False, False]], dtype=bool),
+            'team_success': np.array([True, False], dtype=bool),
+            'both_dead': np.array([False, False], dtype=bool),
+            'timeout': np.array([False, True], dtype=bool),
+            'alive_before': alive_before,
+            'alive_after': self.alive.copy(),
+            'min_clearance': np.ones((2, 2), np.float32),
+            'map_seed': self.map_seeds.copy(),
+        }
+        return self.observe(), rewards, done, info
+
+
+def test_collection_reports_success_failure_sample_composition_and_advantage_split():
+    cfg = tiny_cfg(samples=2, parallel_envs=2)
+    worker = TwoRunnerWorker('runner_0', cfg, device='cpu', env_factory=MixedOutcomeEnv)
+    batch, metrics = worker.collect_round(policy_set(cfg), round_index=0)
+
+    assert batch.observations.shape[0] == 2
+    assert metrics['team_success_episodes'] == 1
+    assert metrics['timeout_episodes'] == 1
+    assert metrics['both_dead_episodes'] == 0
+    assert metrics['sample_pool_success_transitions'] == 1
+    assert metrics['sample_pool_failure_transitions'] == 1
+    assert metrics['selected_success_transitions'] == 1
+    assert metrics['selected_failure_transitions'] == 1
+    assert metrics['selected_success_trajectories'] == 1
+    assert metrics['selected_failure_trajectories'] == 1
+    assert metrics['selected_success_fraction'] == 0.5
+    assert 'selected_success_advantage_mean' in metrics
+    assert 'selected_failure_advantage_mean' in metrics
+    assert 'mean_success_terminal_credit_weight_at_start' in metrics
+
+
+def test_nonterminal_fragment_bootstraps_value_at_fixed_horizon():
+    transitions = [
+        TargetTransition(
+            observation=np.zeros(18, np.float32),
+            action=np.zeros(2, np.float32),
+            old_log_prob=0.0,
+            reward=0.0,
+            value=1.0,
+            next_value=2.0,
+        ),
+        TargetTransition(
+            observation=np.zeros(18, np.float32),
+            action=np.zeros(2, np.float32),
+            old_log_prob=0.0,
+            reward=0.0,
+            value=2.0,
+            next_value=3.0,
+        ),
+    ]
+    samples = finalize_target_fragment(
+        transitions,
+        terminal=False,
+        gamma=1.0,
+        gae_lambda=1.0,
+    )
+    assert len(samples) == 2
+    assert samples[-1].done is False
+    assert samples[-1].next_value == 3.0
+    np.testing.assert_allclose(
+        [sample.return_value for sample in samples],
+        [3.0, 3.0],
+        atol=1e-6,
+    )
+
+
+def test_terminal_fragment_does_not_bootstrap_past_terminal():
+    transitions = [
+        TargetTransition(
+            observation=np.zeros(18, np.float32),
+            action=np.zeros(2, np.float32),
+            old_log_prob=0.0,
+            reward=5.0,
+            value=1.0,
+            next_value=99.0,
+        ),
+    ]
+    samples = finalize_target_fragment(
+        transitions,
+        terminal=True,
+        gamma=0.99,
+        gae_lambda=0.95,
+    )
+    assert samples[0].done is True
+    assert samples[0].next_value == 0.0
+    assert samples[0].return_value == 5.0

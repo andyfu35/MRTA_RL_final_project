@@ -6,6 +6,9 @@ from typing import Any
 
 import numpy as np
 
+from .reward_api import RewardContext
+from .reward_loader import RewardEngine
+
 
 def _wrap_angle(angle: np.ndarray) -> np.ndarray:
     return (angle + np.pi) % (2.0 * np.pi) - np.pi
@@ -84,6 +87,15 @@ class TwoRunnerArena2D:
         self.num_envs = int(num_envs)
         self.cfg = copy.deepcopy(env_cfg)
         self.reward_cfg = copy.deepcopy(reward_cfg)
+        plugin_path = self.reward_cfg.get("plugin_path")
+        self.reward_engine = (
+            RewardEngine.from_file(
+                plugin_path,
+                params=self.reward_cfg.get("params", {}),
+            )
+            if plugin_path
+            else None
+        )
         self.width = float(env_cfg["width"])
         self.height = float(env_cfg["height"])
         self.dt = float(env_cfg["dt"])
@@ -407,31 +419,84 @@ class TwoRunnerArena2D:
                 team_progress[env_index] = old_team_dist - new_team_dist
 
         min_clearance = self._minimum_clearance(self.state)
-        rewards = np.zeros((self.num_envs, 2), dtype=np.float32)
         cfg = self.reward_cfg
-        safety_distance = float(cfg["safety_distance"])
-        danger = np.maximum(0.0, (safety_distance - min_clearance) / safety_distance)
-        for agent_index in range(2):
-            active = alive_before[:, agent_index]
-            rewards[active, agent_index] = (
-                float(cfg["self_progress_scale"]) * self_progress[active, agent_index]
-                + float(cfg["team_progress_scale"]) * team_progress[active]
-                + float(cfg["step_penalty"])
-                - float(cfg["safety_scale"]) * danger[active, agent_index] ** 2
-            )
+        reward_params = cfg.get("params", {}) if self.reward_engine is not None else cfg
+        safety_distance = float(reward_params.get("safety_distance", 0.5))
+        if safety_distance <= 0.0:
+            raise ValueError("reward safety_distance must be positive")
+        danger = np.maximum(
+            0.0,
+            (safety_distance - min_clearance) / safety_distance,
+        )
 
         new_death = collision & alive_before
-        rewards[new_death] = float(cfg["collision_penalty"])
         both_dead = ~self.alive.any(axis=1)
         raw_timeout = self.steps >= self.max_steps
         timeout = raw_timeout & ~team_success & ~both_dead
-        if np.any(timeout):
-            timeout_alive = timeout[:, None] & self.alive
-            rewards[timeout_alive] = float(cfg["timeout_penalty"])
-        if np.any(team_success):
-            rewards[team_success[:, None] & alive_before] = float(cfg["team_success_bonus"])
-
         done = team_success | both_dead | timeout
+
+        reward_breakdown: dict[str, np.ndarray] | None = None
+        if self.reward_engine is None:
+            # Backward-compatible reward path for historical experiments and
+            # checkpoints. New deployments should set plugin_path and keep the
+            # reward logic in external reward.py.
+            rewards = np.zeros((self.num_envs, 2), dtype=np.float32)
+            for agent_index in range(2):
+                active = alive_before[:, agent_index]
+                rewards[active, agent_index] = (
+                    float(cfg["self_progress_scale"])
+                    * self_progress[active, agent_index]
+                    + float(cfg["team_progress_scale"])
+                    * team_progress[active]
+                    + float(cfg["step_penalty"])
+                    - float(cfg["safety_scale"])
+                    * danger[active, agent_index] ** 2
+                )
+            rewards[new_death] = float(cfg["collision_penalty"])
+            if np.any(timeout):
+                timeout_alive = timeout[:, None] & self.alive
+                rewards[timeout_alive] = float(cfg["timeout_penalty"])
+            if np.any(team_success):
+                rewards[
+                    team_success[:, None] & alive_before
+                ] = float(cfg["team_success_bonus"])
+        else:
+            reward_eval = self.reward_engine.evaluate(
+                RewardContext(
+                    old_state=old_state.copy(),
+                    new_state=self.state.copy(),
+                    actions=effective_actions.copy(),
+                    alive_before=alive_before.copy(),
+                    alive_after=self.alive.copy(),
+                    old_goal_distance=old_goal_dist.astype(
+                        np.float32, copy=True
+                    ),
+                    new_goal_distance=new_goal_dist.astype(
+                        np.float32, copy=True
+                    ),
+                    self_progress=self_progress.astype(
+                        np.float32, copy=True
+                    ),
+                    team_progress=team_progress.astype(
+                        np.float32, copy=True
+                    ),
+                    min_clearance=min_clearance.astype(
+                        np.float32, copy=True
+                    ),
+                    danger=danger.astype(np.float32, copy=True),
+                    collision=collision.copy(),
+                    new_death=new_death.copy(),
+                    goal_reached=goal_reached.copy(),
+                    team_success=team_success.copy(),
+                    both_dead=both_dead.copy(),
+                    timeout=timeout.copy(),
+                    steps=self.steps.copy(),
+                    params={},
+                )
+            )
+            rewards = reward_eval.total
+            reward_breakdown = reward_eval.terms
+
         info = {
             "collision": collision.copy(),
             "new_death": new_death.copy(),
@@ -445,6 +510,12 @@ class TwoRunnerArena2D:
             "team_progress": team_progress.astype(np.float32),
             "min_clearance": min_clearance.astype(np.float32),
             "map_seed": self.map_seeds.copy(),
+            "reward_breakdown": reward_breakdown,
+            "reward_plugin_sha256": (
+                None
+                if self.reward_engine is None
+                else self.reward_engine.source_sha256
+            ),
         }
         return self.observe(), rewards, done, info
 

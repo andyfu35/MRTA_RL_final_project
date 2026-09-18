@@ -19,3 +19,7 @@ dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[project.scripts]
+marl2d-node = "marl2d.node_cli:main"
