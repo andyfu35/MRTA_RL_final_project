@@ -185,11 +185,16 @@ def validate_two_runner_config(cfg: dict[str, Any]) -> None:
     if float(reward["safety_scale"]) < 0:
         raise ValueError("two_runner_reward.safety_scale must be >= 0")
     progress_mode = str(reward.get("progress_mode", "instant")).lower()
-    if progress_mode not in {"instant", "record"}:
-        raise ValueError("two_runner_reward.progress_mode must be 'instant' or 'record'")
+    if progress_mode not in {"instant", "record", "geodesic"}:
+        raise ValueError(
+            "two_runner_reward.progress_mode must be 'instant', 'record', or 'geodesic'"
+        )
     record_epsilon = float(reward.get("record_progress_epsilon", 0.0))
     if record_epsilon < 0:
         raise ValueError("two_runner_reward.record_progress_epsilon must be >= 0")
+    geodesic_resolution = float(reward.get("geodesic_grid_resolution", 0.20))
+    if geodesic_resolution <= 0:
+        raise ValueError("two_runner_reward.geodesic_grid_resolution must be > 0")
 
     samples = int(cfg["training"]["samples_per_update"])
     if samples <= 0:
