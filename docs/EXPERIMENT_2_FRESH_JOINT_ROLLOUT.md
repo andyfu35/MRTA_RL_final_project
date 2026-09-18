@@ -4,17 +4,18 @@
 
 The previous 32,768-sample Large-Batch run collected a large on-policy rollout and then reused the same data for four PPO epochs before collecting again. This improves sample efficiency, but the policy can move substantially while the data remain fixed.
 
-This experiment changes the interaction/update rhythm:
+This experiment changes the interaction/update rhythm and trains the two Runner policies **from scratch** with fresh random Actor-Critic weights:
 
 ```
-collect fresh joint rollout
+random policy initialization
+-> collect fresh joint rollout
 -> one PPO epoch for R0
 -> one PPO epoch for R1
 -> synchronous commit
 -> immediately recollect with the new joint policy
 ```
 
-The goal is to reduce policy-to-data staleness and directly observe the effect of each committed update in the next rollout.
+No Experiment 1 or previous Experiment 2 policy weights are inherited. The goal is to test whether this new training architecture can learn navigation directly, without carrying behavior learned under the older update regime.
 
 ## Shared joint worlds
 
@@ -72,6 +73,7 @@ Both still use 819,200 selected transitions per policy over the full formal expe
 - entropy coefficient 0.005
 - minibatch size 256
 - validation seeds 40000-40199
+- initialization: random weights; no warm-start checkpoint
 
 ## Run
 
@@ -84,11 +86,11 @@ source .venv/bin/activate
 pip install -e .
 python -m pytest -q
 
-mkdir -p runs/exp2_two_runner_fresh_joint
+mkdir -p runs/exp2_two_runner_fresh_joint_scratch
 
 python -m marl2d two-train \
   --config config/two_runner_fresh_joint.yaml \
-  --init-single-runner-checkpoint runs/exp1_r2_safe30_r70_to_r100/round_00080.pt \
-  --output runs/exp2_two_runner_fresh_joint \
-  --device cpu 2>&1 | tee runs/exp2_two_runner_fresh_joint/train.log
+  --from-scratch \
+  --output runs/exp2_two_runner_fresh_joint_scratch \
+  --device cpu 2>&1 | tee runs/exp2_two_runner_fresh_joint_scratch/train.log
 ```
