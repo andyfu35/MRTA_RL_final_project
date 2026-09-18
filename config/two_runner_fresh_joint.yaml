@@ -1,6 +1,8 @@
-# Experiment 2 fresh shared-joint-rollout training.
-# Collect a short fresh rollout, update each policy for one epoch, commit both
-# policies together, then immediately recollect under the new joint policy.
+# Experiment 2 fixed-horizon fresh shared-joint PPO training.
+# Run exactly 64 shared worlds x 128 steps, bootstrap non-terminal fragments,
+# update each policy for one epoch, then immediately continue with the new
+# committed joint policy. Goal-progress shaping is strengthened; terminal
+# success remains +100.
 experiment:
   name: exp2_fresh_joint_rollout
   hypothesis: fresh_shared_joint_rollouts_learn_stably_from_random_initialization
@@ -44,8 +46,8 @@ two_runner_reward:
   team_success_bonus: 100.0
   collision_penalty: -100.0
   timeout_penalty: -20.0
-  self_progress_scale: 3.0
-  team_progress_scale: 2.0
+  self_progress_scale: 8.0
+  team_progress_scale: 4.0
   step_penalty: -0.01
   safety_distance: 0.50
   safety_scale: 3.0
@@ -58,6 +60,7 @@ training:
 joint_collection:
   enabled: true
   parallel_envs: 64
+  rollout_steps: 128
 
 # Kept for backward-compatible worker construction. They are not used while
 # joint_collection.enabled=true; R0 and R1 share the same 64 joint worlds.
