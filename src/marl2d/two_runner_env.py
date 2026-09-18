@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import copy
 import math
+from collections import OrderedDict
 from typing import Any
 
 import numpy as np
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import dijkstra
+
+
+_GEODESIC_FIELD_CACHE: OrderedDict[tuple[Any, ...], np.ndarray] = OrderedDict()
+_GEODESIC_FIELD_CACHE_LIMIT = 256
 
 
 def _wrap_angle(angle: np.ndarray) -> np.ndarray:
@@ -85,11 +92,14 @@ class TwoRunnerArena2D:
         self.cfg = copy.deepcopy(env_cfg)
         self.reward_cfg = copy.deepcopy(reward_cfg)
         self.progress_mode = str(reward_cfg.get("progress_mode", "instant")).lower()
-        if self.progress_mode not in {"instant", "record"}:
-            raise ValueError("two-runner progress_mode must be 'instant' or 'record'")
+        if self.progress_mode not in {"instant", "record", "geodesic"}:
+            raise ValueError("two-runner progress_mode must be 'instant', 'record', or 'geodesic'")
         self.record_progress_epsilon = float(reward_cfg.get("record_progress_epsilon", 0.0))
         if self.record_progress_epsilon < 0.0:
             raise ValueError("record_progress_epsilon must be >= 0")
+        self.geodesic_grid_resolution = float(reward_cfg.get("geodesic_grid_resolution", 0.20))
+        if self.geodesic_grid_resolution <= 0.0:
+            raise ValueError("geodesic_grid_resolution must be > 0")
         self.width = float(env_cfg["width"])
         self.height = float(env_cfg["height"])
         self.dt = float(env_cfg["dt"])
@@ -123,6 +133,17 @@ class TwoRunnerArena2D:
         self.steps = np.zeros(self.num_envs, dtype=np.int32)
         self.best_goal_distance = np.zeros((self.num_envs, 2), dtype=np.float32)
         self.obstacles = np.zeros((self.num_envs, self.obstacle_count, 4), dtype=np.float32)
+        self._geodesic_nx = int(math.ceil(self.width / self.geodesic_grid_resolution))
+        self._geodesic_ny = int(math.ceil(self.height / self.geodesic_grid_resolution))
+        self.geodesic_fields = (
+            np.full(
+                (self.num_envs, self._geodesic_ny, self._geodesic_nx),
+                np.inf,
+                dtype=np.float32,
+            )
+            if self.progress_mode == "geodesic"
+            else None
+        )
         self.reset(seed=seed)
 
     def _base_state(self) -> np.ndarray:
@@ -185,10 +206,209 @@ class TwoRunnerArena2D:
         return np.stack(placed).astype(np.float32, copy=False)
 
     def _regenerate_obstacles(self, indices: np.ndarray) -> None:
-        for env_index in np.asarray(indices, dtype=np.int64):
+        indices = np.asarray(indices, dtype=np.int64)
+        for env_index in indices:
             map_seed = self._map_seed(int(env_index))
             self.map_seeds[env_index] = map_seed
             self.obstacles[env_index] = self._generate_obstacles_for_env(int(env_index), map_seed)
+        if self.progress_mode == "geodesic":
+            self._regenerate_geodesic_fields(indices)
+
+    def _geodesic_cache_key(self, env_index: int) -> tuple[Any, ...]:
+        return (
+            round(self.width, 6),
+            round(self.height, 6),
+            round(self.robot_radius, 6),
+            round(self.geodesic_grid_resolution, 6),
+            round(float(self.goal[0]), 6),
+            round(float(self.goal[1]), 6),
+            self.obstacles[int(env_index)].tobytes(),
+        )
+
+    def _build_geodesic_field(self, env_index: int) -> np.ndarray:
+        resolution = self.geodesic_grid_resolution
+        nx = self._geodesic_nx
+        ny = self._geodesic_ny
+        xs = (np.arange(nx, dtype=np.float64) + 0.5) * resolution
+        ys = (np.arange(ny, dtype=np.float64) + 0.5) * resolution
+        grid_x, grid_y = np.meshgrid(xs, ys)
+
+        free = (
+            (grid_x >= self.robot_radius)
+            & (grid_x <= self.width - self.robot_radius)
+            & (grid_y >= self.robot_radius)
+            & (grid_y <= self.height - self.robot_radius)
+        )
+        for rect in self.obstacles[int(env_index)]:
+            cx, cy, rect_width, rect_height = (float(v) for v in rect)
+            dx = np.maximum(np.abs(grid_x - cx) - rect_width * 0.5, 0.0)
+            dy = np.maximum(np.abs(grid_y - cy) - rect_height * 0.5, 0.0)
+            free &= np.hypot(dx, dy) >= self.robot_radius - 1e-9
+
+        node_ids = np.arange(nx * ny, dtype=np.int64).reshape(ny, nx)
+        row_parts: list[np.ndarray] = []
+        col_parts: list[np.ndarray] = []
+        weight_parts: list[np.ndarray] = []
+
+        def add_edges(
+            source: np.ndarray,
+            target: np.ndarray,
+            valid: np.ndarray,
+            step_cost: float,
+        ) -> None:
+            src = source[valid]
+            dst = target[valid]
+            if src.size == 0:
+                return
+            row_parts.append(src)
+            col_parts.append(dst)
+            weight_parts.append(np.full(src.size, step_cost, dtype=np.float64))
+
+        add_edges(
+            node_ids[:, :-1],
+            node_ids[:, 1:],
+            free[:, :-1] & free[:, 1:],
+            resolution,
+        )
+        add_edges(
+            node_ids[:-1, :],
+            node_ids[1:, :],
+            free[:-1, :] & free[1:, :],
+            resolution,
+        )
+
+        diagonal_cost = resolution * math.sqrt(2.0)
+        add_edges(
+            node_ids[:-1, :-1],
+            node_ids[1:, 1:],
+            free[:-1, :-1] & free[1:, 1:] & free[:-1, 1:] & free[1:, :-1],
+            diagonal_cost,
+        )
+        add_edges(
+            node_ids[:-1, 1:],
+            node_ids[1:, :-1],
+            free[:-1, 1:] & free[1:, :-1] & free[:-1, :-1] & free[1:, 1:],
+            diagonal_cost,
+        )
+
+        # Add conservative sqrt(5) moves. These improve the isotropy of the
+        # distance field while requiring both cells crossed by the segment to be
+        # free, so the graph cannot cut through an inflated obstacle corner.
+        knight_cost = resolution * math.sqrt(5.0)
+        add_edges(
+            node_ids[:-1, :-2],
+            node_ids[1:, 2:],
+            free[:-1, :-2] & free[1:, 2:] & free[:-1, 1:-1] & free[1:, 1:-1],
+            knight_cost,
+        )
+        add_edges(
+            node_ids[:-1, 2:],
+            node_ids[1:, :-2],
+            free[:-1, 2:] & free[1:, :-2] & free[:-1, 1:-1] & free[1:, 1:-1],
+            knight_cost,
+        )
+        add_edges(
+            node_ids[:-2, :-1],
+            node_ids[2:, 1:],
+            free[:-2, :-1] & free[2:, 1:] & free[1:-1, :-1] & free[1:-1, 1:],
+            knight_cost,
+        )
+        add_edges(
+            node_ids[:-2, 1:],
+            node_ids[2:, :-1],
+            free[:-2, 1:] & free[2:, :-1] & free[1:-1, 1:] & free[1:-1, :-1],
+            knight_cost,
+        )
+
+        if not row_parts:
+            raise RuntimeError("geodesic grid contains no traversable edges")
+
+        rows = np.concatenate(row_parts)
+        cols = np.concatenate(col_parts)
+        weights = np.concatenate(weight_parts)
+        graph = coo_matrix(
+            (
+                np.concatenate((weights, weights)),
+                (
+                    np.concatenate((rows, cols)),
+                    np.concatenate((cols, rows)),
+                ),
+            ),
+            shape=(nx * ny, nx * ny),
+        ).tocsr()
+
+        goal_d2 = (grid_x - float(self.goal[0])) ** 2 + (grid_y - float(self.goal[1])) ** 2
+        goal_d2[~free] = np.inf
+        goal_node = int(np.argmin(goal_d2))
+        if not np.isfinite(goal_d2.reshape(-1)[goal_node]):
+            raise RuntimeError("geodesic grid has no free goal cell")
+
+        distances = dijkstra(graph, directed=True, indices=goal_node)
+        return np.asarray(distances, dtype=np.float32).reshape(ny, nx)
+
+    def _regenerate_geodesic_fields(self, indices: np.ndarray) -> None:
+        if self.progress_mode != "geodesic":
+            return
+        assert self.geodesic_fields is not None
+        for env_index in np.asarray(indices, dtype=np.int64):
+            key = self._geodesic_cache_key(int(env_index))
+            cached = _GEODESIC_FIELD_CACHE.get(key)
+            if cached is None:
+                cached = self._build_geodesic_field(int(env_index))
+                _GEODESIC_FIELD_CACHE[key] = cached.copy()
+                _GEODESIC_FIELD_CACHE.move_to_end(key)
+                while len(_GEODESIC_FIELD_CACHE) > _GEODESIC_FIELD_CACHE_LIMIT:
+                    _GEODESIC_FIELD_CACHE.popitem(last=False)
+            else:
+                _GEODESIC_FIELD_CACHE.move_to_end(key)
+            self.geodesic_fields[int(env_index)] = cached
+
+    def _geodesic_goal_distances(self, state: np.ndarray | None = None) -> np.ndarray:
+        if self.progress_mode != "geodesic" or self.geodesic_fields is None:
+            raise RuntimeError("geodesic distance requested while progress_mode is not geodesic")
+        s = self.state if state is None else np.asarray(state, dtype=np.float32)
+        result = np.zeros((self.num_envs, 2), dtype=np.float32)
+        resolution = self.geodesic_grid_resolution
+        nx = self._geodesic_nx
+        ny = self._geodesic_ny
+
+        for env_index in range(self.num_envs):
+            field = self.geodesic_fields[env_index]
+            for agent_index in range(2):
+                x = float(s[env_index, agent_index, 0])
+                y = float(s[env_index, agent_index, 1])
+                gx = x / resolution - 0.5
+                gy = y / resolution - 0.5
+                x0 = math.floor(gx)
+                y0 = math.floor(gy)
+                tx = gx - x0
+                ty = gy - y0
+
+                weighted = 0.0
+                total_weight = 0.0
+                for ix, wx in ((x0, 1.0 - tx), (x0 + 1, tx)):
+                    if ix < 0 or ix >= nx:
+                        continue
+                    for iy, wy in ((y0, 1.0 - ty), (y0 + 1, ty)):
+                        if iy < 0 or iy >= ny:
+                            continue
+                        weight = wx * wy
+                        value = float(field[iy, ix])
+                        if weight > 0.0 and math.isfinite(value):
+                            weighted += weight * value
+                            total_weight += weight
+
+                if total_weight > 0.0:
+                    result[env_index, agent_index] = weighted / total_weight
+                else:
+                    # A coarse grid can disconnect a physically valid very
+                    # narrow corridor. Fall back to Euclidean distance rather
+                    # than injecting inf/NaN into PPO.
+                    result[env_index, agent_index] = math.hypot(
+                        x - float(self.goal[0]),
+                        y - float(self.goal[1]),
+                    )
+        return result
 
     def reset(self, seed: int | None = None) -> np.ndarray:
         if seed is not None:
@@ -421,14 +641,21 @@ class TwoRunnerArena2D:
             # A dead Runner's old record therefore never blocks its teammate.
             team_progress = self_progress.max(axis=1).astype(np.float32)
         else:
-            self_progress = old_goal_dist - new_goal_dist
+            if self.progress_mode == "geodesic":
+                old_progress_dist = self._geodesic_goal_distances(old_state)
+                new_progress_dist = self._geodesic_goal_distances(self.state)
+            else:
+                old_progress_dist = old_goal_dist
+                new_progress_dist = new_goal_dist
+
+            self_progress = old_progress_dist - new_progress_dist
             self_progress[~alive_before] = 0.0
             team_progress = np.zeros(self.num_envs, dtype=np.float32)
             for env_index in range(self.num_envs):
                 active = alive_before[env_index]
                 if np.any(active):
-                    old_team_dist = float(old_goal_dist[env_index, active].min())
-                    new_team_dist = float(new_goal_dist[env_index, active].min())
+                    old_team_dist = float(old_progress_dist[env_index, active].min())
+                    new_team_dist = float(new_progress_dist[env_index, active].min())
                     team_progress[env_index] = old_team_dist - new_team_dist
 
         min_clearance = self._minimum_clearance(self.state)
@@ -502,3 +729,5 @@ class TwoRunnerArena2D:
             # Legacy checkpoints predate record-progress state.
             self.best_goal_distance[:] = self._goal_distances(self.state)
         self.rng.bit_generator.state = copy.deepcopy(state["rng_state"])
+        if self.progress_mode == "geodesic":
+            self._regenerate_geodesic_fields(np.arange(self.num_envs, dtype=np.int64))
