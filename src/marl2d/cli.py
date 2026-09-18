@@ -74,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
     two_train.add_argument("--device", default="cpu")
     source = two_train.add_mutually_exclusive_group(required=True)
     source.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="Start Experiment 2 from fresh random Actor-Critic weights with no inherited policy.",
+    )
+    source.add_argument(
         "--init-single-runner-checkpoint",
         default=None,
         help="Start Experiment 2 from the finalized 15-D single-runner checkpoint.",
@@ -266,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
                 trainer.best_validation = None
                 print("Reset inherited Experiment 2 best-validation history.")
             print(f"Resumed {resume_mode} two-runner state from round {trainer.current_round}: {args.resume}")
+        elif args.from_scratch:
+            print("Initialized both runners from fresh random weights (from scratch).")
         else:
             trainer.initialize_from_single_runner_checkpoint(args.init_single_runner_checkpoint)
             print(f"Initialized both runners from: {args.init_single_runner_checkpoint}")
