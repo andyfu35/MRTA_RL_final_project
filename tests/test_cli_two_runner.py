@@ -69,3 +69,6 @@ def test_two_runner_record_format_surfaces_success_batch_diagnostics():
     assert 'succ_ep=40' in text
     assert 'sel_succ=9000/32768' in text
     assert 'kl=0.00420' in text
+    assert 'guard_kl=0.00000' in text
+    assert 'opt=0' in text
+    assert 'stop=0' in text
