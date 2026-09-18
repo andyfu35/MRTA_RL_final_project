@@ -75,3 +75,81 @@ def test_two_runner_config_rejects_nonpositive_target_kl():
         assert 'target_kl' in str(exc)
     else:
         raise AssertionError('expected ValueError')
+
+
+def test_fresh_joint_rollout_config_uses_single_epoch_and_frequent_fresh_data():
+    large = load_two_runner_config('config/two_runner_large_batch.yaml')
+    fresh = load_two_runner_config('config/two_runner_fresh_joint.yaml')
+
+    assert fresh['environment'] == large['environment']
+    fresh_reward = dict(fresh['two_runner_reward'])
+    large_reward = dict(large['two_runner_reward'])
+    assert fresh_reward.pop('self_progress_scale') == 8.0
+    assert fresh_reward.pop('team_progress_scale') == 4.0
+    assert large_reward.pop('self_progress_scale') == 3.0
+    assert large_reward.pop('team_progress_scale') == 2.0
+    assert fresh_reward == large_reward
+    assert fresh['training']['samples_per_update'] == 8192
+    assert fresh['training']['rounds'] == 100
+    assert fresh['training']['samples_per_update'] * fresh['training']['rounds'] == 819200
+
+    assert fresh['joint_collection'] == {
+        'enabled': True,
+        'parallel_envs': 64,
+        'rollout_steps': 128,
+    }
+    assert fresh['ppo']['epochs'] == 1
+    assert fresh['ppo']['minibatch_size'] == 256
+    assert 'target_kl' not in fresh['ppo']
+
+    # 64 worlds x 128 simulator steps is exactly 8192 fresh world transitions.
+    # Per-agent actor samples can be lower when that Runner dies before the
+    # horizon, but every valid actor sample is consumed in exactly one epoch.
+    assert (
+        fresh['joint_collection']['parallel_envs']
+        * fresh['joint_collection']['rollout_steps']
+        == fresh['training']['samples_per_update']
+        == 8192
+    )
+
+    for key in (
+        'hidden_sizes', 'learning_rate', 'gamma', 'gae_lambda', 'clip_range',
+        'value_coef', 'entropy_coef', 'max_grad_norm', 'minibatch_size',
+    ):
+        assert fresh['ppo'][key] == large['ppo'][key]
+
+
+def test_joint_collection_requires_positive_parallel_world_count():
+    cfg = yaml.safe_load(Path('config/two_runner.yaml').read_text(encoding='utf-8'))
+    cfg['joint_collection'] = {'enabled': True, 'parallel_envs': 0, 'rollout_steps': 128}
+    try:
+        validate_two_runner_config(cfg)
+    except ValueError as exc:
+        assert 'joint_collection.parallel_envs' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')
+
+
+def test_joint_collection_requires_positive_rollout_steps():
+    cfg = yaml.safe_load(Path('config/two_runner.yaml').read_text(encoding='utf-8'))
+    cfg['joint_collection'] = {
+        'enabled': True,
+        'parallel_envs': 64,
+        'rollout_steps': 0,
+    }
+    try:
+        validate_two_runner_config(cfg)
+    except ValueError as exc:
+        assert 'joint_collection.rollout_steps' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')
+
+
+def test_fresh_joint_dense_goal_progress_is_increased_without_changing_terminal_bonus():
+    large = load_two_runner_config('config/two_runner_large_batch.yaml')
+    fresh = load_two_runner_config('config/two_runner_fresh_joint.yaml')
+    assert fresh['two_runner_reward']['team_success_bonus'] == large['two_runner_reward']['team_success_bonus'] == 100.0
+    assert fresh['two_runner_reward']['self_progress_scale'] == 8.0
+    assert fresh['two_runner_reward']['team_progress_scale'] == 4.0
+    assert fresh['two_runner_reward']['collision_penalty'] == large['two_runner_reward']['collision_penalty']
+    assert fresh['two_runner_reward']['safety_scale'] == large['two_runner_reward']['safety_scale']

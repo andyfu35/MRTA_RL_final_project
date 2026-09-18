@@ -6,6 +6,7 @@ from marl2d.two_runner import (
     TWO_RUNNER_IDS,
     TargetTransition,
     TwoRunnerWorker,
+    finalize_target_fragment,
     finalize_target_trajectory,
 )
 
@@ -340,3 +341,60 @@ def test_collection_reports_success_failure_sample_composition_and_advantage_spl
     assert 'selected_success_advantage_mean' in metrics
     assert 'selected_failure_advantage_mean' in metrics
     assert 'mean_success_terminal_credit_weight_at_start' in metrics
+
+
+def test_nonterminal_fragment_bootstraps_value_at_fixed_horizon():
+    transitions = [
+        TargetTransition(
+            observation=np.zeros(18, np.float32),
+            action=np.zeros(2, np.float32),
+            old_log_prob=0.0,
+            reward=0.0,
+            value=1.0,
+            next_value=2.0,
+        ),
+        TargetTransition(
+            observation=np.zeros(18, np.float32),
+            action=np.zeros(2, np.float32),
+            old_log_prob=0.0,
+            reward=0.0,
+            value=2.0,
+            next_value=3.0,
+        ),
+    ]
+    samples = finalize_target_fragment(
+        transitions,
+        terminal=False,
+        gamma=1.0,
+        gae_lambda=1.0,
+    )
+    assert len(samples) == 2
+    assert samples[-1].done is False
+    assert samples[-1].next_value == 3.0
+    np.testing.assert_allclose(
+        [sample.return_value for sample in samples],
+        [3.0, 3.0],
+        atol=1e-6,
+    )
+
+
+def test_terminal_fragment_does_not_bootstrap_past_terminal():
+    transitions = [
+        TargetTransition(
+            observation=np.zeros(18, np.float32),
+            action=np.zeros(2, np.float32),
+            old_log_prob=0.0,
+            reward=5.0,
+            value=1.0,
+            next_value=99.0,
+        ),
+    ]
+    samples = finalize_target_fragment(
+        transitions,
+        terminal=True,
+        gamma=0.99,
+        gae_lambda=0.95,
+    )
+    assert samples[0].done is True
+    assert samples[0].next_value == 0.0
+    assert samples[0].return_value == 5.0

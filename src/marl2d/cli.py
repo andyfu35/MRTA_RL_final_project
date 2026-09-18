@@ -74,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
     two_train.add_argument("--device", default="cpu")
     source = two_train.add_mutually_exclusive_group(required=True)
     source.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="Start Experiment 2 from fresh random Actor-Critic weights with no inherited policy.",
+    )
+    source.add_argument(
         "--init-single-runner-checkpoint",
         default=None,
         help="Start Experiment 2 from the finalized 15-D single-runner checkpoint.",
@@ -144,6 +149,13 @@ def _format_two_runner_record(record: dict) -> str:
     pieces = [f"round={int(record['round']):4d}"]
     for agent_id in TWO_RUNNER_IDS:
         metrics = record["agents"][agent_id]
+        freshness = ""
+        if int(metrics.get("shared_joint_rollout", 0)):
+            freshness = (
+                f" joint=1"
+                f" pv={int(metrics.get('rollout_policy_version', -1))}"
+                f" dataep={int(metrics.get('ppo_data_epochs', 0))}"
+            )
         pieces.append(
             f"{agent_id}:samples={int(metrics['samples'])} "
             f"sim={int(metrics['simulator_steps'])} "
@@ -156,6 +168,7 @@ def _format_two_runner_record(record: dict) -> str:
             f"guard_kl={float(metrics.get('max_guard_kl', 0.0)):.5f} "
             f"opt={int(metrics.get('optimizer_steps', 0))} "
             f"stop={int(metrics.get('early_stopped', 0))}"
+            f"{freshness}"
         )
     if "validation" in record:
         validation = record["validation"]
@@ -258,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
                 trainer.best_validation = None
                 print("Reset inherited Experiment 2 best-validation history.")
             print(f"Resumed {resume_mode} two-runner state from round {trainer.current_round}: {args.resume}")
+        elif args.from_scratch:
+            print("Initialized both runners from fresh random weights (from scratch).")
         else:
             trainer.initialize_from_single_runner_checkpoint(args.init_single_runner_checkpoint)
             print(f"Initialized both runners from: {args.init_single_runner_checkpoint}")
