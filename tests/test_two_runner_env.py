@@ -115,3 +115,103 @@ def test_timeout_penalizes_only_alive_runners():
     assert done[0]
     assert info['timeout'][0]
     np.testing.assert_allclose(rewards[0], [-20.0, -20.0])
+
+
+def make_record_reward_cfg(*, epsilon=0.0, self_scale=1.0, team_scale=0.0):
+    cfg = make_reward_cfg()
+    cfg.update({
+        'progress_mode': 'record',
+        'record_progress_epsilon': float(epsilon),
+        'self_progress_scale': float(self_scale),
+        'team_progress_scale': float(team_scale),
+        'step_penalty': 0.0,
+        'safety_scale': 0.0,
+    })
+    return cfg
+
+
+def test_record_progress_allows_detour_without_negative_progress_and_cannot_replay_old_progress():
+    env = TwoRunnerArena2D(1, make_env_cfg(), make_record_reward_cfg(), seed=11)
+    start_best = env.best_goal_distance.copy()
+
+    _, reward_closer, _, info_closer = env.step(
+        np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    first_improvement = float(info_closer['self_progress'][0, 0])
+    assert first_improvement > 0.0
+    assert reward_closer[0, 0] > 0.0
+    assert env.best_goal_distance[0, 0] < start_best[0, 0]
+
+    _, reward_detour, _, info_detour = env.step(
+        np.array([[[-1.0, -1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    assert info_detour['self_progress'][0, 0] == 0.0
+    assert reward_detour[0, 0] == 0.0
+
+    _, reward_return, _, info_return = env.step(
+        np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    assert info_return['self_progress'][0, 0] == 0.0
+    assert reward_return[0, 0] == 0.0
+
+    _, reward_new_record, _, info_new_record = env.step(
+        np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    assert info_new_record['self_progress'][0, 0] > 0.0
+    assert reward_new_record[0, 0] > 0.0
+
+
+def test_record_progress_epsilon_accumulates_small_improvements_until_threshold_is_crossed():
+    env = TwoRunnerArena2D(
+        1,
+        make_env_cfg(),
+        make_record_reward_cfg(epsilon=0.30),
+        seed=12,
+    )
+    best0 = float(env.best_goal_distance[0, 0])
+
+    _, reward1, _, info1 = env.step(
+        np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    assert info1['self_progress'][0, 0] == 0.0
+    assert reward1[0, 0] == 0.0
+    assert float(env.best_goal_distance[0, 0]) == best0
+
+    _, reward2, _, info2 = env.step(
+        np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    assert info2['self_progress'][0, 0] > 0.30
+    assert reward2[0, 0] > 0.30
+    assert float(env.best_goal_distance[0, 0]) < best0
+
+
+def test_record_team_progress_uses_largest_new_personal_record_not_sum_and_is_shared():
+    env = TwoRunnerArena2D(
+        1,
+        make_env_cfg(),
+        make_record_reward_cfg(self_scale=0.0, team_scale=1.0),
+        seed=13,
+    )
+    _, rewards, _, info = env.step(
+        np.array([[[1.0, 1.0], [1.0, 1.0]]], dtype=np.float32)
+    )
+    r0 = float(info['self_progress'][0, 0])
+    r1 = float(info['self_progress'][0, 1])
+    expected = max(r0, r1)
+    assert expected > 0.0
+    assert np.isclose(float(info['team_progress'][0]), expected, atol=1e-6)
+    np.testing.assert_allclose(rewards[0], [expected, expected], atol=1e-6)
+
+
+def test_record_best_distance_is_reset_and_checkpointed_with_environment_state():
+    env = TwoRunnerArena2D(1, make_env_cfg(), make_record_reward_cfg(), seed=14)
+    env.step(np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32))
+    snapshot = env.snapshot_state()
+    saved_best = snapshot['best_goal_distance'].copy()
+
+    env.best_goal_distance[:] = 999.0
+    env.restore_state(snapshot)
+    np.testing.assert_allclose(env.best_goal_distance, saved_best)
+
+    env.reset_indices(np.array([True]))
+    np.testing.assert_allclose(env.best_goal_distance, env._goal_distances(), atol=1e-6)
