@@ -198,7 +198,7 @@ def test_shared_joint_rollout_recollects_after_each_committed_policy_update(tmp_
 
 
 def test_shared_joint_checkpoint_resume_reproduces_next_round(tmp_path: Path):
-    c = fresh_joint_cfg(samples=2, parallel_envs=1)
+    c = fresh_joint_cfg(samples=2, parallel_envs=1, rollout_steps=2)
     first = TwoRunnerTrainer(
         c,
         tmp_path / 'shared_first',
