@@ -125,6 +125,7 @@ def _format_two_runner_record(record: dict) -> str:
             f"sel_succ={int(metrics.get('selected_success_transitions', 0))}/{int(metrics['samples'])} "
             f"pool={int(metrics.get('sample_pool_size', metrics['samples']))} "
             f"discard={int(metrics.get('discarded_surplus_samples', 0))} "
+            f"geo_fb={float(metrics.get('geodesic_fallback_rate', 0.0)):.3f} "
             f"kl={float(metrics.get('approx_kl', 0.0)):.5f}"
         )
     if "validation" in record:
