@@ -191,3 +191,33 @@ def test_shared_joint_rollout_recollects_after_each_committed_policy_update(tmp_
     assert records[1]['agents']['runner_1']['rollout_policy_version'] == 1
     assert all(r['agents']['runner_0']['ppo_data_epochs'] == 1 for r in records)
     assert all(r['agents']['runner_1']['ppo_data_epochs'] == 1 for r in records)
+
+
+def test_shared_joint_checkpoint_resume_reproduces_next_round(tmp_path: Path):
+    c = fresh_joint_cfg(samples=2, parallel_envs=1)
+    first = TwoRunnerTrainer(
+        c,
+        tmp_path / 'shared_first',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    first.run(rounds=1, run_validation=False)
+    checkpoint = first.save_checkpoint(tmp_path / 'shared_resume.pt')
+    original = first.run(rounds=1, run_validation=False)[0]
+    original_policy = first.policy_set()
+
+    resumed = TwoRunnerTrainer(
+        c,
+        tmp_path / 'shared_resumed',
+        device='cpu',
+        worker_env_factory=CountingJointSuccessEnv,
+    )
+    assert resumed.resume_from_checkpoint(checkpoint) == 'full'
+    replay = resumed.run(rounds=1, run_validation=False)[0]
+
+    assert replay['round'] == original['round']
+    assert replay['agents']['runner_0']['rollout_policy_version'] == 1
+    assert replay['agents']['runner_1']['rollout_policy_version'] == 1
+    for aid in TWO_RUNNER_IDS:
+        for key, value in original_policy[aid].items():
+            torch.testing.assert_close(resumed.policy_set()[aid][key], value)
