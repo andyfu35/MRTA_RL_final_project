@@ -1,0 +1,89 @@
+# Experiment 2 record-progress reward ablation.
+# Based on the 32,768-sample large-batch schedule. The only training-objective
+# change is progress shaping: temporary detours are not punished, and progress
+# reward is paid only when a Runner beats its best-so-far goal distance.
+experiment:
+  name: exp2_record_progress_32768
+  hypothesis: best_so_far_progress_allows_useful_detours_without_reward_hacking
+  parent_experiment: exp2_large_batch_32768
+  total_used_samples_per_policy: 819200
+
+seed: 42
+
+environment:
+  width: 20.0
+  height: 20.0
+  dt: 0.10
+  wheel_radius: 0.10
+  wheel_base: 0.50
+  max_wheel_linear_speed: 2.0
+  robot_radius: 0.30
+  body_length: 0.70
+  body_width: 0.44
+  wheel_length: 0.34
+  wheel_width: 0.10
+  goal: [18.0, 10.0]
+  goal_radius: 0.70
+  max_steps: 360
+  lidar_rays: 8
+  lidar_range: 6.0
+  reset_jitter: 0.18
+  obstacles:
+    count: 14
+    min_width: 0.8
+    max_width: 1.8
+    min_height: 0.8
+    max_height: 1.8
+    min_spacing: 0.65
+    spawn_clearance: 1.8
+    goal_clearance: 2.0
+    border_margin: 0.35
+    max_attempts: 4000
+
+two_runner_reward:
+  team_success_bonus: 100.0
+  collision_penalty: -100.0
+  timeout_penalty: -20.0
+  self_progress_scale: 3.0
+  team_progress_scale: 2.0
+  step_penalty: -0.01
+  safety_distance: 0.50
+  safety_scale: 3.0
+  progress_mode: record
+  record_progress_epsilon: 0.01
+
+training:
+  samples_per_update: 32768
+  rounds: 25
+  checkpoint_every: 1
+
+collection_profiles:
+  runner_0:
+    parallel_envs: 32
+  runner_1:
+    parallel_envs: 16
+
+ppo:
+  hidden_sizes: [64, 64]
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  value_coef: 0.5
+  entropy_coef: 0.005
+  max_grad_norm: 0.5
+  epochs: 4
+  minibatch_size: 256
+
+validation:
+  every: 1
+  episodes: 200
+  seed_start: 40000
+
+evaluation:
+  episodes: 200
+  seed_start: 50000
+
+final_test:
+  episodes: 200
+  seed_start: 60000
