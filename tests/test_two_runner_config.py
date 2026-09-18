@@ -85,3 +85,32 @@ def test_two_runner_config_rejects_unknown_progress_mode_and_negative_record_eps
         assert 'record_progress_epsilon' in str(exc)
     else:
         raise AssertionError('expected ValueError')
+
+
+def test_geodesic_progress_config_changes_only_progress_metric_from_large_batch():
+    large = load_two_runner_config('config/two_runner_large_batch.yaml')
+    geo = load_two_runner_config('config/two_runner_geodesic_progress.yaml')
+
+    assert geo['training'] == large['training']
+    assert geo['collection_profiles'] == large['collection_profiles']
+    assert geo['environment'] == large['environment']
+    assert geo['ppo'] == large['ppo']
+    assert geo['validation'] == large['validation']
+
+    large_reward = dict(large['two_runner_reward'])
+    geo_reward = dict(geo['two_runner_reward'])
+    assert geo_reward.pop('progress_mode') == 'geodesic'
+    assert geo_reward.pop('geodesic_grid_resolution') == 0.20
+    assert geo_reward == large_reward
+
+
+def test_two_runner_config_rejects_nonpositive_geodesic_resolution():
+    cfg = yaml.safe_load(Path('config/two_runner_large_batch.yaml').read_text(encoding='utf-8'))
+    cfg['two_runner_reward']['progress_mode'] = 'geodesic'
+    cfg['two_runner_reward']['geodesic_grid_resolution'] = 0.0
+    try:
+        validate_two_runner_config(cfg)
+    except ValueError as exc:
+        assert 'geodesic_grid_resolution' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')
