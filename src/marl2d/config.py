@@ -189,6 +189,14 @@ def validate_two_runner_config(cfg: dict[str, Any]) -> None:
     if target_kl is not None and float(target_kl) <= 0.0:
         raise ValueError("ppo.target_kl must be > 0 when configured")
 
+    joint_collection = cfg.get("joint_collection")
+    if joint_collection is not None:
+        if not isinstance(joint_collection, dict):
+            raise ValueError("joint_collection must be a mapping")
+        if bool(joint_collection.get("enabled", False)):
+            if int(joint_collection.get("parallel_envs", 0)) <= 0:
+                raise ValueError("joint_collection.parallel_envs must be positive when enabled")
+
     samples = int(cfg["training"]["samples_per_update"])
     if samples <= 0:
         raise ValueError("training.samples_per_update must be positive")
