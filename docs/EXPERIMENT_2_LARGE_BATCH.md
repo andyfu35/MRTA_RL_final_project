@@ -69,3 +69,22 @@ The CLI now prints each Experiment 2 round immediately instead of waiting for al
 | 100 | 25 | 819,200 |
 
 Do not use final-test seeds 60000-60199 for tuning.
+
+## Completed result
+
+The formal 25-round run completed successfully.
+
+Key validation results:
+
+- mean team success: approximately **48.9%**
+- mean any-collision rate: approximately **49.8%**
+- peak team success: **67.5% at Round 23**
+- Round 23 collision: **48.0%**
+- Round 23 both-dead: **6.0%**
+- final Round 25 success: **62.0%**
+- final Round 25 collision: **53.5%**
+- final Round 25 both-dead: **8.5%**
+- last-five-round mean success: approximately **61.9%**
+- last-five-round mean collision: approximately **51.5%**
+
+Conclusion: increasing per-update data from 8,192 to 32,768 improved late-stage and peak success, but did not remove checkpoint oscillation and produced a relatively aggressive high-collision policy. See `docs/EXPERIMENT_2_RESULTS.md` for the cross-experiment comparison.

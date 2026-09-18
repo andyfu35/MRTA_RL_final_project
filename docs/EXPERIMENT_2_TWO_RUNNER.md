@@ -140,3 +140,26 @@ python -m marl2d two-eval \
 ```
 
 Do not use seeds `60000-60199` until the final Experiment 2 checkpoint and selection rule are locked.
+
+## Experimental status through 2026-09-18
+
+Four formal Experiment 2 variants have now been run:
+
+1. original 8,192-sample instantaneous-Euclidean baseline
+2. 32,768-sample Large-Batch controlled ablation
+3. 32,768-sample Record-Progress reward ablation
+4. 32,768-sample Geodesic-Progress reward ablation
+
+The complete experiment history, key checkpoints, aggregate results, supported/rejected hypotheses, and next recommended controlled test are maintained in:
+
+`docs/EXPERIMENT_2_RESULTS.md`
+
+Current headline results:
+
+- Original baseline peak success: **61.0%**
+- Large-Batch peak success: **67.5%**
+- Record-Progress peak success: **61.0%**
+- Geodesic-Progress peak success: **55.5%**
+- Large Batch currently provides the strongest task-success result.
+- Record-Progress reduces collision relative to Large Batch but sacrifices some success.
+- Geodesic-Progress did not improve success despite `geo_fb=0.000`, so its distance field was active throughout the run.
