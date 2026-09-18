@@ -48,3 +48,40 @@ def test_large_batch_config_preserves_total_used_samples_and_changes_only_batch_
     assert large['two_runner_reward'] == baseline['two_runner_reward']
     assert large['collection_profiles'] == baseline['collection_profiles']
     assert large['ppo'] == baseline['ppo']
+
+
+def test_record_progress_config_changes_only_progress_shaping_from_large_batch():
+    large = load_two_runner_config('config/two_runner_large_batch.yaml')
+    record = load_two_runner_config('config/two_runner_record_progress.yaml')
+
+    assert record['training'] == large['training']
+    assert record['collection_profiles'] == large['collection_profiles']
+    assert record['environment'] == large['environment']
+    assert record['ppo'] == large['ppo']
+    assert record['validation'] == large['validation']
+
+    large_reward = dict(large['two_runner_reward'])
+    record_reward = dict(record['two_runner_reward'])
+    assert record_reward.pop('progress_mode') == 'record'
+    assert record_reward.pop('record_progress_epsilon') == 0.01
+    assert record_reward == large_reward
+
+
+def test_two_runner_config_rejects_unknown_progress_mode_and_negative_record_epsilon():
+    cfg = yaml.safe_load(Path('config/two_runner_large_batch.yaml').read_text(encoding='utf-8'))
+    cfg['two_runner_reward']['progress_mode'] = 'not-a-mode'
+    try:
+        validate_two_runner_config(cfg)
+    except ValueError as exc:
+        assert 'progress_mode' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')
+
+    cfg['two_runner_reward']['progress_mode'] = 'record'
+    cfg['two_runner_reward']['record_progress_epsilon'] = -0.01
+    try:
+        validate_two_runner_config(cfg)
+    except ValueError as exc:
+        assert 'record_progress_epsilon' in str(exc)
+    else:
+        raise AssertionError('expected ValueError')
