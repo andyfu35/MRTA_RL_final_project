@@ -419,6 +419,574 @@ class TwoRunnerWorker:
         update_metrics = ppo_update(self.model, self.optimizer, batch, self.cfg["ppo"])
         return snapshot_model(self.model), {**collection_metrics, **update_metrics}
 
+
+class SharedTwoRunnerCollector:
+    """Collect both Runner policies from the exact same joint team episodes.
+
+    A round is generated entirely by one frozen joint policy version. Once both
+    per-agent finalized pools contain enough valid actor transitions, no new
+    episodes are launched; in-flight episodes are drained so team outcomes and
+    delayed success credit are known before GAE is finalized.
+    """
+
+    obs_dim = 18
+    action_dim = 2
+
+    def __init__(
+        self,
+        cfg: dict[str, Any],
+        device: str = "cpu",
+        env_factory: Callable[..., Any] = TwoRunnerArena2D,
+    ) -> None:
+        joint_cfg = cfg.get("joint_collection", {})
+        if not bool(joint_cfg.get("enabled", False)):
+            raise ValueError("SharedTwoRunnerCollector requires joint_collection.enabled=true")
+        self.cfg = cfg
+        self.device = torch.device(device)
+        self.env_factory = env_factory
+        self.parallel_envs = int(joint_cfg["parallel_envs"])
+        if self.parallel_envs <= 0:
+            raise ValueError("joint_collection.parallel_envs must be positive")
+        self._collector_env: Any | None = None
+        self._collector_obs: np.ndarray | None = None
+        self.pending_trajectories: dict[str, list[list[TargetTransition]]] = {
+            aid: [] for aid in TWO_RUNNER_IDS
+        }
+        self.finalized_queue: dict[str, deque[FinalizedSample]] = {
+            aid: deque() for aid in TWO_RUNNER_IDS
+        }
+        self.finalized_outcomes: dict[str, deque[str]] = {
+            aid: deque() for aid in TWO_RUNNER_IDS
+        }
+        self.finalized_trajectory_ids: dict[str, deque[int]] = {
+            aid: deque() for aid in TWO_RUNNER_IDS
+        }
+
+    def _ensure_collector(self) -> None:
+        if self._collector_env is not None:
+            return
+        base_seed = int(self.cfg.get("seed", 0)) + 700_000
+        self._collector_env = self.env_factory(
+            self.parallel_envs,
+            self.cfg["environment"],
+            self.cfg["two_runner_reward"],
+            seed=base_seed,
+        )
+        self._collector_obs = self._collector_env.observe()
+        self.pending_trajectories = {
+            aid: [[] for _ in range(self.parallel_envs)]
+            for aid in TWO_RUNNER_IDS
+        }
+
+    def _models_from_policy_set(
+        self,
+        policy_set: dict[str, dict[str, torch.Tensor]],
+    ) -> dict[str, ActorCritic]:
+        if set(policy_set) != set(TWO_RUNNER_IDS):
+            raise ValueError(f"policy_set must contain exactly {TWO_RUNNER_IDS}")
+        hidden = self.cfg["ppo"]["hidden_sizes"]
+        models: dict[str, ActorCritic] = {}
+        for aid in TWO_RUNNER_IDS:
+            model = ActorCritic(self.obs_dim, self.action_dim, hidden).to(self.device)
+            load_model_snapshot(model, policy_set[aid])
+            model.eval()
+            models[aid] = model
+        return models
+
+    def _finalize_agent_env(
+        self,
+        agent_id: str,
+        env_index: int,
+        *,
+        delayed_team_success: bool,
+        outcome: str,
+        trajectory_id: int,
+    ) -> None:
+        trajectory = self.pending_trajectories[agent_id][env_index]
+        finalized = finalize_target_trajectory(
+            trajectory,
+            delayed_team_success=bool(delayed_team_success),
+            team_success_bonus=float(self.cfg["two_runner_reward"]["team_success_bonus"]),
+            gamma=float(self.cfg["ppo"]["gamma"]),
+            gae_lambda=float(self.cfg["ppo"]["gae_lambda"]),
+        )
+        self.finalized_queue[agent_id].extend(finalized)
+        self.finalized_outcomes[agent_id].extend([str(outcome)] * len(finalized))
+        self.finalized_trajectory_ids[agent_id].extend(
+            [int(trajectory_id)] * len(finalized)
+        )
+        self.pending_trajectories[agent_id][env_index] = []
+
+    @staticmethod
+    def _outcome_name(info: dict[str, Any], env_index: int) -> str:
+        if bool(np.asarray(info["team_success"])[env_index]):
+            return "success"
+        if bool(np.asarray(info["both_dead"])[env_index]):
+            return "both_dead"
+        if bool(np.asarray(info["timeout"])[env_index]):
+            return "timeout"
+        return "other"
+
+    def _seal_agent_batch(
+        self,
+        agent_id: str,
+        *,
+        expected_samples: int,
+        selection_seed: int,
+        simulator_steps: int,
+        completed_team_episodes: int,
+        outcome_episode_counts: dict[str, int],
+        outcome_trajectory_lengths: dict[str, dict[str, list[int]]],
+        target_deaths: dict[str, int],
+        target_goal_contributions: dict[str, int],
+        delayed_team_credits: dict[str, int],
+        unique_map_seeds: set[int],
+        round_index: int,
+    ) -> tuple[RolloutBatch, dict[str, float | int]]:
+        sample_pool = list(self.finalized_queue[agent_id])
+        outcome_pool = list(self.finalized_outcomes[agent_id])
+        trajectory_id_pool = list(self.finalized_trajectory_ids[agent_id])
+        pool_size = len(sample_pool)
+        if not (pool_size == len(outcome_pool) == len(trajectory_id_pool)):
+            raise RuntimeError("shared joint diagnostic sidecars are not aligned")
+        if pool_size < expected_samples:
+            raise RuntimeError(
+                f"shared collector has only {pool_size} {agent_id} samples, "
+                f"expected at least {expected_samples}"
+            )
+
+        selection_rng = np.random.default_rng(int(selection_seed))
+        selected_indices = selection_rng.choice(
+            pool_size, size=expected_samples, replace=False
+        )
+        consumed = [sample_pool[int(index)] for index in selected_indices]
+        selected_outcomes = [outcome_pool[int(index)] for index in selected_indices]
+        selected_trajectory_ids = [
+            trajectory_id_pool[int(index)] for index in selected_indices
+        ]
+        discarded_surplus = pool_size - expected_samples
+
+        self.finalized_queue[agent_id].clear()
+        self.finalized_outcomes[agent_id].clear()
+        self.finalized_trajectory_ids[agent_id].clear()
+
+        observations = torch.from_numpy(
+            np.stack([x.observation for x in consumed])
+        ).to(self.device)
+        actions = torch.from_numpy(np.stack([x.action for x in consumed])).to(
+            self.device
+        )
+        old_log_probs = torch.tensor(
+            [x.old_log_prob for x in consumed],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        returns = torch.tensor(
+            [x.return_value for x in consumed],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        advantages = torch.tensor(
+            [x.advantage for x in consumed],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        batch = RolloutBatch(
+            observations, actions, old_log_probs, returns, advantages
+        )
+
+        success_pool_mask = np.asarray(
+            [x == "success" for x in outcome_pool], dtype=bool
+        )
+        success_selected_mask = np.asarray(
+            [x == "success" for x in selected_outcomes], dtype=bool
+        )
+        selected_advantages = np.asarray(
+            [x.advantage for x in consumed], dtype=np.float64
+        )
+
+        def _mean(values: list[int] | np.ndarray) -> float:
+            return float(np.mean(values)) if len(values) else 0.0
+
+        def _masked_mean_std(mask: np.ndarray) -> tuple[float, float]:
+            values = selected_advantages[mask]
+            if values.size == 0:
+                return 0.0, 0.0
+            return float(values.mean()), float(values.std())
+
+        success_adv_mean, success_adv_std = _masked_mean_std(
+            success_selected_mask
+        )
+        failure_adv_mean, failure_adv_std = _masked_mean_std(
+            ~success_selected_mask
+        )
+        success_lengths = outcome_trajectory_lengths[agent_id]["success"]
+        failure_lengths = (
+            outcome_trajectory_lengths[agent_id]["timeout"]
+            + outcome_trajectory_lengths[agent_id]["both_dead"]
+            + outcome_trajectory_lengths[agent_id]["other"]
+        )
+        gae_decay = float(self.cfg["ppo"]["gamma"]) * float(
+            self.cfg["ppo"]["gae_lambda"]
+        )
+        success_credit_weights = [
+            gae_decay ** max(int(length) - 1, 0)
+            for length in success_lengths
+        ]
+
+        metrics: dict[str, float | int] = {
+            "samples": expected_samples,
+            "simulator_steps": simulator_steps,
+            "completed_team_episodes": completed_team_episodes,
+            "shared_team_episodes": completed_team_episodes,
+            "shared_joint_rollout": 1,
+            "rollout_policy_version": int(round_index),
+            "ppo_data_epochs": int(self.cfg["ppo"]["epochs"]),
+            "team_success_episodes": outcome_episode_counts["success"],
+            "timeout_episodes": outcome_episode_counts["timeout"],
+            "both_dead_episodes": outcome_episode_counts["both_dead"],
+            "target_deaths": target_deaths[agent_id],
+            "target_goal_contributions": target_goal_contributions[agent_id],
+            "delayed_team_credits": delayed_team_credits[agent_id],
+            "sample_pool_size": pool_size,
+            "sample_pool_success_transitions": int(success_pool_mask.sum()),
+            "sample_pool_failure_transitions": int((~success_pool_mask).sum()),
+            "sample_pool_success_fraction": (
+                float(success_pool_mask.mean()) if pool_size else 0.0
+            ),
+            "selected_success_transitions": int(success_selected_mask.sum()),
+            "selected_failure_transitions": int((~success_selected_mask).sum()),
+            "selected_success_fraction": float(success_selected_mask.mean()),
+            "selected_unique_trajectories": len(set(selected_trajectory_ids)),
+            "selected_success_trajectories": len(
+                {
+                    selected_trajectory_ids[i]
+                    for i in range(len(selected_trajectory_ids))
+                    if success_selected_mask[i]
+                }
+            ),
+            "selected_failure_trajectories": len(
+                {
+                    selected_trajectory_ids[i]
+                    for i in range(len(selected_trajectory_ids))
+                    if not success_selected_mask[i]
+                }
+            ),
+            "mean_success_target_trajectory_steps": _mean(success_lengths),
+            "mean_failure_target_trajectory_steps": _mean(failure_lengths),
+            "mean_success_terminal_credit_weight_at_start": _mean(
+                success_credit_weights
+            ),
+            "selected_success_advantage_mean": success_adv_mean,
+            "selected_success_advantage_std": success_adv_std,
+            "selected_failure_advantage_mean": failure_adv_mean,
+            "selected_failure_advantage_std": failure_adv_std,
+            "discarded_surplus_samples": discarded_surplus,
+            "queued_surplus_samples": 0,
+            "unique_map_seeds": len(unique_map_seeds),
+            "stochastic_action_std": float(
+                actions.detach().cpu().numpy().std()
+            ),
+        }
+        return batch, metrics
+
+    def collect_round(
+        self,
+        frozen_policy_set: dict[str, dict[str, torch.Tensor]],
+        round_index: int,
+    ) -> tuple[
+        dict[str, RolloutBatch],
+        dict[str, dict[str, float | int]],
+    ]:
+        expected_samples = int(self.cfg["training"]["samples_per_update"])
+        if expected_samples <= 0:
+            raise ValueError("training.samples_per_update must be positive")
+        self._ensure_collector()
+        assert self._collector_env is not None and self._collector_obs is not None
+        env = self._collector_env
+
+        for aid in TWO_RUNNER_IDS:
+            if (
+                self.finalized_queue[aid]
+                or self.finalized_outcomes[aid]
+                or self.finalized_trajectory_ids[aid]
+                or any(self.pending_trajectories[aid])
+            ):
+                raise RuntimeError(
+                    "shared joint collector crossed a PPO round boundary "
+                    f"with stale {aid} samples"
+                )
+
+        models = self._models_from_policy_set(frozen_policy_set)
+        round_seed = int(self.cfg.get("seed", 0)) + int(round_index) * 1_000_000
+        torch.manual_seed(round_seed)
+
+        simulator_steps = 0
+        completed_team_episodes = 0
+        unique_map_seeds: set[int] = set()
+        outcome_episode_counts = {
+            "success": 0,
+            "timeout": 0,
+            "both_dead": 0,
+            "other": 0,
+        }
+        outcome_trajectory_lengths = {
+            aid: {
+                "success": [],
+                "timeout": [],
+                "both_dead": [],
+                "other": [],
+            }
+            for aid in TWO_RUNNER_IDS
+        }
+        target_deaths = {aid: 0 for aid in TWO_RUNNER_IDS}
+        target_goal_contributions = {aid: 0 for aid in TWO_RUNNER_IDS}
+        delayed_team_credits = {aid: 0 for aid in TWO_RUNNER_IDS}
+
+        trajectory_serial = 0
+        draining = False
+        active_episode_mask = np.ones(int(env.num_envs), dtype=bool)
+
+        while True:
+            obs = self._collector_obs
+            alive_before = np.asarray(env.alive, dtype=bool).copy()
+            n_envs = int(env.num_envs)
+            step_mask = (
+                active_episode_mask
+                if draining
+                else np.ones(n_envs, dtype=bool)
+            )
+            all_actions = np.zeros((n_envs, 2, 2), dtype=np.float32)
+            action_cache = {
+                aid: np.zeros((n_envs, 2), dtype=np.float32)
+                for aid in TWO_RUNNER_IDS
+            }
+            log_prob_cache = {
+                aid: np.zeros(n_envs, dtype=np.float32)
+                for aid in TWO_RUNNER_IDS
+            }
+            value_cache = {
+                aid: np.zeros(n_envs, dtype=np.float32)
+                for aid in TWO_RUNNER_IDS
+            }
+
+            for agent_index, aid in enumerate(TWO_RUNNER_IDS):
+                alive_mask = alive_before[:, agent_index] & step_mask
+                if not np.any(alive_mask):
+                    continue
+                obs_tensor = torch.from_numpy(
+                    obs[alive_mask, agent_index, :]
+                ).to(self.device)
+                with torch.no_grad():
+                    action, log_prob, value = models[aid].sample(obs_tensor)
+                action_np = action.cpu().numpy()
+                all_actions[alive_mask, agent_index, :] = action_np
+                action_cache[aid][alive_mask] = action_np
+                log_prob_cache[aid][alive_mask] = log_prob.cpu().numpy()
+                value_cache[aid][alive_mask] = value.cpu().numpy()
+
+            next_obs, rewards, done, info = env.step(all_actions)
+            simulator_steps += n_envs
+            unique_map_seeds.update(
+                int(x)
+                for x in np.asarray(
+                    info.get("map_seed", env.map_seeds)
+                ).tolist()
+            )
+
+            next_value_cache: dict[str, np.ndarray] = {}
+            with torch.no_grad():
+                for agent_index, aid in enumerate(TWO_RUNNER_IDS):
+                    next_value_cache[aid] = (
+                        models[aid]
+                        .value(
+                            torch.from_numpy(
+                                next_obs[:, agent_index, :]
+                            ).to(self.device)
+                        )
+                        .cpu()
+                        .numpy()
+                    )
+
+            alive_before_info = np.asarray(info["alive_before"], dtype=bool)
+            for agent_index, aid in enumerate(TWO_RUNNER_IDS):
+                actor_mask = alive_before_info[:, agent_index] & step_mask
+                for env_index in np.flatnonzero(actor_mask):
+                    env_index = int(env_index)
+                    self.pending_trajectories[aid][env_index].append(
+                        TargetTransition(
+                            observation=obs[env_index, agent_index, :],
+                            action=action_cache[aid][env_index],
+                            old_log_prob=float(
+                                log_prob_cache[aid][env_index]
+                            ),
+                            reward=float(rewards[env_index, agent_index]),
+                            value=float(value_cache[aid][env_index]),
+                            next_value=float(
+                                next_value_cache[aid][env_index]
+                            ),
+                        )
+                    )
+
+                target_deaths[aid] += int(
+                    (
+                        np.asarray(info["new_death"], dtype=bool)[
+                            :, agent_index
+                        ]
+                        & step_mask
+                    ).sum()
+                )
+                target_goal_contributions[aid] += int(
+                    (
+                        np.asarray(info["goal_reached"], dtype=bool)[
+                            :, agent_index
+                        ]
+                        & step_mask
+                    ).sum()
+                )
+
+            effective_done = np.asarray(done, dtype=bool) & step_mask
+            for env_index in np.flatnonzero(effective_done):
+                env_index = int(env_index)
+                completed_team_episodes += 1
+                outcome = self._outcome_name(info, env_index)
+                outcome_episode_counts[outcome] += 1
+
+                for agent_index, aid in enumerate(TWO_RUNNER_IDS):
+                    target_was_alive = bool(
+                        alive_before_info[env_index, agent_index]
+                    )
+                    delayed = (
+                        outcome == "success" and not target_was_alive
+                    )
+                    if delayed:
+                        delayed_team_credits[aid] += 1
+                    trajectory_length = len(
+                        self.pending_trajectories[aid][env_index]
+                    )
+                    outcome_trajectory_lengths[aid][outcome].append(
+                        trajectory_length
+                    )
+                    self._finalize_agent_env(
+                        aid,
+                        env_index,
+                        delayed_team_success=delayed,
+                        outcome=outcome,
+                        trajectory_id=trajectory_serial,
+                    )
+                trajectory_serial += 1
+
+            enough_for_both = all(
+                len(self.finalized_queue[aid]) >= expected_samples
+                for aid in TWO_RUNNER_IDS
+            )
+            if not draining and enough_for_both:
+                draining = True
+                active_episode_mask = ~effective_done
+                if not np.any(active_episode_mask):
+                    self._collector_obs = next_obs
+                    break
+            elif draining:
+                active_episode_mask &= ~effective_done
+                if not np.any(active_episode_mask):
+                    self._collector_obs = next_obs
+                    break
+            else:
+                if np.any(effective_done):
+                    env.reset_indices(effective_done)
+                    next_obs = env.observe()
+
+            self._collector_obs = next_obs
+
+        for aid in TWO_RUNNER_IDS:
+            if any(self.pending_trajectories[aid]):
+                raise RuntimeError(
+                    "shared drain ended with unfinished target trajectories"
+                )
+            if len(self.finalized_queue[aid]) < expected_samples:
+                raise RuntimeError(
+                    f"shared collector drained without enough {aid} samples"
+                )
+
+        batches: dict[str, RolloutBatch] = {}
+        metrics: dict[str, dict[str, float | int]] = {}
+        for agent_index, aid in enumerate(TWO_RUNNER_IDS):
+            batch, agent_metrics = self._seal_agent_batch(
+                aid,
+                expected_samples=expected_samples,
+                selection_seed=round_seed + 10 + agent_index,
+                simulator_steps=simulator_steps,
+                completed_team_episodes=completed_team_episodes,
+                outcome_episode_counts=outcome_episode_counts,
+                outcome_trajectory_lengths=outcome_trajectory_lengths,
+                target_deaths=target_deaths,
+                target_goal_contributions=target_goal_contributions,
+                delayed_team_credits=delayed_team_credits,
+                unique_map_seeds=unique_map_seeds,
+                round_index=round_index,
+            )
+            batches[aid] = batch
+            metrics[aid] = agent_metrics
+
+        # Every round boundary starts from brand-new team episodes. The new
+        # policy set will therefore be evaluated only on data collected after
+        # the synchronous commit.
+        reset_mask = np.ones(int(env.num_envs), dtype=bool)
+        env.reset_indices(reset_mask)
+        self._collector_obs = env.observe()
+        return batches, metrics
+
+    def snapshot_state(self) -> dict[str, Any]:
+        self._ensure_collector()
+        assert self._collector_env is not None and self._collector_obs is not None
+        if not hasattr(self._collector_env, "snapshot_state"):
+            raise ValueError("shared collector environment does not support snapshot_state")
+        return {
+            "collector_state": self._collector_env.snapshot_state(),
+            "collector_obs": self._collector_obs.copy(),
+            "pending_trajectories": copy.deepcopy(self.pending_trajectories),
+            "finalized_queue": {
+                aid: copy.deepcopy(list(self.finalized_queue[aid]))
+                for aid in TWO_RUNNER_IDS
+            },
+            "finalized_outcomes": {
+                aid: list(self.finalized_outcomes[aid])
+                for aid in TWO_RUNNER_IDS
+            },
+            "finalized_trajectory_ids": {
+                aid: list(self.finalized_trajectory_ids[aid])
+                for aid in TWO_RUNNER_IDS
+            },
+        }
+
+    def restore_state(self, state: dict[str, Any]) -> None:
+        self._ensure_collector()
+        assert self._collector_env is not None
+        if not hasattr(self._collector_env, "restore_state"):
+            raise ValueError("shared collector environment does not support restore_state")
+        self._collector_env.restore_state(state["collector_state"])
+        self._collector_obs = np.asarray(
+            state["collector_obs"], dtype=np.float32
+        ).copy()
+        self.pending_trajectories = copy.deepcopy(
+            state["pending_trajectories"]
+        )
+        self.finalized_queue = {
+            aid: deque(copy.deepcopy(state["finalized_queue"][aid]))
+            for aid in TWO_RUNNER_IDS
+        }
+        self.finalized_outcomes = {
+            aid: deque(copy.deepcopy(state["finalized_outcomes"][aid]))
+            for aid in TWO_RUNNER_IDS
+        }
+        self.finalized_trajectory_ids = {
+            aid: deque(
+                copy.deepcopy(state["finalized_trajectory_ids"][aid])
+            )
+            for aid in TWO_RUNNER_IDS
+        }
+
+
 # --- Experiment 2 trainer / checkpoint / evaluation ---
 import copy
 import json
