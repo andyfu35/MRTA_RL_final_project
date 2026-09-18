@@ -192,6 +192,7 @@ class TwoRunnerWorker:
         target_deaths = 0
         target_goal_contributions = 0
         delayed_team_credits = 0
+        geodesic_fallback_agent_steps = 0
         unique_map_seeds: set[int] = set()
         outcome_episode_counts = {"success": 0, "timeout": 0, "both_dead": 0, "other": 0}
         outcome_trajectory_lengths: dict[str, list[int]] = {
@@ -230,6 +231,12 @@ class TwoRunnerWorker:
 
             next_obs, rewards, done, info = env.step(all_actions)
             simulator_steps += n_envs
+            geodesic_fallback_agent_steps += int(
+                np.asarray(
+                    info.get("geodesic_fallback", np.zeros((n_envs, 2), dtype=bool)),
+                    dtype=bool,
+                ).sum()
+            )
             unique_map_seeds.update(int(x) for x in np.asarray(info.get("map_seed", env.map_seeds)).tolist())
 
             with torch.no_grad():
@@ -408,6 +415,10 @@ class TwoRunnerWorker:
             "discarded_surplus_samples": discarded_surplus,
             "queued_surplus_samples": 0,
             "unique_map_seeds": len(unique_map_seeds),
+            "geodesic_fallback_agent_steps": geodesic_fallback_agent_steps,
+            "geodesic_fallback_rate": (
+                geodesic_fallback_agent_steps / max(1, simulator_steps * 2)
+            ),
             "stochastic_action_std": float(actions.detach().cpu().numpy().std()),
         }
         return batch, metrics
