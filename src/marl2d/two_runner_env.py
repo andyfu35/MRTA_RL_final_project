@@ -363,11 +363,17 @@ class TwoRunnerArena2D:
                 _GEODESIC_FIELD_CACHE.move_to_end(key)
             self.geodesic_fields[int(env_index)] = cached
 
-    def _geodesic_goal_distances(self, state: np.ndarray | None = None) -> np.ndarray:
+    def _geodesic_goal_distances(
+        self,
+        state: np.ndarray | None = None,
+        *,
+        return_fallback: bool = False,
+    ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         if self.progress_mode != "geodesic" or self.geodesic_fields is None:
             raise RuntimeError("geodesic distance requested while progress_mode is not geodesic")
         s = self.state if state is None else np.asarray(state, dtype=np.float32)
         result = np.zeros((self.num_envs, 2), dtype=np.float32)
+        fallback = np.zeros((self.num_envs, 2), dtype=bool)
         resolution = self.geodesic_grid_resolution
         nx = self._geodesic_nx
         ny = self._geodesic_ny
@@ -404,10 +410,13 @@ class TwoRunnerArena2D:
                     # A coarse grid can disconnect a physically valid very
                     # narrow corridor. Fall back to Euclidean distance rather
                     # than injecting inf/NaN into PPO.
+                    fallback[env_index, agent_index] = True
                     result[env_index, agent_index] = math.hypot(
                         x - float(self.goal[0]),
                         y - float(self.goal[1]),
                     )
+        if return_fallback:
+            return result, fallback
         return result
 
     def reset(self, seed: int | None = None) -> np.ndarray:
@@ -641,9 +650,15 @@ class TwoRunnerArena2D:
             # A dead Runner's old record therefore never blocks its teammate.
             team_progress = self_progress.max(axis=1).astype(np.float32)
         else:
+            geodesic_fallback = np.zeros((self.num_envs, 2), dtype=bool)
             if self.progress_mode == "geodesic":
-                old_progress_dist = self._geodesic_goal_distances(old_state)
-                new_progress_dist = self._geodesic_goal_distances(self.state)
+                old_progress_dist, old_fallback = self._geodesic_goal_distances(
+                    old_state, return_fallback=True
+                )
+                new_progress_dist, new_fallback = self._geodesic_goal_distances(
+                    self.state, return_fallback=True
+                )
+                geodesic_fallback = old_fallback | new_fallback
             else:
                 old_progress_dist = old_goal_dist
                 new_progress_dist = new_goal_dist
@@ -696,6 +711,11 @@ class TwoRunnerArena2D:
             "self_progress": self_progress.astype(np.float32),
             "team_progress": team_progress.astype(np.float32),
             "best_goal_distance": self.best_goal_distance.copy(),
+            "geodesic_fallback": (
+                geodesic_fallback.copy()
+                if self.progress_mode == "geodesic"
+                else np.zeros((self.num_envs, 2), dtype=bool)
+            ),
             "min_clearance": min_clearance.astype(np.float32),
             "map_seed": self.map_seeds.copy(),
         }
