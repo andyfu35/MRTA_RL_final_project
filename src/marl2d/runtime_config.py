@@ -179,7 +179,9 @@ def load_runtime_config(path: str | Path) -> RuntimeConfig:
     )
 
 
-def local_ipv4_addresses() -> set[str]:
+def local_ipv4_addresses(
+    peer_ips: list[str] | tuple[str, ...] | None = None,
+) -> set[str]:
     addresses = {"127.0.0.1"}
     try:
         for item in socket.getaddrinfo(
@@ -192,9 +194,11 @@ def local_ipv4_addresses() -> set[str]:
         pass
 
     # This does not send traffic. connect() on UDP only asks the kernel which
-    # local interface would route to a peer, which is useful on Ubuntu hosts
-    # whose hostname resolves only to 127.x.
-    for probe in ("1.1.1.1", "8.8.8.8"):
+    # local interface would route to a peer. Prefer configured LAN peers so
+    # auto-identification works on an offline ROS2 network with no Internet.
+    probes = list(peer_ips or ())
+    probes.extend(["1.1.1.1", "8.8.8.8"])
+    for probe in probes:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             sock.connect((probe, 9))
@@ -221,7 +225,13 @@ def resolve_local_node(
             )
         return matches[0]
 
-    ips = local_ipv4_addresses() if local_ips is None else set(local_ips)
+    ips = (
+        local_ipv4_addresses(
+            tuple(node.ip for node in cfg.nodes)
+        )
+        if local_ips is None
+        else set(local_ips)
+    )
     matches = [node for node in cfg.nodes if node.ip in ips]
     if len(matches) != 1:
         raise RuntimeError(
