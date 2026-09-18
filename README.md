@@ -393,3 +393,20 @@ python -m marl2d single-train --config config/single_runner.yaml --reward-mode R
 ```
 
 再各自以完全相同的 held-out seed range 評估，才能公平比較 reward shaping 對成功率、碰撞率、時間與路徑效率的影響。
+
+
+## External reward + ROS2 deployment
+
+The distributed deployment architecture is documented in
+`docs/EXTERNAL_REWARD_ROS2_DEPLOYMENT.md`.
+
+It separates deployment into three runtime files:
+
+```
+marl2d_node
+reward.py
+config.json
+```
+
+Reward functions can be added in the external `reward.py` without modifying
+the simulator or rebuilding the executable.
