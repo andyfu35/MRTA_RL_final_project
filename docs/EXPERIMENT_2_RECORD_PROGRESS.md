@@ -89,3 +89,27 @@ python -m marl2d two-train \
 ```
 
 Keep confirmation seeds 50000-50199 and final-test seeds 60000-60199 untouched until checkpoint selection is locked.
+
+## Completed result
+
+The formal 25-round run completed successfully. The local full regression suite reported:
+
+```
+84 passed in 2.19s
+```
+
+Key validation results:
+
+- mean team success: approximately **43.9%**
+- mean any-collision rate: approximately **43.6%**
+- peak success: **61.0% at Round 24**
+- Round 24 collision: **45.0%**
+- Round 24 both-dead: **4.5%**
+- final Round 25 success: **58.5%**
+- final Round 25 collision: **41.0%**
+- final Round 25 both-dead: **6.5%**
+- lowest collision: **32.5% at Round 6**
+- last-five-round mean success: approximately **53.8%**
+- last-five-round mean collision: approximately **43.0%**
+
+Conclusion: Record-Progress reduced collision relative to the Large-Batch instantaneous-Euclidean experiment, but reduced task success and did not remove PPO regression. It therefore improved the safety/task trade-off without solving training instability. See `docs/EXPERIMENT_2_RESULTS.md`.
