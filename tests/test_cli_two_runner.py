@@ -72,3 +72,28 @@ def test_two_runner_record_format_surfaces_success_batch_diagnostics():
     assert 'guard_kl=0.00000' in text
     assert 'opt=0' in text
     assert 'stop=0' in text
+
+
+def test_two_render_accepts_success_search_controls():
+    args = build_parser().parse_args([
+        'two-render',
+        '--checkpoint', 'runs/exp2/round_00020.pt',
+        '--output', 'runs/exp2/demo.gif',
+        '--seed-start', '40000',
+        '--search-episodes', '200',
+    ])
+    assert args.command == 'two-render'
+    assert args.seed is None
+    assert args.seed_start == 40000
+    assert args.search_episodes == 200
+    assert args.output.endswith('demo.gif')
+
+
+def test_two_render_can_force_exact_seed():
+    args = build_parser().parse_args([
+        'two-render',
+        '--checkpoint', 'runs/exp2/round_00020.pt',
+        '--seed', '40017',
+    ])
+    assert args.command == 'two-render'
+    assert args.seed == 40017
