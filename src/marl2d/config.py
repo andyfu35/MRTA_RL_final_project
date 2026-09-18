@@ -194,8 +194,20 @@ def validate_two_runner_config(cfg: dict[str, Any]) -> None:
         if not isinstance(joint_collection, dict):
             raise ValueError("joint_collection must be a mapping")
         if bool(joint_collection.get("enabled", False)):
-            if int(joint_collection.get("parallel_envs", 0)) <= 0:
+            parallel_envs = int(joint_collection.get("parallel_envs", 0))
+            rollout_steps = int(joint_collection.get("rollout_steps", 0))
+            if parallel_envs <= 0:
                 raise ValueError("joint_collection.parallel_envs must be positive when enabled")
+            if rollout_steps <= 0:
+                raise ValueError("joint_collection.rollout_steps must be positive when enabled")
+            expected_samples = parallel_envs * rollout_steps
+            configured_samples = int(cfg["training"]["samples_per_update"])
+            if configured_samples != expected_samples:
+                raise ValueError(
+                    "training.samples_per_update must equal "
+                    "joint_collection.parallel_envs * joint_collection.rollout_steps "
+                    f"({expected_samples}) when fixed-horizon joint collection is enabled"
+                )
 
     samples = int(cfg["training"]["samples_per_update"])
     if samples <= 0:
