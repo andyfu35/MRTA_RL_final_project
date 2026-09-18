@@ -215,3 +215,121 @@ def test_record_best_distance_is_reset_and_checkpointed_with_environment_state()
 
     env.reset_indices(np.array([True]))
     np.testing.assert_allclose(env.best_goal_distance, env._goal_distances(), atol=1e-6)
+
+
+def make_geodesic_reward_cfg(*, resolution=0.20, self_scale=1.0, team_scale=0.0):
+    cfg = make_reward_cfg()
+    cfg.update({
+        'progress_mode': 'geodesic',
+        'geodesic_grid_resolution': float(resolution),
+        'self_progress_scale': float(self_scale),
+        'team_progress_scale': float(team_scale),
+        'step_penalty': 0.0,
+        'safety_scale': 0.0,
+    })
+    return cfg
+
+
+def _install_vertical_blocking_obstacle(env):
+    env.obstacles[0, 0] = np.array([10.0, 10.0, 2.0, 8.0], dtype=np.float32)
+    env._regenerate_geodesic_fields(np.array([0], dtype=np.int64))
+
+
+def test_geodesic_distance_matches_euclidean_on_empty_map_with_grid_tolerance():
+    env = TwoRunnerArena2D(
+        1,
+        make_env_cfg(obstacle_count=0),
+        make_geodesic_reward_cfg(resolution=0.20),
+        seed=21,
+    )
+    state = np.array([[[5.0, 5.0, 0.0], [7.0, 13.0, 0.0]]], dtype=np.float32)
+    euclidean = env._goal_distances(state)
+    geodesic = env._geodesic_goal_distances(state)
+    np.testing.assert_allclose(geodesic, euclidean, atol=0.35)
+
+
+def test_geodesic_distance_rewards_a_real_detour_even_when_euclidean_distance_increases():
+    env_cfg = make_env_cfg(obstacle_count=1)
+    env = TwoRunnerArena2D(
+        1,
+        env_cfg,
+        make_geodesic_reward_cfg(resolution=0.20),
+        seed=22,
+    )
+    _install_vertical_blocking_obstacle(env)
+
+    before = np.array([[[8.0, 10.0, -math.pi / 2], [2.0, 13.0, 0.0]]], dtype=np.float32)
+    after = before.copy()
+    after[0, 0, 1] = 9.0
+
+    euclid_before = float(env._goal_distances(before)[0, 0])
+    euclid_after = float(env._goal_distances(after)[0, 0])
+    geo_before = float(env._geodesic_goal_distances(before)[0, 0])
+    geo_after = float(env._geodesic_goal_distances(after)[0, 0])
+
+    assert euclid_after > euclid_before
+    assert geo_after < geo_before
+
+
+def test_geodesic_step_progress_is_positive_for_detour_that_moves_away_in_euclidean_distance():
+    env = TwoRunnerArena2D(
+        1,
+        make_env_cfg(obstacle_count=1),
+        make_geodesic_reward_cfg(resolution=0.20, self_scale=1.0, team_scale=0.0),
+        seed=23,
+    )
+    _install_vertical_blocking_obstacle(env)
+    env.set_state(np.array(
+        [[[8.0, 10.0, -math.pi / 2], [2.0, 13.0, 0.0]]],
+        dtype=np.float32,
+    ))
+
+    old_euclidean = float(env._goal_distances()[0, 0])
+    _, rewards, _, info = env.step(
+        np.array([[[1.0, 1.0], [0.0, 0.0]]], dtype=np.float32)
+    )
+    new_euclidean = float(env._goal_distances()[0, 0])
+
+    assert new_euclidean > old_euclidean
+    assert info['self_progress'][0, 0] > 0.0
+    assert rewards[0, 0] > 0.0
+
+
+def test_geodesic_distance_field_ignores_teammate_position():
+    env = TwoRunnerArena2D(
+        1,
+        make_env_cfg(obstacle_count=1),
+        make_geodesic_reward_cfg(resolution=0.20),
+        seed=24,
+    )
+    _install_vertical_blocking_obstacle(env)
+
+    state_a = np.array([[[8.0, 10.0, 0.0], [3.0, 3.0, 0.0]]], dtype=np.float32)
+    state_b = state_a.copy()
+    state_b[0, 1, :2] = [15.0, 15.0]
+
+    d_a = float(env._geodesic_goal_distances(state_a)[0, 0])
+    d_b = float(env._geodesic_goal_distances(state_b)[0, 0])
+    assert np.isclose(d_a, d_b, atol=1e-6)
+
+
+def test_geodesic_field_is_rebuilt_from_obstacles_after_restore():
+    env = TwoRunnerArena2D(
+        1,
+        make_env_cfg(obstacle_count=1),
+        make_geodesic_reward_cfg(resolution=0.20),
+        seed=25,
+    )
+    _install_vertical_blocking_obstacle(env)
+    probe = np.array([[[8.0, 10.0, 0.0], [2.0, 13.0, 0.0]]], dtype=np.float32)
+    before = float(env._geodesic_goal_distances(probe)[0, 0])
+    snapshot = env.snapshot_state()
+
+    env.obstacles[0, 0] = np.array([15.0, 3.0, 1.0, 1.0], dtype=np.float32)
+    env._regenerate_geodesic_fields(np.array([0], dtype=np.int64))
+    changed = float(env._geodesic_goal_distances(probe)[0, 0])
+    assert not np.isclose(before, changed, atol=0.2)
+
+    env.restore_state(snapshot)
+    restored = float(env._geodesic_goal_distances(probe)[0, 0])
+    assert np.isclose(before, restored, atol=1e-6)
