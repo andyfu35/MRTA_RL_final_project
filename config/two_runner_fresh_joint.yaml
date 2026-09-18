@@ -3,8 +3,9 @@
 # policies together, then immediately recollect under the new joint policy.
 experiment:
   name: exp2_fresh_joint_rollout
-  hypothesis: frequent_fresh_joint_rollouts_reduce_policy_data_staleness
-  parent_experiment: exp2_large_batch_32768
+  hypothesis: fresh_shared_joint_rollouts_learn_stably_from_random_initialization
+  initialization: random
+  warm_start: false
   total_used_samples_per_policy: 819200
 
 seed: 42
