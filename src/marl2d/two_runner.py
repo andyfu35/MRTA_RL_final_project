@@ -465,7 +465,10 @@ class SharedTwoRunnerCollector:
     def _ensure_collector(self) -> None:
         if self._collector_env is not None:
             return
-        base_seed = int(self.cfg.get("seed", 0)) + 700_000
+        # Reuse the formal training seed stream rather than introducing a
+        # new seed offset, so the architecture change does not also change the
+        # obstacle-map distribution.
+        base_seed = int(self.cfg.get("seed", 0))
         self._collector_env = self.env_factory(
             self.parallel_envs,
             self.cfg["environment"],
