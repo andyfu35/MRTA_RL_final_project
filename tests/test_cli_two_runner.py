@@ -125,3 +125,31 @@ def test_two_runner_record_format_surfaces_fresh_joint_rollout_version():
     assert 'joint=1 pv=1 dataep=1' in text
     assert 'opt=32' in text
     assert 'stop=0' in text
+
+
+def test_two_train_supports_explicit_from_scratch_initialization():
+    args = build_parser().parse_args([
+        'two-train',
+        '--config', 'config/two_runner_fresh_joint.yaml',
+        '--from-scratch',
+    ])
+    assert args.command == 'two-train'
+    assert args.from_scratch is True
+    assert args.init_single_runner_checkpoint is None
+    assert args.resume is None
+
+
+def test_two_train_from_scratch_is_mutually_exclusive_with_checkpoint_sources():
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args([
+            'two-train',
+            '--from-scratch',
+            '--init-single-runner-checkpoint', 'a.pt',
+        ])
+    with pytest.raises(SystemExit):
+        parser.parse_args([
+            'two-train',
+            '--from-scratch',
+            '--resume', 'b.pt',
+        ])
