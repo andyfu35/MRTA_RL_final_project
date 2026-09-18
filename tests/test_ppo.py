@@ -67,3 +67,46 @@ def test_ppo_update_returns_finite_metrics():
     for name in ('policy_loss', 'value_loss', 'entropy', 'approx_kl'):
         assert name in metrics
         assert np.isfinite(metrics[name])
+
+
+def test_ppo_update_without_target_kl_runs_full_optimizer_schedule():
+    torch.manual_seed(11)
+    model = ActorCritic(obs_dim=21, action_dim=2, hidden_sizes=[32, 32])
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    obs = torch.randn(128, 21)
+    with torch.no_grad():
+        actions, old_log_prob, values = model.sample(obs)
+    advantages = torch.randn(128)
+    returns = values + advantages
+    cfg = make_ppo_cfg()
+    batch = RolloutBatch(obs, actions, old_log_prob, returns, advantages)
+
+    metrics = ppo_update(model, optimizer, batch, cfg)
+
+    assert metrics['optimizer_steps'] == cfg['epochs'] * (128 // cfg['minibatch_size'])
+    assert metrics['early_stopped'] == 0.0
+    assert metrics['epochs_completed'] == float(cfg['epochs'])
+
+
+def test_ppo_target_kl_stops_update_before_full_schedule():
+    torch.manual_seed(12)
+    model = ActorCritic(obs_dim=21, action_dim=2, hidden_sizes=[32, 32])
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
+    obs = torch.randn(256, 21)
+    with torch.no_grad():
+        actions, old_log_prob, values = model.sample(obs)
+    advantages = torch.linspace(-2.0, 2.0, 256)
+    returns = values + advantages
+    cfg = make_ppo_cfg()
+    cfg['epochs'] = 4
+    cfg['minibatch_size'] = 32
+    cfg['target_kl'] = 1e-4
+    full_steps = cfg['epochs'] * (256 // cfg['minibatch_size'])
+    batch = RolloutBatch(obs, actions, old_log_prob, returns, advantages)
+
+    metrics = ppo_update(model, optimizer, batch, cfg)
+
+    assert metrics['early_stopped'] == 1.0
+    assert 0 < metrics['optimizer_steps'] < full_steps
+    assert metrics['max_guard_kl'] > cfg['target_kl']
+    assert metrics['epochs_completed'] < float(cfg['epochs'])
