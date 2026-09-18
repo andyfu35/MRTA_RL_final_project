@@ -82,7 +82,13 @@ def test_fresh_joint_rollout_config_uses_single_epoch_and_frequent_fresh_data():
     fresh = load_two_runner_config('config/two_runner_fresh_joint.yaml')
 
     assert fresh['environment'] == large['environment']
-    assert fresh['two_runner_reward'] == large['two_runner_reward']
+    fresh_reward = dict(fresh['two_runner_reward'])
+    large_reward = dict(large['two_runner_reward'])
+    assert fresh_reward.pop('self_progress_scale') == 8.0
+    assert fresh_reward.pop('team_progress_scale') == 4.0
+    assert large_reward.pop('self_progress_scale') == 3.0
+    assert large_reward.pop('team_progress_scale') == 2.0
+    assert fresh_reward == large_reward
     assert fresh['training']['samples_per_update'] == 8192
     assert fresh['training']['rounds'] == 100
     assert fresh['training']['samples_per_update'] * fresh['training']['rounds'] == 819200
@@ -96,9 +102,15 @@ def test_fresh_joint_rollout_config_uses_single_epoch_and_frequent_fresh_data():
     assert fresh['ppo']['minibatch_size'] == 256
     assert 'target_kl' not in fresh['ppo']
 
-    # Every selected transition is consumed in exactly one PPO epoch before
-    # the next policy version must collect a new rollout.
-    assert fresh['training']['samples_per_update'] // fresh['ppo']['minibatch_size'] == 32
+    # 64 worlds x 128 simulator steps is exactly 8192 fresh world transitions.
+    # Per-agent actor samples can be lower when that Runner dies before the
+    # horizon, but every valid actor sample is consumed in exactly one epoch.
+    assert (
+        fresh['joint_collection']['parallel_envs']
+        * fresh['joint_collection']['rollout_steps']
+        == fresh['training']['samples_per_update']
+        == 8192
+    )
 
     for key in (
         'hidden_sizes', 'learning_rate', 'gamma', 'gae_lambda', 'clip_range',
