@@ -93,3 +93,28 @@ python -m marl2d two-train \
 ```
 
 Do not use confirmation seeds 50000-50199 or final-test seeds 60000-60199 until checkpoint selection is locked.
+
+## Completed result
+
+The formal 25-round run completed successfully.
+
+Aggregate validation results:
+
+- mean success: **39.7%**
+- mean any-collision rate: **46.34%**
+- mean both-dead rate: **10.8%**
+- peak success: **55.5% at Round 1**
+- lowest collision: **34.5% at Round 21**
+- final Round 25:
+  - success: **31.5%**
+  - collision: **44.5%**
+  - both dead: **5.5%**
+- last-five-round mean success: **39.5%**
+- last-five-round mean collision: **40.6%**
+- `geo_fb=0.000` for both workers in every reported round
+
+The zero fallback rate is important: the training did not silently fall back to Euclidean progress because of disconnected distance fields. The geodesic reward was active, but the learned policy still underperformed the Large-Batch and Record-Progress experiments.
+
+The highest validation success occurred immediately at Round 1 and performance generally degraded after additional geodesic PPO updates. Early updates also showed large policy KL, including R0 KL 0.04357 at Round 1 and 0.04230 at Round 2.
+
+Conclusion: obstacle-aware geodesic progress by itself is **not sufficient** to solve the observed policy regression in the current 18-D local-observation setup. Full per-round data and cross-experiment interpretation are recorded in `docs/EXPERIMENT_2_RESULTS.md`.
