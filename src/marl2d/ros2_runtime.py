@@ -80,7 +80,7 @@ class Ros2PolicyBus:
             history=HistoryPolicy.KEEP_LAST,
             depth=20,
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
 
         self.policy_publishers = {}
@@ -268,6 +268,47 @@ class Ros2PolicyBus:
                 raise TimeoutError(
                     f"timed out waiting for policy version {version}; "
                     f"missing agents={missing}"
+                )
+
+    def wait_for_round_complete(
+        self,
+        version: int,
+        *,
+        timeout_s: float,
+    ) -> None:
+        deadline = time.monotonic() + float(timeout_s)
+        expected_nodes = {
+            item.node_id for item in self.runtime.training_nodes
+        }
+        while True:
+            self.spin_once(0.1)
+            ready = set()
+            ahead: dict[str, tuple[int, str]] = {}
+            for node_id in expected_nodes:
+                status = self.peer_status.get(node_id)
+                if status is None:
+                    continue
+                peer_version = int(status.get("version", -1))
+                phase = str(status.get("phase", ""))
+                if peer_version > int(version):
+                    ahead[node_id] = (peer_version, phase)
+                if (
+                    peer_version == int(version)
+                    and phase == "round_complete"
+                ):
+                    ready.add(node_id)
+            if ahead:
+                raise RuntimeError(
+                    f"peer advanced beyond round-complete barrier "
+                    f"{version}: {ahead}"
+                )
+            if ready == expected_nodes:
+                return
+            if time.monotonic() >= deadline:
+                missing = sorted(expected_nodes - ready)
+                raise TimeoutError(
+                    f"timed out waiting for round_complete "
+                    f"version {version}; missing nodes={missing}"
                 )
 
     def close(self) -> None:
@@ -488,6 +529,19 @@ def run_training_node(
                     f"both_dead={summary['both_dead_rate']:.3f}",
                     flush=True,
                 )
+
+            # Nobody starts collecting version current_version until every
+            # training computer has finished its local post-commit work.
+            # This prevents a fast peer from publishing P_(k+1) while the
+            # validation computer is still processing P_k.
+            bus.publish_status(
+                phase="round_complete",
+                version=current_version,
+            )
+            bus.wait_for_round_complete(
+                current_version,
+                timeout_s=timeout_s,
+            )
 
             checkpoint_every = max(
                 1,
