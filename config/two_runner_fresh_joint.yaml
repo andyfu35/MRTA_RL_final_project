@@ -8,7 +8,7 @@ experiment:
   hypothesis: fresh_shared_joint_rollouts_learn_stably_from_random_initialization
   initialization: random
   warm_start: false
-  total_used_samples_per_policy: 819200
+  planned_world_transitions: 819200
 
 seed: 42
 
@@ -53,6 +53,9 @@ two_runner_reward:
   safety_scale: 3.0
 
 training:
+  # In fixed-horizon joint mode this is the nominal world-transition count:
+  # 64 worlds x 128 steps = 8192. A policy can have fewer valid actor samples
+  # if that Runner dies before the horizon.
   samples_per_update: 8192
   rounds: 100
   checkpoint_every: 1
