@@ -144,6 +144,13 @@ def _format_two_runner_record(record: dict) -> str:
     pieces = [f"round={int(record['round']):4d}"]
     for agent_id in TWO_RUNNER_IDS:
         metrics = record["agents"][agent_id]
+        freshness = ""
+        if int(metrics.get("shared_joint_rollout", 0)):
+            freshness = (
+                f" joint=1"
+                f" pv={int(metrics.get('rollout_policy_version', -1))}"
+                f" dataep={int(metrics.get('ppo_data_epochs', 0))}"
+            )
         pieces.append(
             f"{agent_id}:samples={int(metrics['samples'])} "
             f"sim={int(metrics['simulator_steps'])} "
@@ -156,6 +163,7 @@ def _format_two_runner_record(record: dict) -> str:
             f"guard_kl={float(metrics.get('max_guard_kl', 0.0)):.5f} "
             f"opt={int(metrics.get('optimizer_steps', 0))} "
             f"stop={int(metrics.get('early_stopped', 0))}"
+            f"{freshness}"
         )
     if "validation" in record:
         validation = record["validation"]
