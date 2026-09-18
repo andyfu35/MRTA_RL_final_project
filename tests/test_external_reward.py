@@ -4,7 +4,40 @@ import numpy as np
 
 from marl2d.reward_loader import RewardEngine
 from marl2d.two_runner_env import TwoRunnerArena2D
-from tests.test_two_runner_env import make_env_cfg, make_reward_cfg
+def make_env_cfg(max_steps=20):
+    return {
+        "width": 20.0,
+        "height": 20.0,
+        "dt": 0.1,
+        "wheel_radius": 0.1,
+        "wheel_base": 0.5,
+        "max_wheel_linear_speed": 2.0,
+        "robot_radius": 0.3,
+        "body_length": 0.7,
+        "body_width": 0.44,
+        "wheel_length": 0.34,
+        "wheel_width": 0.10,
+        "goal": [18.0, 10.0],
+        "goal_radius": 0.7,
+        "max_steps": max_steps,
+        "lidar_rays": 8,
+        "lidar_range": 6.0,
+        "reset_jitter": 0.0,
+        "obstacles": {"count": 0},
+    }
+
+
+def make_reward_cfg():
+    return {
+        "team_success_bonus": 100.0,
+        "collision_penalty": -100.0,
+        "timeout_penalty": -20.0,
+        "self_progress_scale": 3.0,
+        "team_progress_scale": 2.0,
+        "step_penalty": -0.01,
+        "safety_distance": 0.5,
+        "safety_scale": 3.0,
+    }
 
 
 def plugin_reward_cfg(tmp_path: Path | None = None):
