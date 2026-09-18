@@ -97,3 +97,31 @@ def test_two_render_can_force_exact_seed():
     ])
     assert args.command == 'two-render'
     assert args.seed == 40017
+
+
+def test_two_runner_record_format_surfaces_fresh_joint_rollout_version():
+    record = {
+        'round': 2,
+        'agents': {
+            aid: {
+                'samples': 8192,
+                'simulator_steps': 10000,
+                'completed_team_episodes': 80,
+                'team_success_episodes': 40,
+                'selected_success_transitions': 4000,
+                'sample_pool_size': 9000,
+                'discarded_surplus_samples': 808,
+                'approx_kl': 0.003,
+                'optimizer_steps': 32,
+                'early_stopped': 0,
+                'shared_joint_rollout': 1,
+                'rollout_policy_version': 1,
+                'ppo_data_epochs': 1,
+            }
+            for aid in ('runner_0', 'runner_1')
+        },
+    }
+    text = _format_two_runner_record(record)
+    assert 'joint=1 pv=1 dataep=1' in text
+    assert 'opt=32' in text
+    assert 'stop=0' in text
