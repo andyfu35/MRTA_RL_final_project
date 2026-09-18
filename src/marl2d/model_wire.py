@@ -10,6 +10,8 @@ from typing import Any, Mapping
 
 import torch
 
+MAX_POLICY_PAYLOAD_BYTES = 8 * 1024 * 1024
+
 
 def snapshot_sha256(snapshot: Mapping[str, torch.Tensor]) -> str:
     payload = encode_snapshot(snapshot)
@@ -31,7 +33,7 @@ def decode_snapshot(payload: bytes) -> OrderedDict[str, torch.Tensor]:
     data = torch.load(
         io.BytesIO(raw),
         map_location="cpu",
-        weights_only=False,
+        weights_only=True,
     )
     if not isinstance(data, Mapping):
         raise ValueError("policy payload did not contain a state_dict mapping")
@@ -92,6 +94,10 @@ def parse_policy_message(
             "peer config.json hash differs from local config.json"
         )
     payload = base64.b64decode(message["payload_b64"], validate=True)
+    if len(payload) > MAX_POLICY_PAYLOAD_BYTES:
+        raise ValueError(
+            f"policy payload exceeds {MAX_POLICY_PAYLOAD_BYTES} bytes"
+        )
     actual = hashlib.sha256(payload).hexdigest()
     if actual != str(message["payload_sha256"]):
         raise ValueError("policy payload SHA256 mismatch")
