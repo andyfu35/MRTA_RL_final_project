@@ -84,6 +84,12 @@ class TwoRunnerArena2D:
         self.num_envs = int(num_envs)
         self.cfg = copy.deepcopy(env_cfg)
         self.reward_cfg = copy.deepcopy(reward_cfg)
+        self.progress_mode = str(reward_cfg.get("progress_mode", "instant")).lower()
+        if self.progress_mode not in {"instant", "record"}:
+            raise ValueError("two-runner progress_mode must be 'instant' or 'record'")
+        self.record_progress_epsilon = float(reward_cfg.get("record_progress_epsilon", 0.0))
+        if self.record_progress_epsilon < 0.0:
+            raise ValueError("record_progress_epsilon must be >= 0")
         self.width = float(env_cfg["width"])
         self.height = float(env_cfg["height"])
         self.dt = float(env_cfg["dt"])
@@ -115,6 +121,7 @@ class TwoRunnerArena2D:
         self.collision = np.zeros((self.num_envs, 2), dtype=bool)
         self.alive = np.ones((self.num_envs, 2), dtype=bool)
         self.steps = np.zeros(self.num_envs, dtype=np.int32)
+        self.best_goal_distance = np.zeros((self.num_envs, 2), dtype=np.float32)
         self.obstacles = np.zeros((self.num_envs, self.obstacle_count, 4), dtype=np.float32)
         self.reset(seed=seed)
 
@@ -199,6 +206,7 @@ class TwoRunnerArena2D:
         self.collision.fill(False)
         self.alive.fill(True)
         self.steps.fill(0)
+        self.best_goal_distance[:] = self._goal_distances(self.state)
         self._regenerate_obstacles(np.arange(self.num_envs))
         return self.observe()
 
@@ -222,6 +230,8 @@ class TwoRunnerArena2D:
         self.collision[mask] = False
         self.alive[mask] = True
         self.steps[mask] = 0
+        current_distances = self._goal_distances(self.state)
+        self.best_goal_distance[mask] = current_distances[mask]
         self._regenerate_obstacles(indices)
 
     def set_state(self, state: np.ndarray, alive: np.ndarray | None = None) -> None:
@@ -230,6 +240,7 @@ class TwoRunnerArena2D:
             raise ValueError(f"Expected state shape {self.state.shape}, got {state.shape}")
         self.state[:] = state
         self.collision.fill(False)
+        self.best_goal_distance[:] = self._goal_distances(self.state)
         if alive is not None:
             alive = np.asarray(alive, dtype=bool)
             if alive.shape != self.alive.shape:
@@ -396,15 +407,29 @@ class TwoRunnerArena2D:
         self.steps += 1
 
         new_goal_dist = self._goal_distances(self.state)
-        self_progress = old_goal_dist - new_goal_dist
-        self_progress[~alive_before] = 0.0
-        team_progress = np.zeros(self.num_envs, dtype=np.float32)
-        for env_index in range(self.num_envs):
-            active = alive_before[env_index]
-            if np.any(active):
-                old_team_dist = float(old_goal_dist[env_index, active].min())
-                new_team_dist = float(new_goal_dist[env_index, active].min())
-                team_progress[env_index] = old_team_dist - new_team_dist
+        if self.progress_mode == "record":
+            record_improvement = self.best_goal_distance - new_goal_dist
+            self_progress = np.zeros_like(record_improvement, dtype=np.float32)
+            qualifies = alive_before & (record_improvement > 0.0)
+            if self.record_progress_epsilon > 0.0:
+                qualifies &= record_improvement >= self.record_progress_epsilon
+            self_progress[qualifies] = record_improvement[qualifies]
+            # Do not advance the record for sub-threshold improvements. They
+            # accumulate until the total improvement exceeds epsilon.
+            self.best_goal_distance[qualifies] = new_goal_dist[qualifies]
+            # Team progress is the largest NEW personal record made this step.
+            # A dead Runner's old record therefore never blocks its teammate.
+            team_progress = self_progress.max(axis=1).astype(np.float32)
+        else:
+            self_progress = old_goal_dist - new_goal_dist
+            self_progress[~alive_before] = 0.0
+            team_progress = np.zeros(self.num_envs, dtype=np.float32)
+            for env_index in range(self.num_envs):
+                active = alive_before[env_index]
+                if np.any(active):
+                    old_team_dist = float(old_goal_dist[env_index, active].min())
+                    new_team_dist = float(new_goal_dist[env_index, active].min())
+                    team_progress[env_index] = old_team_dist - new_team_dist
 
         min_clearance = self._minimum_clearance(self.state)
         rewards = np.zeros((self.num_envs, 2), dtype=np.float32)
@@ -443,6 +468,7 @@ class TwoRunnerArena2D:
             "alive_after": self.alive.copy(),
             "self_progress": self_progress.astype(np.float32),
             "team_progress": team_progress.astype(np.float32),
+            "best_goal_distance": self.best_goal_distance.copy(),
             "min_clearance": min_clearance.astype(np.float32),
             "map_seed": self.map_seeds.copy(),
         }
@@ -458,6 +484,7 @@ class TwoRunnerArena2D:
             "collision": self.collision.copy(),
             "alive": self.alive.copy(),
             "steps": self.steps.copy(),
+            "best_goal_distance": self.best_goal_distance.copy(),
             "obstacles": self.obstacles.copy(),
             "rng_state": copy.deepcopy(self.rng.bit_generator.state),
         }
@@ -467,4 +494,11 @@ class TwoRunnerArena2D:
         for name in ("episode_counts", "map_seeds", "state", "prev_action", "collision", "alive", "steps", "obstacles"):
             target = getattr(self, name)
             target[...] = np.asarray(state[name], dtype=target.dtype)
+        if "best_goal_distance" in state:
+            self.best_goal_distance[...] = np.asarray(
+                state["best_goal_distance"], dtype=self.best_goal_distance.dtype
+            )
+        else:
+            # Legacy checkpoints predate record-progress state.
+            self.best_goal_distance[:] = self._goal_distances(self.state)
         self.rng.bit_generator.state = copy.deepcopy(state["rng_state"])
