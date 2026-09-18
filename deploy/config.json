@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "environment": {
+    "width": 20.0,
+    "height": 20.0,
+    "dt": 0.1,
+    "wheel_radius": 0.1,
+    "wheel_base": 0.5,
+    "max_wheel_linear_speed": 2.0,
+    "robot_radius": 0.3,
+    "body_length": 0.7,
+    "body_width": 0.44,
+    "wheel_length": 0.34,
+    "wheel_width": 0.1,
+    "goal": [18.0, 10.0],
+    "goal_radius": 0.7,
+    "max_steps": 360,
+    "lidar_rays": 8,
+    "lidar_range": 6.0,
+    "reset_jitter": 0.18,
+    "obstacles": {
+      "count": 14,
+      "min_width": 0.8,
+      "max_width": 1.8,
+      "min_height": 0.8,
+      "max_height": 1.8,
+      "min_spacing": 0.65,
+      "spawn_clearance": 1.8,
+      "goal_clearance": 2.0,
+      "border_margin": 0.35,
+      "max_attempts": 4000
+    }
+  },
+  "reward": {
+    "file": "reward.py",
+    "params": {
+      "team_success_bonus": 100.0,
+      "collision_penalty": -100.0,
+      "timeout_penalty": -20.0,
+      "self_progress_scale": 8.0,
+      "team_progress_scale": 4.0,
+      "step_penalty": -0.01,
+      "safety_distance": 0.5,
+      "safety_scale": 3.0
+    }
+  },
+  "training": {
+    "rounds": 100,
+    "checkpoint_every": 1,
+    "auto_resume": false,
+    "output_dir": "runs/distributed"
+  },
+  "joint_collection": {
+    "parallel_envs": 64,
+    "rollout_steps": 128
+  },
+  "ppo": {
+    "hidden_sizes": [64, 64],
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "value_coef": 0.5,
+    "entropy_coef": 0.005,
+    "max_grad_norm": 0.5,
+    "epochs": 1,
+    "minibatch_size": 256
+  },
+  "validation": {
+    "every": 5,
+    "episodes": 200,
+    "seed_start": 40000
+  },
+  "evaluation": {
+    "episodes": 200,
+    "seed_start": 50000
+  },
+  "final_test": {
+    "episodes": 200,
+    "seed_start": 60000
+  },
+  "network": {
+    "ros_domain_id": 42,
+    "heartbeat_period_s": 1.0,
+    "barrier_timeout_s": 180.0,
+    "validation_node_id": "pc_runner_0",
+    "nodes": [
+      {
+        "id": "pc_runner_0",
+        "ip": "192.168.1.101",
+        "agent_id": "runner_0",
+        "train": true
+      },
+      {
+        "id": "pc_runner_1",
+        "ip": "192.168.1.102",
+        "agent_id": "runner_1",
+        "train": true
+      },
+      {
+        "id": "pc_blocker_0",
+        "ip": "192.168.1.103",
+        "agent_id": "blocker_0",
+        "train": false
+      },
+      {
+        "id": "pc_blocker_1",
+        "ip": "192.168.1.104",
+        "agent_id": "blocker_1",
+        "train": false
+      }
+    ]
+  }
+}
