@@ -16,8 +16,8 @@ Can a shared gene allocator learn that the nearest task is not always the best t
 - no deadline
 - no obstacle
 - no battery model
-- constant robot speed = 2 distance units / second
-- task service time sampled uniformly from 2 to 15 seconds
+- calibrated robot speed = 4 distance units / second
+- task service time sampled uniformly from 2 to 35 seconds
 - episode horizon = 50 seconds
 - event-based simulation, no small-dt physical integration
 
@@ -173,8 +173,7 @@ seeds = 7, 17, 27, 37, 47
 ```
 
 Training worlds change every generation.
-Probe worlds are fixed and are not used for parent selection.
-Validation worlds are not used until the final report.
+Probe worlds are fixed and are not used for parent selection. A small probe hall of fame is retained only for reporting/model selection so a good earlier candidate is not lost by later random training worlds. Validation worlds are not used until the final report.
 
 ## Mac commands
 
@@ -219,3 +218,18 @@ history.csv
 aggregate_summary.json
 per_seed.csv
 ```
+
+
+## Calibration note
+
+The first V1.2 smoke used robot speed 2 and service time 2-15 seconds. It passed all tests, but nearest and shortest-total-time both achieved 0.50625 completion on the smoke validation set. This showed that travel time was still dominating the service-time signal.
+
+The calibrated V1.2 keeps the same task model and observations but changes only the time scales:
+
+```text
+robot_speed = 4
+service_time = Uniform(2, 35) seconds
+episode_time = 50 seconds
+```
+
+The world diagonal is about 141.4 distance units, so maximum straight-line travel time is now about 35.35 seconds. This puts travel time and maximum service time on comparable scales without introducing priority, deadline, obstacle, or battery complexity.
