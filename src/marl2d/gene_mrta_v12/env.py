@@ -13,9 +13,9 @@ class EnvConfig:
     world_size: float = 100.0
     num_robots: int = 4
     num_tasks: int = 20
-    robot_speed: float = 2.0
+    robot_speed: float = 4.0
     service_time_min: float = 2.0
-    service_time_max: float = 15.0
+    service_time_max: float = 35.0
     episode_time: float = 50.0
 
     @property
