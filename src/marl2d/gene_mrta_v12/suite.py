@@ -51,6 +51,14 @@ def run_suite(args: argparse.Namespace) -> Path:
                 str(seed),
                 "--log-every",
                 str(args.log_every),
+                "--robot-speed",
+                str(args.robot_speed),
+                "--service-time-min",
+                str(args.service_time_min),
+                "--service-time-max",
+                str(args.service_time_max),
+                "--episode-time",
+                str(args.episode_time),
                 "--output-dir",
                 str(suite_dir / "runs"),
             ]
@@ -189,6 +197,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=8,
     )
     parser.add_argument("--log-every", type=int, default=10)
+    parser.add_argument("--robot-speed", type=float, default=4.0)
+    parser.add_argument("--service-time-min", type=float, default=2.0)
+    parser.add_argument("--service-time-max", type=float, default=35.0)
+    parser.add_argument("--episode-time", type=float, default=50.0)
     parser.add_argument(
         "--output-dir",
         default="runs/gene_mrta_v12_suite",
