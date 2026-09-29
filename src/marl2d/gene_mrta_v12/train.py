@@ -198,6 +198,7 @@ def train(args: argparse.Namespace) -> Path:
     rng = np.random.default_rng(args.seed)
     population = [Gene.random(rng) for _ in range(args.population)]
     archives: dict[str, list[Gene]] | None = None
+    probe_hof: list[Gene] = []
     history: list[dict[str, float | int]] = []
 
     probe_worlds = _make_worlds(
@@ -248,14 +249,18 @@ def train(args: argparse.Namespace) -> Path:
         }
 
         probe_candidates = _archive_union(archives)
+        probe_pool = _dedupe(probe_hof + probe_candidates)
         probe_axis_best, probe_reference_gene, probe_reference = (
             _select_on_probe(
-                probe_candidates,
+                probe_pool,
                 probe_worlds,
                 config,
             )
         )
-        del probe_reference_gene
+        probe_hof = _dedupe(
+            [probe_axis_best[axis][0] for axis in AXES]
+            + [probe_reference_gene]
+        )
 
         sigma = _mutation_sigma(
             generation,
@@ -296,6 +301,7 @@ def train(args: argparse.Namespace) -> Path:
             ),
             "mutation_sigma": sigma,
             "bank_size": len(probe_candidates),
+            "probe_hof_size": len(probe_hof),
         }
         history.append(row)
 
@@ -328,7 +334,7 @@ def train(args: argparse.Namespace) -> Path:
         raise RuntimeError("Training produced no archive")
 
     final_candidates = _dedupe(
-        population + _archive_union(archives)
+        probe_hof + population + _archive_union(archives)
     )
     probe_axis_best, reference_gene, reference_probe_eval = (
         _select_on_probe(
@@ -386,6 +392,7 @@ def train(args: argparse.Namespace) -> Path:
             "completion, efficiency, balance"
         ),
         "probe_is_used_for_parent_selection": False,
+        "probe_hall_of_fame_is_reporting_only": True,
         "validation_is_used_for_selection": False,
         "observation": [
             "distance_norm",
@@ -501,7 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--world-size", type=float, default=100.0)
     parser.add_argument("--robots", type=int, default=4)
     parser.add_argument("--tasks", type=int, default=20)
-    parser.add_argument("--robot-speed", type=float, default=2.0)
+    parser.add_argument("--robot-speed", type=float, default=4.0)
     parser.add_argument(
         "--service-time-min",
         type=float,
@@ -510,7 +517,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--service-time-max",
         type=float,
-        default=15.0,
+        default=35.0,
     )
     parser.add_argument("--episode-time", type=float, default=50.0)
     return parser
