@@ -23,6 +23,9 @@ if [[ "$MODE" == "smoke" ]]; then
     --probe-worlds 16 \
     --validation-worlds 32 \
     --archive-per-axis 4 \
+    --robot-speed 4 \
+    --service-time-min 2 \
+    --service-time-max 35 \
     --seed 7 \
     --log-every 1
 elif [[ "$MODE" == "single" ]]; then
@@ -33,6 +36,9 @@ elif [[ "$MODE" == "single" ]]; then
     --probe-worlds 64 \
     --validation-worlds 128 \
     --archive-per-axis 8 \
+    --robot-speed 4 \
+    --service-time-min 2 \
+    --service-time-max 35 \
     --seed 7 \
     --log-every 10
 elif [[ "$MODE" == "full" ]]; then
@@ -44,6 +50,9 @@ elif [[ "$MODE" == "full" ]]; then
     --probe-worlds 64 \
     --validation-worlds 128 \
     --archive-per-axis 8 \
+    --robot-speed 4 \
+    --service-time-min 2 \
+    --service-time-max 35 \
     --log-every 10
 else
   echo "Usage: bash tools/run_gene_mrta_v12_mac.sh [smoke|single|full]" >&2
