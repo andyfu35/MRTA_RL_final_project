@@ -57,67 +57,126 @@ def run_suite(args: argparse.Namespace) -> Path:
         with (run_dir / "summary.json").open("r", encoding="utf-8") as f:
             summary = json.load(f)
 
-        ref = summary["final"]["reference_gene"]["validation_metrics"]
-        baselines = summary["final"]["validation_baselines"]
+        final = summary["final"]
+        ref = final["reference_gene"]["validation_metrics"]
+        specialists = final["axis_best_selected_on_probe"]
+        baselines = final["validation_baselines"]
 
         row: dict[str, object] = {
             "seed": seed,
             "run_dir": str(run_dir),
         }
 
-        for axis in AXES:
-            row[f"gene_{axis}"] = float(ref[axis])
+        for metric in AXES:
+            row[f"reference_{metric}"] = float(ref[metric])
+
+        for specialist_axis in AXES:
+            metrics = specialists[specialist_axis]["validation_metrics"]
+            for metric in AXES:
+                row[
+                    f"specialist_{specialist_axis}_{metric}"
+                ] = float(metrics[metric])
 
         for baseline_name in REPORT_BASELINES:
             baseline = baselines[baseline_name]
-            for axis in AXES:
-                row[f"{baseline_name}_{axis}"] = float(baseline[axis])
+            for metric in AXES:
+                row[f"{baseline_name}_{metric}"] = float(baseline[metric])
                 row[
-                    f"delta_gene_minus_{baseline_name}_{axis}"
-                ] = float(ref[axis]) - float(baseline[axis])
+                    f"delta_reference_minus_{baseline_name}_{metric}"
+                ] = float(ref[metric]) - float(baseline[metric])
 
         per_seed.append(row)
 
-    aggregate_metrics: dict[str, object] = {}
-    for axis in AXES:
-        axis_result: dict[str, object] = {
-            "gene": _mean_std(
-                [float(row[f"gene_{axis}"]) for row in per_seed]
-            )
-        }
-        for baseline_name in REPORT_BASELINES:
-            axis_result[baseline_name] = _mean_std(
-                [
-                    float(row[f"{baseline_name}_{axis}"])
-                    for row in per_seed
-                ]
-            )
-            axis_result[
-                f"delta_gene_minus_{baseline_name}"
-            ] = _mean_std(
+    aggregate: dict[str, object] = {
+        "reference": {},
+        "specialists": {},
+        "baselines": {},
+        "delta_reference_minus_baseline": {},
+        "specialist_own_axis": {},
+    }
+
+    for metric in AXES:
+        aggregate["reference"][metric] = _mean_std(
+            [float(row[f"reference_{metric}"]) for row in per_seed]
+        )
+
+    for specialist_axis in AXES:
+        aggregate["specialists"][specialist_axis] = {}
+        for metric in AXES:
+            aggregate["specialists"][specialist_axis][metric] = _mean_std(
                 [
                     float(
                         row[
-                            f"delta_gene_minus_{baseline_name}_{axis}"
+                            f"specialist_{specialist_axis}_{metric}"
                         ]
                     )
                     for row in per_seed
                 ]
             )
-        aggregate_metrics[axis] = axis_result
 
-    aggregate = {
+    for baseline_name in REPORT_BASELINES:
+        aggregate["baselines"][baseline_name] = {}
+        aggregate["delta_reference_minus_baseline"][baseline_name] = {}
+        for metric in AXES:
+            aggregate["baselines"][baseline_name][metric] = _mean_std(
+                [
+                    float(row[f"{baseline_name}_{metric}"])
+                    for row in per_seed
+                ]
+            )
+            aggregate["delta_reference_minus_baseline"][baseline_name][metric] = (
+                _mean_std(
+                    [
+                        float(
+                            row[
+                                f"delta_reference_minus_"
+                                f"{baseline_name}_{metric}"
+                            ]
+                        )
+                        for row in per_seed
+                    ]
+                )
+            )
+
+    for specialist_axis in AXES:
+        own_values = [
+            float(
+                row[
+                    f"specialist_{specialist_axis}_{specialist_axis}"
+                ]
+            )
+            for row in per_seed
+        ]
+        own_summary: dict[str, object] = {
+            "specialist": _mean_std(own_values),
+            "vs_baselines": {},
+        }
+        for baseline_name in REPORT_BASELINES:
+            baseline_values = [
+                float(row[f"{baseline_name}_{specialist_axis}"])
+                for row in per_seed
+            ]
+            own_summary["vs_baselines"][baseline_name] = _mean_std(
+                [
+                    gene_value - baseline_value
+                    for gene_value, baseline_value
+                    in zip(own_values, baseline_values)
+                ]
+            )
+        aggregate["specialist_own_axis"][specialist_axis] = own_summary
+
+    payload = {
         "experiment": "gene_homogeneous_mrta_v1_3_multiseed",
         "seeds": list(args.seeds),
         "per_seed": per_seed,
-        "aggregate": aggregate_metrics,
+        "aggregate": aggregate,
     }
 
     with (suite_dir / "aggregate_summary.json").open(
         "w",
         encoding="utf-8",
     ) as f:
-        json.dump(aggregate, f, indent=2, ensure_ascii=False)
+        json.dump(payload, f, indent=2, ensure_ascii=False)
 
     with (suite_dir / "per_seed.csv").open(
         "w",
@@ -132,7 +191,7 @@ def run_suite(args: argparse.Namespace) -> Path:
         writer.writerows(per_seed)
 
     print("\nMULTISEED AGGREGATE")
-    print(json.dumps(aggregate_metrics, indent=2, ensure_ascii=False))
+    print(json.dumps(aggregate, indent=2, ensure_ascii=False))
     print(f"\nSUITE_DIR={suite_dir}")
     return suite_dir
 
