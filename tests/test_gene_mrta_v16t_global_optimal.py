@@ -1,6 +1,6 @@
 import numpy as np
 
-from marl2d.gene_mrta_v16t.env import EnvConfig, build_world, generate_world
+from marl2d.gene_mrta_v16t.env import EnvConfig, build_world
 from marl2d.gene_mrta_v16t.global_optimal_core import solve_global_time_optimum
 from marl2d.gene_mrta_v16t.hungarian_benchmark import rollout_world
 
@@ -51,10 +51,40 @@ def test_global_oracle_known_two_task_optimum():
 
 
 def test_global_oracle_is_not_worse_than_event_hungarian():
-    config = EnvConfig()
-    world = generate_world(config, seed=97_000_000)
+    config = EnvConfig(
+        world_size=20.0,
+        num_robots=2,
+        num_tasks=4,
+        robot_speed=2.0,
+        service_time_min=1.0,
+        service_time_max=4.0,
+        priority_min=1.0,
+        priority_max=1.0,
+        deadline_min=12.0,
+        deadline_max=12.0,
+        episode_time=12.0,
+        obstacle_count=0,
+        obstacle_size_min=2.0,
+        obstacle_size_max=4.0,
+        obstacle_clearance=1.0,
+        grid_resolution=1.0,
+        battery_capacity=100.0,
+        initial_battery_min=100.0,
+        initial_battery_max=100.0,
+        energy_per_distance=1.0,
+    )
+    world = build_world(
+        config,
+        np.array([[1.0, 1.0], [1.0, 5.0]]),
+        np.array([100.0, 100.0]),
+        np.array([[3.0, 1.0], [5.0, 1.0], [3.0, 5.0], [5.0, 5.0]]),
+        np.array([2.0, 1.0, 3.0, 1.5]),
+        np.ones(4),
+        np.full(4, 12.0),
+        np.zeros((0, 4)),
+    )
 
-    oracle = solve_global_time_optimum(world, config, time_limit=60.0)
+    oracle = solve_global_time_optimum(world, config, time_limit=30.0)
     hungarian = rollout_world(
         world,
         config,
@@ -62,6 +92,6 @@ def test_global_oracle_is_not_worse_than_event_hungarian():
         matcher="hungarian",
     ).evaluation.time_optimality
 
-    if oracle.optimal:
-        assert oracle.time_optimality is not None
-        assert oracle.time_optimality + 1e-8 >= hungarian
+    assert oracle.optimal
+    assert oracle.time_optimality is not None
+    assert oracle.time_optimality + 1e-8 >= hungarian
