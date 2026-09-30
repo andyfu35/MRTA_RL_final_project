@@ -23,9 +23,9 @@ COMMON_ARGS=(
   --priority-max 1.0
   --deadline-min 25
   --deadline-max 50
-  --obstacle-count 8
-  --obstacle-size-min 10
-  --obstacle-size-max 18
+  --obstacle-count 10
+  --obstacle-size-min 12
+  --obstacle-size-max 20
   --obstacle-clearance 4
   --grid-resolution 5
 )
