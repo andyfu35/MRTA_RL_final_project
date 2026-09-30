@@ -228,9 +228,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deadline-min", type=float, default=25.0)
     parser.add_argument("--deadline-max", type=float, default=50.0)
     parser.add_argument("--episode-time", type=float, default=50.0)
-    parser.add_argument("--obstacle-count", type=int, default=8)
-    parser.add_argument("--obstacle-size-min", type=float, default=10.0)
-    parser.add_argument("--obstacle-size-max", type=float, default=18.0)
+    parser.add_argument("--obstacle-count", type=int, default=10)
+    parser.add_argument("--obstacle-size-min", type=float, default=12.0)
+    parser.add_argument("--obstacle-size-max", type=float, default=20.0)
     parser.add_argument("--obstacle-clearance", type=float, default=4.0)
     parser.add_argument("--grid-resolution", type=float, default=5.0)
     parser.add_argument(
