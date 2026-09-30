@@ -57,6 +57,16 @@ def _detour_world():
     )
 
 
+
+def test_calibrated_defaults_use_comparable_path_scale():
+    config = EnvConfig()
+
+    assert config.obstacle_count == 10
+    assert np.isclose(config.obstacle_size_min, 12.0)
+    assert np.isclose(config.obstacle_size_max, 20.0)
+    assert np.isclose(config.path_cost_scale, config.diagonal)
+
+
 def test_generated_obstacles_and_paths_are_deterministic():
     config = EnvConfig()
     a = generate_world(config, seed=123)
