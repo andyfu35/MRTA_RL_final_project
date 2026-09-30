@@ -253,3 +253,100 @@ V1.6  Battery
 ```
 
 V1.6 completes the planned first full homogeneous-MRTA environment stack.
+
+
+## Hungarian quality-time benchmark
+
+V1.6 includes a separate benchmark that does not alter training.
+
+The primary comparison is:
+
+```text
+Gene Greedy
+vs
+Same Gene + Hungarian
+```
+
+Both methods use exactly the same 8D Gene score matrix. The only difference is
+the matching step.
+
+- `Gene Greedy`: repeatedly selects the current highest feasible bid.
+- `Same Gene + Hungarian`: finds the maximum-total-bid feasible batch matching
+  for the current event.
+
+This makes the comparison suitable for a quality-versus-computation-time study.
+
+Hungarian optimality here is intentionally limited to the current event's
+assignment matrix. It is not claimed to be the globally optimal solution of the
+entire sequential MRTA episode, because future robot positions, battery states,
+busy times, and available tasks depend on earlier assignments.
+
+Two additional centralized baselines are reported:
+
+```text
+Hungarian Path-Time
+Hungarian Priority-per-Path-Time
+```
+
+All methods use the same horizon and battery feasibility constraints.
+
+### Timing protocol
+
+World generation and A* path precomputation are performed before timing because
+they are common inputs to all compared assignment policies.
+
+The benchmark reports:
+
+```text
+decision_ms_per_world
+decision_us_per_event
+matcher_us_per_event
+wall_ms_per_world
+```
+
+It also performs a matcher-only scaling sweep at:
+
+```text
+4, 8, 16, 32, 64, 100 robots
+tasks = 5 * robots
+```
+
+The main quality-retention comparison is:
+
+```text
+Gene Greedy metric / Same-Gene Hungarian metric
+```
+
+This directly measures how much episode-level task performance is retained when
+using the cheaper greedy assignment instead of exact per-event Hungarian
+matching under the same learned score.
+
+### Command
+
+Using the latest V1.6 multiseed suite automatically:
+
+```bash
+bash tools/run_gene_mrta_v16_hungarian_benchmark_mac.sh
+```
+
+Or explicitly:
+
+```bash
+bash tools/run_gene_mrta_v16_hungarian_benchmark_mac.sh \
+  runs/gene_mrta_v16_suite/multiseed_20260930_100639 \
+  reference
+```
+
+The second argument may be one of:
+
+```text
+reference
+completion
+efficiency
+priority_satisfaction
+deadline_satisfaction
+balance
+```
+
+For the first paper-facing comparison, use `reference`. To study near-optimal
+task throughput specifically, rerun with `completion`.
