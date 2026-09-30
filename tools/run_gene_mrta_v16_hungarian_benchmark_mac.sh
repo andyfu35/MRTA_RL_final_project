@@ -37,5 +37,5 @@ python -m marl2d.gene_mrta_v16.hungarian_benchmark \
   --timing-repeats 3 \
   --scaling-sizes 4 8 16 32 64 100 \
   --task-ratio 5 \
-  --scaling-repeats 200 \
+  --scaling-repeats 50 \
   --output-dir "$OUT_DIR"
