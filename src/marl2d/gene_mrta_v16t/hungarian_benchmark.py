@@ -265,6 +265,7 @@ def rollout_world(
     timing = RolloutTiming()
     local_hungarian_time_regret_sum = 0.0
     local_hungarian_time_regret_events = 0
+    oracle_diagnostic_ns = 0
 
     max_events = task_count + robot_count + 2
     for _ in range(max_events):
@@ -350,6 +351,7 @@ def rollout_world(
             matcher_end - matcher_start,
         )
 
+        oracle_diag_start = perf_counter_ns()
         time_utility = np.where(
             pair_eligible,
             1.0 - np.clip(
@@ -377,6 +379,7 @@ def rollout_world(
                 (oracle_utility - policy_utility) / oracle_utility,
             )
             local_hungarian_time_regret_events += 1
+        oracle_diagnostic_ns += perf_counter_ns() - oracle_diag_start
 
         matched_rows = np.zeros(robot_count, dtype=bool)
         for robot_idx, task_idx in assignments:
@@ -479,7 +482,7 @@ def rollout_world(
     return RolloutResult(
         evaluation=evaluation,
         timing=timing,
-        wall_ns=wall_end - wall_start,
+        wall_ns=max(0, wall_end - wall_start - oracle_diagnostic_ns),
         local_hungarian_time_regret_sum=local_hungarian_time_regret_sum,
         local_hungarian_time_regret_events=local_hungarian_time_regret_events,
     )
