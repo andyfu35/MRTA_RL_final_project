@@ -89,7 +89,16 @@ bid_ij =
   + w_competition * competition_norm
 ```
 
-Path cost normalization uses the same spatial scale as Euclidean distance:\n\n```text\npath_cost_norm = clip(AStarPathLength / world_diagonal, 0, 1)\n```\n\nThis keeps Euclidean distance and actual path cost on comparable feature scales.\n\nCompetition is path-aware: a robot counts as a closer competitor only when its\nactual A* path to the task is shorter.
+Path cost normalization uses the same spatial scale as Euclidean distance:
+
+```text
+path_cost_norm = clip(AStarPathLength / world_diagonal, 0, 1)
+```
+
+This keeps Euclidean distance and actual path cost on comparable feature scales.
+
+Competition is path-aware: a robot counts as a closer competitor only when its
+actual A* path to the task is shorter.
 
 ## Capability axes
 
