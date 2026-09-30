@@ -353,11 +353,6 @@ def generate_world(config: EnvConfig, seed: int) -> World:
     _validate_config(config)
     rng = np.random.default_rng(seed)
     robots = rng.uniform(0.0, config.world_size, size=(config.num_robots, 2))
-    batteries = rng.uniform(
-        config.initial_battery_min,
-        config.initial_battery_max,
-        size=config.num_robots,
-    )
     tasks = rng.uniform(0.0, config.world_size, size=(config.num_tasks, 2))
     services = rng.uniform(
         config.service_time_min,
@@ -376,6 +371,11 @@ def generate_world(config: EnvConfig, seed: int) -> World:
     )
     protected = np.vstack([robots, tasks])
     obstacles = _generate_obstacles(config, rng, protected)
+    batteries = rng.uniform(
+        config.initial_battery_min,
+        config.initial_battery_max,
+        size=config.num_robots,
+    )
 
     return build_world(
         config,
