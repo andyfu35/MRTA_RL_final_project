@@ -407,7 +407,9 @@ def _evaluate_policy_batch(
     policy_codes: np.ndarray,
     worlds: list[World],
     config: EnvConfig,
-) -> list[Evaluation]:
+    *,
+    return_time_matrix: bool = False,
+) -> list[Evaluation] | tuple[list[Evaluation], np.ndarray]:
     if not worlds:
         raise ValueError("At least one world is required")
 
@@ -871,7 +873,30 @@ def _evaluate_policy_batch(
                 ),
             )
         )
+    if return_time_matrix:
+        return evaluations, time_optimality.copy()
     return evaluations
+
+
+def evaluate_genes_time_optimality_matrix(
+    genes: list[Gene],
+    worlds: list[World],
+    config: EnvConfig,
+) -> np.ndarray:
+    """Return shape (num_genes, num_worlds) without changing rollout semantics."""
+    if not genes:
+        return np.zeros((0, len(worlds)), dtype=np.float64)
+    weights = np.stack([gene.weights for gene in genes], axis=0)
+    policy_codes = np.zeros(len(genes), dtype=np.int64)
+    result = _evaluate_policy_batch(
+        weights,
+        policy_codes,
+        worlds,
+        config,
+        return_time_matrix=True,
+    )
+    _, matrix = result
+    return matrix
 
 
 def evaluate_genes_on_worlds(
