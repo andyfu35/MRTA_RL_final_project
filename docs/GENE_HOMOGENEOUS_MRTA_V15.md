@@ -27,8 +27,8 @@ deadline satisfaction, and workload balance?
 Each world receives static non-overlapping square obstacles:
 
 ```text
-obstacle count = 8
-side length ~ Uniform(10, 18)
+obstacle count = 10
+side length ~ Uniform(12, 20)
 ```
 
 Robot initial positions and task positions are protected from obstacle overlap.
@@ -89,8 +89,7 @@ bid_ij =
   + w_competition * competition_norm
 ```
 
-Competition is path-aware: a robot counts as a closer competitor only when its
-actual A* path to the task is shorter.
+Path cost normalization uses the same spatial scale as Euclidean distance:\n\n```text\npath_cost_norm = clip(AStarPathLength / world_diagonal, 0, 1)\n```\n\nThis keeps Euclidean distance and actual path cost on comparable feature scales.\n\nCompetition is path-aware: a robot counts as a closer competitor only when its\nactual A* path to the task is shorter.
 
 ## Capability axes
 
@@ -245,3 +244,22 @@ V1.6  Battery
 
 V1.5 is the first stage where Euclidean closeness is no longer equivalent to
 navigation cost.
+
+
+## V1.5 calibration note
+
+The first obstacle smoke used 8 obstacles with side length 10-18 and produced
+only a small detour effect (typically about 1-4 percent). To make the V1.5
+research question meaningful without changing the Gene Bank logic, the
+calibrated default is:
+
+```text
+obstacle count = 10
+side length ~ Uniform(12, 20)
+grid resolution = 5
+path_cost_norm = clip(path_length / world_diagonal, 0, 1)
+```
+
+The calibration target is not a fixed score; it is to create a visible gap
+between Euclidean-only and path-aware heuristics while keeping all generated
+robot/task nodes connected.
