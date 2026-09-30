@@ -41,9 +41,9 @@ class EnvConfig:
     deadline_min: float = 25.0
     deadline_max: float = 50.0
     episode_time: float = 50.0
-    obstacle_count: int = 8
-    obstacle_size_min: float = 10.0
-    obstacle_size_max: float = 18.0
+    obstacle_count: int = 10
+    obstacle_size_min: float = 12.0
+    obstacle_size_max: float = 20.0
     obstacle_clearance: float = 4.0
     grid_resolution: float = 5.0
 
@@ -53,7 +53,7 @@ class EnvConfig:
 
     @property
     def path_cost_scale(self) -> float:
-        return 2.0 * self.diagonal
+        return self.diagonal
 
     @property
     def service_time_range(self) -> float:
