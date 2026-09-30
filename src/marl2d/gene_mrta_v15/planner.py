@@ -166,13 +166,9 @@ def astar_path_length(
     if not math.isfinite(grid_cost):
         return math.inf
 
-    local_start = float(
-        np.linalg.norm(start_point - cell_center(start, resolution))
-    )
-    local_goal = float(
-        np.linalg.norm(goal_point - cell_center(goal, resolution))
-    )
-    return max(direct, grid_cost + local_start + local_goal)
+    free_grid_cost = _octile(start, goal, resolution)
+    obstacle_detour = max(0.0, grid_cost - free_grid_cost)
+    return direct + obstacle_detour
 
 
 def points_are_connected(
