@@ -8,6 +8,8 @@ from marl2d.gene_mrta_v16.env import (
     generate_world,
 )
 from marl2d.gene_mrta_v16.gene import Gene
+from marl2d.gene_mrta_v15.env import EnvConfig as EnvConfigV15
+from marl2d.gene_mrta_v15.env import generate_world as generate_world_v15
 
 
 def _single_task_battery_world(initial_battery: float):
@@ -52,6 +54,22 @@ def test_default_battery_configuration_is_moderately_constrained():
     assert np.isclose(config.initial_battery_min, 35.0)
     assert np.isclose(config.initial_battery_max, 70.0)
     assert np.isclose(config.energy_per_distance, 1.0)
+
+
+
+def test_v16_preserves_v15_nonbattery_world_for_same_seed():
+    config15 = EnvConfigV15()
+    config16 = EnvConfig()
+    old = generate_world_v15(config15, seed=789)
+    new = generate_world(config16, seed=789)
+
+    assert np.allclose(old.robot_positions, new.robot_positions)
+    assert np.allclose(old.task_positions, new.task_positions)
+    assert np.allclose(old.task_service_times, new.task_service_times)
+    assert np.allclose(old.task_priorities, new.task_priorities)
+    assert np.allclose(old.task_deadlines, new.task_deadlines)
+    assert np.allclose(old.obstacles, new.obstacles)
+    assert np.allclose(old.path_to_tasks, new.path_to_tasks)
 
 
 def test_generated_batteries_are_deterministic_and_bounded():
