@@ -33,8 +33,17 @@ class DirectAssignmentGene:
 
     @staticmethod
     def parameter_count(hidden_dim: int = 8) -> int:
-        # pair encoder W,b + decoder on [pair, global, robot, task, step] + bias
-        return OBS_DIM * hidden_dim + hidden_dim + (4 * hidden_dim + 1) + 1
+        # pair encoder + pair-action decoder + learned STOP/WAIT decoder.
+        # Pair action uses [pair, global, robot, task, step].
+        # STOP/WAIT uses [global, step].
+        return (
+            OBS_DIM * hidden_dim
+            + hidden_dim
+            + (4 * hidden_dim + 1)
+            + 1
+            + (hidden_dim + 1)
+            + 1
+        )
 
     @classmethod
     def random(
@@ -48,7 +57,16 @@ class DirectAssignmentGene:
             hidden_dim=hidden_dim,
         )
 
-    def _unpack(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    def _unpack(
+        self,
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        float,
+        np.ndarray,
+        float,
+    ]:
         h = self.hidden_dim
         offset = 0
         w_pair = self.vector_data[offset : offset + OBS_DIM * h].reshape(
@@ -60,14 +78,25 @@ class DirectAssignmentGene:
         w_decode = self.vector_data[offset : offset + 4 * h + 1]
         offset += 4 * h + 1
         b_decode = float(self.vector_data[offset])
-        return w_pair, b_pair, w_decode, b_decode
+        offset += 1
+        w_stop = self.vector_data[offset : offset + h + 1]
+        offset += h + 1
+        b_stop = float(self.vector_data[offset])
+        return (
+            w_pair,
+            b_pair,
+            w_decode,
+            b_decode,
+            w_stop,
+            b_stop,
+        )
 
     @staticmethod
     def _masked_mean(
         values: np.ndarray,
         mask: np.ndarray,
         axis: int | tuple[int, ...],
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, float]:
         mask_f = mask.astype(np.float64)
         while mask_f.ndim < values.ndim:
             mask_f = mask_f[..., None]
@@ -96,7 +125,14 @@ class DirectAssignmentGene:
             raise ValueError("open-mask shape mismatch")
 
         active = eligible & row_open[:, None] & col_open[None, :]
-        w_pair, b_pair, w_decode, b_decode = self._unpack()
+        (
+            w_pair,
+            b_pair,
+            w_decode,
+            b_decode,
+            w_stop,
+            b_stop,
+        ) = self._unpack()
         pair_h = np.tanh(obs @ w_pair + b_pair)
 
         global_h = self._masked_mean(pair_h, active, axis=(0, 1))
@@ -117,7 +153,16 @@ class DirectAssignmentGene:
             axis=-1,
         )
         logits = decoder_input @ w_decode + b_decode
-        return np.where(active, logits, -np.inf)
+
+        stop_input = np.concatenate(
+            [
+                global_h,
+                np.array([step_norm], dtype=np.float64),
+            ]
+        )
+        stop_logit = float(stop_input @ w_stop + b_stop)
+
+        return np.where(active, logits, -np.inf), stop_logit
 
     def assign(
         self,
@@ -129,8 +174,11 @@ class DirectAssignmentGene:
         """
         Emit the joint event assignment autoregressively.
 
-        The argmax is policy decoding, not a separate matching optimizer:
-        logits are recomputed after each action from the changed joint mask.
+        The argmax is policy decoding, not a separate matching optimizer.
+        The Gene also emits a learned STOP/WAIT action. This allows it to
+        assign only a subset of currently free robots when doing so is better
+        for the future episode. Logits are recomputed after every emitted
+        action from the changed joint mask.
         """
         row_open = np.asarray(free, dtype=bool).copy()
         col_open = np.asarray(task_available, dtype=bool).copy()
@@ -138,7 +186,7 @@ class DirectAssignmentGene:
         task_count = observations.shape[1]
 
         for step in range(int(np.sum(row_open))):
-            logits = self.action_logits(
+            logits, stop_logit = self.action_logits(
                 observations,
                 eligible,
                 row_open,
@@ -148,6 +196,8 @@ class DirectAssignmentGene:
             flat = int(np.argmax(logits))
             best = float(logits.flat[flat])
             if not np.isfinite(best):
+                break
+            if stop_logit >= best:
                 break
             robot = flat // task_count
             task = flat % task_count
