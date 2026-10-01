@@ -101,3 +101,28 @@ def test_checkpoint_finalize_excludes_unevaluated_population(tmp_path: Path):
         archive_gene.key(),
     }
     assert population_gene.key() not in {g.key() for g in candidates}
+
+
+
+def test_failure_trace_matches_direct_rollout():
+    from marl2d.gene_mrta_v17.failure_trace import _direct_trace
+    from marl2d.gene_mrta_v17.rollout import rollout_direct_gene
+
+    config = EnvConfig()
+    world = generate_world(config, 230_000_010)
+    rng = np.random.default_rng(23)
+    gene = DirectAssignmentGene.random(rng, hidden_dim=4)
+
+    traced = _direct_trace(gene, world, config)
+    expected = rollout_direct_gene(gene, world, config).evaluation
+
+    assert np.isclose(
+        traced["evaluation"]["time_optimality"],
+        expected.time_optimality,
+    )
+    assert np.isclose(
+        traced["evaluation"]["completion"],
+        expected.completion,
+    )
+    assert isinstance(traced["events"], list)
+    assert all("assignments" in event for event in traced["events"])
