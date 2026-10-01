@@ -22,9 +22,12 @@ def _load_direct_time_gene(run_dir: Path) -> DirectAssignmentGene:
     data = json.loads(
         (run_dir / "summary.json").read_text(encoding="utf-8")
     )
-    return DirectAssignmentGene.from_dict(
-        data["final"]["axis_specialists"]["time_optimality"]["gene"]
-    )
+    final = data["final"]
+    if "time_specialist" in final:
+        gene_data = final["time_specialist"]["gene"]
+    else:
+        gene_data = final["axis_specialists"]["time_optimality"]["gene"]
+    return DirectAssignmentGene.from_dict(gene_data)
 
 
 def _load_v16to_gene(run_dir: Path) -> LinearGene:
