@@ -67,3 +67,37 @@ def test_checkpoint_roundtrip(tmp_path: Path):
     assert [g.key() for g in population] == [g.key() for g in genes]
     assert [g.key() for g in archive] == [g.key() for g in genes[:2]]
     assert [g.key() for g in hof] == [g.key() for g in genes[1:]]
+
+
+def test_checkpoint_finalize_excludes_unevaluated_population(tmp_path: Path):
+    from marl2d.gene_mrta_v17.checkpoint_finalize import (
+        _genes_from_checkpoint,
+    )
+
+    rng = np.random.default_rng(19)
+    hof_gene = DirectAssignmentGene.random(rng, hidden_dim=4)
+    archive_gene = DirectAssignmentGene.random(rng, hidden_dim=4)
+    population_gene = DirectAssignmentGene.random(rng, hidden_dim=4)
+
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text(
+        json.dumps(
+            {
+                "next_generation": 1000,
+                "hof": [hof_gene.to_dict()],
+                "archive": [archive_gene.to_dict()],
+                "population": [population_gene.to_dict()],
+                "rng_state": rng.bit_generator.state,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    generation, candidates = _genes_from_checkpoint(checkpoint)
+
+    assert generation == 1000
+    assert {g.key() for g in candidates} == {
+        hof_gene.key(),
+        archive_gene.key(),
+    }
+    assert population_gene.key() not in {g.key() for g in candidates}
