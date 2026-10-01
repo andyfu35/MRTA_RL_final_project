@@ -356,7 +356,7 @@ def train(args: argparse.Namespace) -> Path:
                 for axis in AXES
             )
             probe_text = " ".join(
-                f"{axis[:1].upper()}*={row[f'probe_best_{axis}_capability']:.3f}"
+                f"probe-{axis[:1].upper()}={row[f'probe_best_{axis}_capability']:.3f}"
                 for axis in AXES
             )
             print(
