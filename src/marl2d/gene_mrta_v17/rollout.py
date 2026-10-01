@@ -308,7 +308,20 @@ def rollout_direct_gene(
             matched[robot] = True
 
         unmatched_free = free & ~matched
-        busy_until[unmatched_free] = config.episode_time
+        if np.any(unmatched_free):
+            # A direct policy may intentionally assign only a subset of free
+            # robots. Unmatched robots WAIT until the next real completion
+            # event instead of being permanently retired. If no robot is busy
+            # after this decision, there is no future state change and the
+            # episode can safely end for those robots.
+            future_times = busy_until[
+                busy_until > now + 1e-12
+            ]
+            if future_times.size > 0:
+                next_event = float(np.min(future_times))
+                busy_until[unmatched_free] = next_event
+            else:
+                busy_until[unmatched_free] = config.episode_time
 
     completed = float(np.sum(task_counts))
     completion = completed / N
