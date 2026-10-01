@@ -52,7 +52,15 @@ elif [[ "$MODE" == "heldout" ]]; then
   python -m marl2d.gene_mrta_v17.checkpoint_finalize     --checkpoint "$CHECKPOINT"     --oracle-dataset "$ORACLE_DATASET"
   RUN_DIR="$(dirname "$CHECKPOINT")"
   python -m marl2d.gene_mrta_v17.global_time_test     --direct-run "$RUN_DIR"     --v16to-run "$V16TO_RUN"     --worlds 20     --world-seed 97000000     --time-limit 300     --output-dir "$RUN_DIR/heldout20"
+elif [[ "$MODE" == "trace" ]]; then
+  RUN_DIR="${2:-runs/gene_mrta_v17t_scale/gene_mrta_v17t_scale_20261001_105828_seed7}"
+  WORLD_SEED="${3:-97000012}"
+  if [[ ! -f "$RUN_DIR/summary.json" ]]; then
+    echo "Missing direct summary: $RUN_DIR/summary.json" >&2
+    exit 2
+  fi
+  python -m marl2d.gene_mrta_v17.failure_trace     --direct-run "$RUN_DIR"     --v16to-run "$V16TO_RUN"     --world-seed "$WORLD_SEED"     --time-limit 300     --output-dir "$RUN_DIR/failure_trace"
 else
-  echo "Usage: bash tools/run_gene_mrta_v17t_scale_mac.sh [tests|smoke|long|resume <checkpoint>|finalize <checkpoint>|heldout <checkpoint>]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v17t_scale_mac.sh [tests|smoke|long|resume <checkpoint>|finalize <checkpoint>|heldout <checkpoint>|trace [run_dir] [world_seed]]" >&2
   exit 2
 fi
