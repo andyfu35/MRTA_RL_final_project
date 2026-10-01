@@ -16,12 +16,13 @@ Input at every decision event remains the same 8D robot-task observation:
 7. robot workload
 8. competition
 
-The Gene sees the full R x T x 8 tensor. It emits one (robot, task) action,
-masks the selected robot and task, recomputes global/robot/task context, then
-emits the next action. There is no external Hungarian or greedy matching
+The Gene sees the full R x T x 8 tensor. It emits either one (robot, task)
+action or STOP/WAIT, masks selected robots/tasks, and recomputes the remaining
+joint context before the next action. Unassigned free robots may wait until the
+next real completion event. There is no external Hungarian or greedy matching
 optimizer in deployment.
 
-The first architecture has hidden_dim=8 and 106 evolvable parameters.
+The first architecture has hidden_dim=8 and 116 evolvable parameters. It also has a learned STOP/WAIT action, so the policy may intentionally assign only a subset of free robots at an event.
 
 ## MILP role
 
