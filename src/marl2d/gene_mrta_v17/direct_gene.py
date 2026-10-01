@@ -96,7 +96,7 @@ class DirectAssignmentGene:
         values: np.ndarray,
         mask: np.ndarray,
         axis: int | tuple[int, ...],
-    ) -> tuple[np.ndarray, float]:
+    ) -> np.ndarray:
         mask_f = mask.astype(np.float64)
         while mask_f.ndim < values.ndim:
             mask_f = mask_f[..., None]
@@ -111,7 +111,7 @@ class DirectAssignmentGene:
         row_open: np.ndarray,
         col_open: np.ndarray,
         step: int,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, float]:
         obs = np.asarray(observations, dtype=np.float64)
         eligible = np.asarray(eligible, dtype=bool)
         if obs.ndim != 3 or obs.shape[-1] != OBS_DIM:
