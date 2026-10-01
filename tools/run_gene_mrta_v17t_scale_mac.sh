@@ -5,6 +5,7 @@ MODE="${1:-smoke}"
 VENV_DIR="${VENV_DIR:-.venv-gene}"
 ORACLE_DATASET="${ORACLE_DATASET:-runs/gene_mrta_v16to_oracle/oracle_dataset.json}"
 BOOTSTRAP_RUN="${BOOTSTRAP_RUN:-runs/gene_mrta_v17/gene_mrta_v17_20261001_095420_seed7}"
+V16TO_RUN="${V16TO_RUN:-runs/gene_mrta_v16to/gene_mrta_v16to_20260930_141419_seed7}"
 
 if [[ ! -d "$VENV_DIR" ]]; then
   python3 -m venv "$VENV_DIR"
@@ -35,7 +36,23 @@ elif [[ "$MODE" == "resume" ]]; then
     exit 2
   fi
   python -m marl2d.gene_mrta_v17.direct_time_scale     --oracle-dataset "$ORACLE_DATASET"     --resume "$CHECKPOINT"     --generations 2000     --population 256     --archive-size 32     --hof-limit 64     --hof-add-per-generation 4     --oracle-batch-schedule 0:16,200:32,500:64,1000:128     --probe-every 10     --checkpoint-every 25     --log-every 10     --seed 7
+elif [[ "$MODE" == "finalize" ]]; then
+  CHECKPOINT="${2:-}"
+  if [[ -z "$CHECKPOINT" || ! -f "$CHECKPOINT" ]]; then
+    echo "Usage: bash tools/run_gene_mrta_v17t_scale_mac.sh finalize <checkpoint.json>" >&2
+    exit 2
+  fi
+  python -m marl2d.gene_mrta_v17.checkpoint_finalize     --checkpoint "$CHECKPOINT"     --oracle-dataset "$ORACLE_DATASET"
+elif [[ "$MODE" == "heldout" ]]; then
+  CHECKPOINT="${2:-}"
+  if [[ -z "$CHECKPOINT" || ! -f "$CHECKPOINT" ]]; then
+    echo "Usage: bash tools/run_gene_mrta_v17t_scale_mac.sh heldout <checkpoint.json>" >&2
+    exit 2
+  fi
+  python -m marl2d.gene_mrta_v17.checkpoint_finalize     --checkpoint "$CHECKPOINT"     --oracle-dataset "$ORACLE_DATASET"
+  RUN_DIR="$(dirname "$CHECKPOINT")"
+  python -m marl2d.gene_mrta_v17.global_time_test     --direct-run "$RUN_DIR"     --v16to-run "$V16TO_RUN"     --worlds 20     --world-seed 97000000     --time-limit 300     --output-dir "$RUN_DIR/heldout20"
 else
-  echo "Usage: bash tools/run_gene_mrta_v17t_scale_mac.sh [tests|smoke|long|resume <checkpoint>]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v17t_scale_mac.sh [tests|smoke|long|resume <checkpoint>|finalize <checkpoint>|heldout <checkpoint>]" >&2
   exit 2
 fi
