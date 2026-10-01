@@ -47,7 +47,12 @@ def _simple_world():
 
 def test_direct_gene_emits_unique_feasible_pairs():
     rng = np.random.default_rng(7)
-    gene = DirectAssignmentGene.random(rng, hidden_dim=4)
+    vector = rng.normal(
+        size=DirectAssignmentGene.parameter_count(4)
+    )
+    # Make STOP impossible for this uniqueness test.
+    vector[-1] = -100.0
+    gene = DirectAssignmentGene(vector, hidden_dim=4)
     observations = rng.normal(size=(3, 5, 8))
     eligible = np.ones((3, 5), dtype=bool)
     eligible[1, 2] = False
@@ -65,6 +70,22 @@ def test_direct_gene_emits_unique_feasible_pairs():
     assert len({r for r, _ in assignments}) == 3
     assert len({t for _, t in assignments}) == 3
     assert all(eligible[r, t] for r, t in assignments)
+
+
+def test_direct_gene_can_stop_without_forced_full_matching():
+    rng = np.random.default_rng(11)
+    vector = np.zeros(DirectAssignmentGene.parameter_count(4))
+    vector[-1] = 100.0
+    gene = DirectAssignmentGene(vector, hidden_dim=4)
+    observations = rng.normal(size=(3, 5, 8))
+    eligible = np.ones((3, 5), dtype=bool)
+    assignments = gene.assign(
+        observations,
+        eligible,
+        np.ones(3, dtype=bool),
+        np.ones(5, dtype=bool),
+    )
+    assert assignments == []
 
 
 def test_direct_rollout_has_no_duplicate_task_within_event():
