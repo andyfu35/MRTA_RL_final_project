@@ -420,6 +420,10 @@ def _load_existing_world(path: Path, seed: int) -> dict[str, object] | None:
         return None
     if int(row.get("world_seed", -1)) != seed:
         return None
+    # Only a proven exact optimum is a completed publication world.
+    # A timed-out/non-optimal cached world is retried on the next invocation.
+    if not bool(row.get("optimal", False)):
+        return None
     return row
 
 
