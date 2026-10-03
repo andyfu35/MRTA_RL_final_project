@@ -15,6 +15,8 @@ from marl2d.gene_mrta_v17.direct_time_scale import _mutation_sigma
 from marl2d.gene_mrta_v18.direct_gene import ConsequenceAwareDirectGene
 from marl2d.gene_mrta_v18.global_time_test import _load_v18
 from marl2d.gene_mrta_v113.robust_metrics import evaluate_route_tail_population
+from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
+from marl2d.gene_mrta_v113.route_tail import rollout_route_tail_gene
 
 from marl2d.gene_mrta_v110.recombination import OPERATORS, RecombinationResult, offspring_family
 from marl2d.gene_mrta_v110.scenario_bank import load_scenario_bank
@@ -582,6 +584,99 @@ def _make_initial_records(
             "V1.13 bootstrap produced no capability records"
         )
     return records
+
+
+def _route_diagnostics(
+    gene: ConsequenceAwareDirectGene,
+    worlds,
+    config,
+    *,
+    limit: int = 10,
+) -> dict[str, float]:
+    route_gene = (
+        gene
+        if isinstance(
+            gene,
+            RouteTailDirectGene,
+        )
+        else RouteTailDirectGene.from_v18(
+            gene
+        )
+    )
+    assigned: list[float] = []
+    mean_depths: list[float] = []
+    max_depths: list[float] = []
+    multi_flags: list[float] = []
+
+    for world in worlds[
+        : min(
+            limit,
+            len(worlds),
+        )
+    ]:
+        rollout = rollout_route_tail_gene(
+            route_gene,
+            world,
+            config,
+        )
+        depths = np.asarray(
+            [
+                len(route)
+                for route
+                in rollout.plan.routes
+            ],
+            dtype=np.float64,
+        )
+        assigned.append(
+            float(
+                rollout.evaluation.completed_tasks
+            )
+        )
+        mean_depths.append(
+            float(
+                np.mean(
+                    depths
+                )
+            )
+        )
+        max_depths.append(
+            float(
+                np.max(
+                    depths
+                )
+            )
+        )
+        multi_flags.append(
+            float(
+                np.max(
+                    depths
+                )
+                >= 2.0
+            )
+        )
+
+    return {
+        "mean_assigned_tasks": float(
+            np.mean(
+                assigned
+            )
+        ),
+        "mean_queue_depth": float(
+            np.mean(
+                mean_depths
+            )
+        ),
+        "mean_max_queue_depth": float(
+            np.mean(
+                max_depths
+            )
+        ),
+        "multi_task_world_fraction": float(
+            np.mean(
+                multi_flags
+            )
+        ),
+    }
 
 
 def _screen_indices(
@@ -1834,6 +1929,14 @@ def train(
                 best_certified_record_id
             ]
         )
+        route_diag = _route_diagnostics(
+            records[
+                best_certified_record_id
+            ].gene,
+            worlds,
+            config,
+            limit=10,
+        )
 
         row: dict[str, object] = {
             "generation": generation,
@@ -1864,6 +1967,18 @@ def train(
                 )
             ),
             "mutation_sigma": sigma,
+            "mean_assigned_tasks": route_diag[
+                "mean_assigned_tasks"
+            ],
+            "mean_queue_depth": route_diag[
+                "mean_queue_depth"
+            ],
+            "mean_max_queue_depth": route_diag[
+                "mean_max_queue_depth"
+            ],
+            "multi_task_world_fraction": route_diag[
+                "multi_task_world_fraction"
+            ],
         }
         for axis in AXES:
             row[
@@ -1953,6 +2068,9 @@ def train(
                 f"tail10={best['tail10_time']:.4f} "
                 f"cont={best['continuation_preservation']:.4f} "
                 f"reserve={best['fleet_option_reserve']:.4f} "
+                f"qmean={route_diag['mean_queue_depth']:.2f} "
+                f"qmax={route_diag['mean_max_queue_depth']:.2f} "
+                f"multi={route_diag['multi_task_world_fraction']:.2f} "
                 f"sigma={sigma:.4f}"
             )
             if admitted_mating:
@@ -2172,8 +2290,8 @@ def train(
         "final_generalization_rule": (
             "The 95M mating scenario bank is development data. "
             "The 98M set remains historical V1.8/V1.9 development evidence. "
-            "Do not inspect 99,000,000-99,000,099 until the V1.10 "
-            "candidate and procedure are frozen."
+            "Do not inspect 99,000,000-99,000,099 until the V1.13 "
+            "route-tail candidate and procedure are frozen."
         ),
     }
 
