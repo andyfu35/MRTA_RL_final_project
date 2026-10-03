@@ -187,3 +187,57 @@ paired seeds with the same frozen protocol, followed by a frozen 96M
 development-validation bank.
 
 The protected 99M benchmark remains untouched.
+
+
+---
+
+# Current implementation status
+
+Status as of 2026-10-03:
+
+IMPLEMENTED, NOT YET RUN.
+
+The V1.14.1 code, tests, paired comparator, and launcher exist in the repository.
+No paired-smoke or paired50 result should be claimed until terminal output is actually produced.
+
+Current implementation files:
+
+- src/marl2d/gene_mrta_v1141/recombination_gene.py
+- src/marl2d/gene_mrta_v1141/evolve.py
+- src/marl2d/gene_mrta_v1141/compare.py
+- tests/test_gene_mrta_v1141_recombination_correction.py
+- tools/run_gene_mrta_v1141_paired_mac.sh
+
+Required execution order:
+
+1. bash tools/run_gene_mrta_v1141_paired_mac.sh tests
+2. bash tools/run_gene_mrta_v1141_paired_mac.sh paired-smoke
+3. inspect structural invariants
+4. only then run bash tools/run_gene_mrta_v1141_paired_mac.sh paired50
+
+Adaptive structural invariant:
+
+Rcenter <= 1
+
+Center-control invariant:
+
+Rbank = 1
+Rcenter = 1
+
+Expected formal paired output:
+
+runs/gene_mrta_v1141_paired_seed7/comparison_50.json
+
+The paired comparison reports the four Policy-axis deltas separately and does not construct a scalar aggregate.
+
+# Documentation handoff rule
+
+Before a new experimental version is started, all completed results and architecture-changing decisions must be recorded in:
+
+- /AI_PROJECT_CONTEXT.md
+- docs/GENE_HOMOGENEOUS_MRTA_EXPERIMENT_LEDGER.md
+- the relevant version-specific document
+
+New AI conversations must read the root context file and experiment ledger before continuing development.
+
+The protected 99M benchmark remains untouched.
