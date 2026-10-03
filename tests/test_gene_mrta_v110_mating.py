@@ -21,6 +21,7 @@ from marl2d.gene_mrta_v110.train import (
     _axis_scores,
     _best_by_axis,
     _capability_ceiling_retention,
+    _certified_capabilities,
     _inheritance_retention,
     _passes_inheritance_gate,
     _quality_weight,
@@ -420,3 +421,37 @@ def test_capability_ceiling_retention_uses_generation_best():
 
     assert ratios["mean_time"] == pytest.approx(0.95)
     assert ratios["continuation_preservation"] == pytest.approx(0.95)
+
+
+def test_certified_capabilities_track_current_ceiling():
+    record = _record(
+        "cert",
+        {
+            "mean_time": 0.96,
+            "tail10_time": 0.89,
+            "continuation_preservation": 0.78,
+            "fleet_option_reserve": 0.81,
+        },
+        (
+            "mean_time",
+            "tail10_time",
+            "continuation_preservation",
+        ),
+    )
+    ceiling = {
+        "mean_time": 1.00,
+        "tail10_time": 0.95,
+        "continuation_preservation": 0.80,
+        "fleet_option_reserve": 0.84,
+    }
+
+    certified = _certified_capabilities(
+        record,
+        ceiling,
+        threshold=0.95,
+    )
+
+    assert certified == (
+        "mean_time",
+        "continuation_preservation",
+    )
