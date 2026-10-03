@@ -388,19 +388,22 @@ class RecombinationRecord:
         generated = float(
             self.generated
         )
+        # Conservative priors prevent an untested newborn rule from
+        # looking artificially better than a mature, empirically good rule.
+        # Exploration is supplied separately by uniform sampling.
         screen_yield = (
-            self.screen_selected + 1.0
+            self.screen_selected + 0.25
         ) / (
             generated + 2.0
         )
         acceptance_yield = (
-            self.accepted + 1.0
+            self.accepted + 0.20
         ) / (
             generated + 2.0
         )
         four_yield = (
             self.four_capability_accepted
-            + 0.5
+            + 0.10
         ) / (
             generated + 2.0
         )
