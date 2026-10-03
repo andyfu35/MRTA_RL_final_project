@@ -1,3 +1,24 @@
+# IMPORTANT — AI / experiment handoff for this branch
+
+This branch currently contains an active Gene-based homogeneous MRTA / SEGB research track in addition to the original MARL2D PPO project described below.
+
+Before any AI assistant or new conversation changes the Gene-MRTA experiment, it MUST read:
+
+1. AI_PROJECT_CONTEXT.md
+2. docs/GENE_HOMOGENEOUS_MRTA_EXPERIMENT_LEDGER.md
+3. docs/GENE_HOMOGENEOUS_MRTA_V1141_RECOMBINATION_CORRECTION.md
+
+Current experimental status as of 2026-10-03:
+
+- V1.13 Route-Tail Multi-Task Evolution: completed.
+- V1.14 Self-Evolving Recombination Bank: completed; exposed center-law clone / evidence confounds.
+- V1.14.1 phenotype-canonical, evidence-aware adaptive-vs-center control: implemented but NOT YET RUN.
+- 99M remains protected and must not be inspected.
+
+All future architecture changes and completed experimental results must be written back to AI_PROJECT_CONTEXT.md and the experiment ledger before starting the next version.
+
+---
+
 # MRTA RL Final Project - MARL2D
 
 ROS2 多電腦 Multi-Agent PPO 訓練專案。
