@@ -601,6 +601,14 @@ class RecombinationRecord:
             "axis_scores": (
                 self.axis_scores()
             ),
+            "evidence_scores_q10": {
+                axis: self.evidence_score(
+                    axis,
+                    quantile=0.10,
+                )
+                for axis
+                in RECOMBINATION_AXES
+            },
             "metadata": dict(
                 self.metadata
             ),
@@ -896,6 +904,9 @@ def spawn_recombination_mutants(
                 ),
                 uniform_fraction=(
                     uniform_fraction
+                ),
+                evidence_quantile=(
+                    evidence_quantile
                 ),
             )
         )
