@@ -9,6 +9,9 @@ from marl2d.gene_mrta_v110.recombination import (
     recombine,
 )
 from marl2d.gene_mrta_v110.scenario_bank import (
+    FROZEN_FAILED_ORIGINAL_SEED,
+    FROZEN_REPLACEMENT_SEED,
+    FROZEN_SCENARIO_SEEDS,
     _replacement_candidate_order,
     _validate_seed_range,
     select_diverse_indices,
@@ -343,3 +346,17 @@ def test_replacement_order_never_returns_original_selected_set():
         len(descriptors)
         - len(selected)
     )
+
+
+def test_frozen_v110_seed_set_is_exactly_100_unique_worlds():
+    assert len(FROZEN_SCENARIO_SEEDS) == 100
+    assert len(set(FROZEN_SCENARIO_SEEDS)) == 100
+    assert FROZEN_FAILED_ORIGINAL_SEED not in FROZEN_SCENARIO_SEEDS
+    assert FROZEN_REPLACEMENT_SEED in FROZEN_SCENARIO_SEEDS
+    assert FROZEN_SCENARIO_SEEDS[1] == FROZEN_REPLACEMENT_SEED
+
+
+def test_frozen_v110_seed_set_does_not_touch_protected_ranges():
+    for seed in FROZEN_SCENARIO_SEEDS:
+        assert not (98_000_000 <= seed <= 98_000_099)
+        assert not (99_000_000 <= seed <= 99_000_099)
