@@ -20,7 +20,9 @@ from marl2d.gene_mrta_v110.train import (
     GeneRecord,
     _axis_scores,
     _best_by_axis,
+    _capability_ceiling_retention,
     _inheritance_retention,
+    _passes_inheritance_gate,
     _quality_weight,
 )
 
@@ -360,3 +362,61 @@ def test_frozen_v110_seed_set_does_not_touch_protected_ranges():
     for seed in FROZEN_SCENARIO_SEEDS:
         assert not (98_000_000 <= seed <= 98_000_099)
         assert not (99_000_000 <= seed <= 99_000_099)
+
+
+def test_ceiling_gate_blocks_cumulative_95_percent_decay():
+    parent_retention = {
+        "mean_time": 0.96,
+        "tail10_time": 0.97,
+    }
+    ceiling_retention = {
+        "mean_time": 0.94,
+        "tail10_time": 0.99,
+    }
+
+    assert not _passes_inheritance_gate(
+        parent_retention,
+        ceiling_retention,
+        threshold=0.95,
+    )
+
+
+def test_ceiling_gate_accepts_dual_retention_above_threshold():
+    parent_retention = {
+        "mean_time": 0.96,
+        "tail10_time": 0.97,
+    }
+    ceiling_retention = {
+        "mean_time": 0.98,
+        "tail10_time": 0.951,
+    }
+
+    assert _passes_inheritance_gate(
+        parent_retention,
+        ceiling_retention,
+        threshold=0.95,
+    )
+
+
+def test_capability_ceiling_retention_uses_generation_best():
+    child_scores = {
+        "mean_time": 0.95,
+        "tail10_time": 0.90,
+        "continuation_preservation": 0.76,
+        "fleet_option_reserve": 0.82,
+    }
+    ceiling = {
+        "mean_time": 1.00,
+        "tail10_time": 0.95,
+        "continuation_preservation": 0.80,
+        "fleet_option_reserve": 0.84,
+    }
+
+    ratios = _capability_ceiling_retention(
+        child_scores,
+        ceiling,
+        ("mean_time", "continuation_preservation"),
+    )
+
+    assert ratios["mean_time"] == pytest.approx(0.95)
+    assert ratios["continuation_preservation"] == pytest.approx(0.95)
