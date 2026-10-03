@@ -1426,6 +1426,18 @@ def train(
             ] = (
                 recombination_records[
                     rule_id
+                ].evidence_score(
+                    axis,
+                    quantile=(
+                        args.recombination_evidence_quantile
+                    ),
+                )
+            )
+            row[
+                f"rule_{axis}_raw_mean"
+            ] = (
+                recombination_records[
+                    rule_id
                 ].axis_scores()[
                     axis
                 ]
@@ -1553,6 +1565,12 @@ def train(
         "scenario_bank": (
             args.scenario_bank
         ),
+        "seed": int(
+            args.seed
+        ),
+        "rng_design": (
+            "separate policy_rng and rule_rng for paired control"
+        ),
         "scenario_seeds": (
             scenario_seeds
         ),
@@ -1613,11 +1631,25 @@ def train(
             for gene_id in front
         ],
         "recombination_axis_specialists": {
-            axis: recombination_records[
-                specialists[
-                    axis
-                ]
-            ].to_dict()
+            axis: {
+                **recombination_records[
+                    specialists[
+                        axis
+                    ]
+                ].to_dict(),
+                "selected_evidence_score": (
+                    recombination_records[
+                        specialists[
+                            axis
+                        ]
+                    ].evidence_score(
+                        axis,
+                        quantile=(
+                            args.recombination_evidence_quantile
+                        ),
+                    )
+                ),
+            }
             for axis in RECOMBINATION_AXES
         },
         "protected_final_rule": (
@@ -1896,7 +1928,7 @@ def main() -> None:
         != args.mating_offspring
     ):
         raise ValueError(
-            "V1.14 keeps the policy population split at 50/50 "
+            "V1.14.1 keeps the policy population split at 50/50 "
             "normal mutation vs recombination"
         )
     if not (
