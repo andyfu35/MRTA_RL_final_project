@@ -222,94 +222,16 @@ class RecombinationGene:
     def equation(
         self,
     ) -> dict[str, str]:
-        return self.to_law().equation()
-
-    def evidence_count(
-        self,
-        axis: str,
-    ) -> int:
-        if axis not in RECOMBINATION_AXES:
-            raise ValueError(
-                f"Unknown recombination axis: {axis}"
-            )
-        return int(
-            self.generated
+        equation = dict(
+            self.to_law().equation()
         )
-
-    def evidence_score(
-        self,
-        axis: str,
-        *,
-        quantile: float = 0.10,
-    ) -> float:
-        """
-        Lower posterior quantile used for mature-rule selection.
-
-        Yield axes use Beta posteriors. retention_quality is treated as a
-        bounded [0,1] fractional-success process after clipping each
-        accumulated retention contribution to the generated trial count.
-        This is intentionally conservative for low-n rules.
-        """
-        if axis not in RECOMBINATION_AXES:
-            raise ValueError(
-                f"Unknown recombination axis: {axis}"
-            )
-        if not (
-            0.0 < quantile < 0.5
-        ):
-            raise ValueError(
-                "quantile must be in (0,0.5)"
-            )
-
-        n = float(
-            self.generated
+        equation["alpha"] = equation[
+            "alpha"
+        ].replace(
+            "*(H_A-H_B)",
+            "*((H_A-H_B)/4)",
         )
-        if axis == "screen_yield":
-            success = float(
-                self.screen_selected
-            )
-            alpha0, beta0 = 1.0, 3.0
-        elif axis == "acceptance_yield":
-            success = float(
-                self.accepted
-            )
-            alpha0, beta0 = 1.0, 9.0
-        elif axis == "four_capability_yield":
-            success = float(
-                self.four_capability_accepted
-            )
-            alpha0, beta0 = 0.5, 9.5
-        else:
-            success = float(
-                np.clip(
-                    self.screen_retention_sum,
-                    0.0,
-                    n,
-                )
-            )
-            alpha0, beta0 = 1.0, 1.0
-
-        failure = max(
-            n - success,
-            0.0,
-        )
-        return float(
-            beta_distribution.ppf(
-                quantile,
-                alpha0 + success,
-                beta0 + failure,
-            )
-        )
-
-    def is_evidence_mature(
-        self,
-        min_evidence: int,
-    ) -> bool:
-        return (
-            self.generated
-            >= min_evidence
-        )
-
+        return equation
 
     def to_dict(
         self,
@@ -566,6 +488,92 @@ class RecombinationRecord:
                 )
             ),
         }
+
+    def evidence_count(
+        self,
+        axis: str,
+    ) -> int:
+        if axis not in RECOMBINATION_AXES:
+            raise ValueError(
+                f"Unknown recombination axis: {axis}"
+            )
+        return int(
+            self.generated
+        )
+
+    def evidence_score(
+        self,
+        axis: str,
+        *,
+        quantile: float = 0.10,
+    ) -> float:
+        """
+        Lower posterior quantile used for mature-rule selection.
+
+        Yield axes use Beta posteriors. retention_quality is approximated as
+        a bounded [0,1] fractional-success process after clipping cumulative
+        retention to the number of generated trials.
+        """
+        if axis not in RECOMBINATION_AXES:
+            raise ValueError(
+                f"Unknown recombination axis: {axis}"
+            )
+        if not (
+            0.0 < quantile < 0.5
+        ):
+            raise ValueError(
+                "quantile must be in (0,0.5)"
+            )
+
+        n = float(
+            self.generated
+        )
+        if axis == "screen_yield":
+            success = float(
+                self.screen_selected
+            )
+            alpha0, beta0 = 1.0, 3.0
+        elif axis == "acceptance_yield":
+            success = float(
+                self.accepted
+            )
+            alpha0, beta0 = 1.0, 9.0
+        elif axis == "four_capability_yield":
+            success = float(
+                self.four_capability_accepted
+            )
+            alpha0, beta0 = 0.5, 9.5
+        else:
+            success = float(
+                np.clip(
+                    self.screen_retention_sum,
+                    0.0,
+                    n,
+                )
+            )
+            alpha0, beta0 = 1.0, 1.0
+
+        failure = max(
+            n - success,
+            0.0,
+        )
+        return float(
+            beta_distribution.ppf(
+                quantile,
+                alpha0 + success,
+                beta0 + failure,
+            )
+        )
+
+    def is_evidence_mature(
+        self,
+        min_evidence: int,
+    ) -> bool:
+        return (
+            self.generated
+            >= min_evidence
+        )
+
 
     def to_dict(
         self,
