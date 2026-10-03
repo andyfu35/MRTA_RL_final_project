@@ -853,6 +853,42 @@ def _inheritance_retention(
     return result
 
 
+def _capability_ceiling_retention(
+    child_scores: dict[str, float],
+    capability_ceiling: dict[str, float],
+    capabilities: tuple[str, ...],
+) -> dict[str, float]:
+    return {
+        axis: (
+            float(child_scores[axis])
+            / max(
+                float(
+                    capability_ceiling[axis]
+                ),
+                1e-12,
+            )
+        )
+        for axis in capabilities
+    }
+
+
+def _passes_inheritance_gate(
+    parent_retention: dict[str, float],
+    ceiling_retention: dict[str, float],
+    *,
+    threshold: float,
+) -> bool:
+    if not parent_retention:
+        return False
+    if set(parent_retention) != set(ceiling_retention):
+        return False
+    return all(
+        parent_retention[axis] >= threshold
+        and ceiling_retention[axis] >= threshold
+        for axis in parent_retention
+    )
+
+
 def _top_mating_full_indices(
     children: list[MatingChild],
     screen_scores: dict[str, np.ndarray],
@@ -1016,6 +1052,7 @@ def _admit_mating_children(
     scores: dict[str, np.ndarray],
     generation: int,
     records: dict[str, GeneRecord],
+    capability_ceiling: dict[str, float],
     threshold: float,
     accepted_log: Path,
 ) -> tuple[
@@ -1045,7 +1082,8 @@ def _admit_mating_children(
             parent_b = records[
                 child.parent_b
             ]
-            retention = (
+
+            parent_retention = (
                 _inheritance_retention(
                     score,
                     parent_a,
@@ -1053,25 +1091,25 @@ def _admit_mating_children(
                     child.required_capabilities,
                 )
             )
-            success = bool(
-                retention
-            ) and all(
-                value
-                >= threshold
-                for value
-                in retention.values()
+            ceiling_retention = (
+                _capability_ceiling_retention(
+                    score,
+                    capability_ceiling,
+                    child.required_capabilities,
+                )
+            )
+            success = (
+                _passes_inheritance_gate(
+                    parent_retention,
+                    ceiling_retention,
+                    threshold=threshold,
+                )
             )
 
             event = {
-                "generation": (
-                    generation
-                ),
-                "parent_a": (
-                    child.parent_a
-                ),
-                "parent_b": (
-                    child.parent_b
-                ),
+                "generation": generation,
+                "parent_a": child.parent_a,
+                "parent_b": child.parent_b,
                 "parent_a_capabilities": list(
                     parent_a.capabilities
                 ),
@@ -1088,7 +1126,21 @@ def _admit_mating_children(
                     child.result.metadata
                 ),
                 "scores": score,
-                "retention": retention,
+                # Kept for backward-compatible analysis scripts.
+                "retention": parent_retention,
+                "parent_retention": (
+                    parent_retention
+                ),
+                "capability_ceiling": {
+                    axis: float(
+                        capability_ceiling[axis]
+                    )
+                    for axis
+                    in child.required_capabilities
+                },
+                "ceiling_retention": (
+                    ceiling_retention
+                ),
                 "threshold": threshold,
                 "accepted": success,
             }
@@ -1127,9 +1179,21 @@ def _admit_mating_children(
                             child.result.operator
                         ),
                         metadata={
-                            "retention": (
-                                retention
+                            "parent_retention": (
+                                parent_retention
                             ),
+                            "ceiling_retention": (
+                                ceiling_retention
+                            ),
+                            "capability_ceiling": {
+                                axis: float(
+                                    capability_ceiling[
+                                        axis
+                                    ]
+                                )
+                                for axis
+                                in child.required_capabilities
+                            },
                             "operator_metadata": (
                                 child.result.metadata
                             ),
@@ -1168,7 +1232,6 @@ def _admit_mating_children(
 
     return admitted, operator_success
 
-
 def _prune_active_records(
     records: dict[str, GeneRecord],
     specialist_size: int,
@@ -1195,7 +1258,8 @@ def _save_checkpoint(
     next_generation: int,
     records: dict[str, GeneRecord],
     rng: np.random.Generator,
-    operator_attempts: dict[str, int],
+    operator_generated: dict[str, int],
+    operator_selected: dict[str, int],
     operator_successes: dict[str, int],
 ) -> None:
     payload = {
@@ -1210,8 +1274,11 @@ def _save_checkpoint(
         "rng_state": _jsonable(
             rng.bit_generator.state
         ),
-        "operator_attempts": (
-            operator_attempts
+        "operator_generated": (
+            operator_generated
+        ),
+        "operator_selected": (
+            operator_selected
         ),
         "operator_successes": (
             operator_successes
@@ -1235,6 +1302,7 @@ def _load_checkpoint(
     dict[str, GeneRecord],
     dict[str, int],
     dict[str, int],
+    dict[str, int],
 ]:
     data = json.loads(
         path.read_text(
@@ -1252,14 +1320,37 @@ def _load_checkpoint(
         )
         for item in data["records"]
     }
-    attempts = {
+
+    legacy_selected = data.get(
+        "operator_attempts",
+        {},
+    )
+    generated = {
         operator: int(
             data.get(
-                "operator_attempts",
+                "operator_generated",
                 {},
             ).get(
                 operator,
-                0,
+                legacy_selected.get(
+                    operator,
+                    0,
+                ),
+            )
+        )
+        for operator in OPERATORS
+    }
+    selected = {
+        operator: int(
+            data.get(
+                "operator_selected",
+                {},
+            ).get(
+                operator,
+                legacy_selected.get(
+                    operator,
+                    0,
+                ),
             )
         )
         for operator in OPERATORS
@@ -1283,7 +1374,8 @@ def _load_checkpoint(
             ]
         ),
         records,
-        attempts,
+        generated,
+        selected,
         successes,
     )
 
@@ -1326,7 +1418,8 @@ def train(
         (
             start_generation,
             records,
-            operator_attempts,
+            operator_generated,
+            operator_selected,
             operator_successes,
         ) = _load_checkpoint(
             checkpoint,
@@ -1363,7 +1456,11 @@ def train(
             config,
         )
         start_generation = 0
-        operator_attempts = {
+        operator_generated = {
+            operator: 0
+            for operator in OPERATORS
+        }
+        operator_selected = {
             operator: 0
             for operator in OPERATORS
         }
@@ -1404,6 +1501,10 @@ def train(
         best = _best_by_axis(
             active_records
         )
+        generation_capability_ceiling = {
+            axis: float(best[axis])
+            for axis in AXES
+        }
 
         sigma = _mutation_sigma(
             generation,
@@ -1454,6 +1555,11 @@ def train(
                 args.mating_mutation_rate
             ),
         )
+
+        for child in mating:
+            operator_generated[
+                child.result.operator
+            ] += 1
 
         if len(mating) != args.mating_offspring:
             raise RuntimeError(
@@ -1572,7 +1678,7 @@ def train(
         )
 
         for child in selected_mating:
-            operator_attempts[
+            operator_selected[
                 child.result.operator
             ] += 1
 
@@ -1584,6 +1690,9 @@ def train(
             scores=mating_full_scores,
             generation=generation,
             records=records,
+            capability_ceiling=(
+                generation_capability_ceiling
+            ),
             threshold=(
                 args.inheritance_threshold
             ),
@@ -1654,8 +1763,13 @@ def train(
                 f"best_{axis}"
             ] = best[axis]
         for operator in OPERATORS:
-            attempts = (
-                operator_attempts[
+            generated = (
+                operator_generated[
+                    operator
+                ]
+            )
+            selected = (
+                operator_selected[
                     operator
                 ]
             )
@@ -1665,11 +1779,33 @@ def train(
                 ]
             )
             row[
-                f"{operator}_success_rate"
+                f"{operator}_generated"
+            ] = generated
+            row[
+                f"{operator}_selected"
+            ] = selected
+            row[
+                f"{operator}_accepted"
+            ] = successes
+            row[
+                f"{operator}_selection_rate"
             ] = (
-                successes
-                / attempts
-                if attempts
+                selected / generated
+                if generated
+                else 0.0
+            )
+            row[
+                f"{operator}_acceptance_from_generated"
+            ] = (
+                successes / generated
+                if generated
+                else 0.0
+            )
+            row[
+                f"{operator}_acceptance_from_selected"
+            ] = (
+                successes / selected
+                if selected
                 else 0.0
             )
 
@@ -1746,8 +1882,11 @@ def train(
                 ),
                 records=active_records,
                 rng=rng,
-                operator_attempts=(
-                    operator_attempts
+                operator_generated=(
+                    operator_generated
+                ),
+                operator_selected=(
+                    operator_selected
                 ),
                 operator_successes=(
                     operator_successes
@@ -1871,6 +2010,9 @@ def train(
             "inheritance_threshold": (
                 args.inheritance_threshold
             ),
+            "inheritance_gate": (
+                "parent_retention_and_generation_capability_ceiling"
+            ),
         },
         "best_axis_scores": best,
         "best_axis_records": (
@@ -1881,8 +2023,11 @@ def train(
             for record
             in best_hybrids[:20]
         ],
-        "operator_attempts": (
-            operator_attempts
+        "operator_generated": (
+            operator_generated
+        ),
+        "operator_selected": (
+            operator_selected
         ),
         "operator_successes": (
             operator_successes
@@ -1912,19 +2057,36 @@ def train(
         )
     )
     print(
-        "OPERATOR_SUCCESS="
+        "OPERATOR_FUNNEL="
         + json.dumps(
             {
                 operator: {
-                    "attempts": (
-                        operator_attempts[
+                    "generated": (
+                        operator_generated[
                             operator
                         ]
                     ),
-                    "successes": (
+                    "selected": (
+                        operator_selected[
+                            operator
+                        ]
+                    ),
+                    "accepted": (
                         operator_successes[
                             operator
                         ]
+                    ),
+                    "acceptance_from_generated": (
+                        operator_successes[
+                            operator
+                        ]
+                        / operator_generated[
+                            operator
+                        ]
+                        if operator_generated[
+                            operator
+                        ]
+                        else 0.0
                     ),
                 }
                 for operator in OPERATORS
