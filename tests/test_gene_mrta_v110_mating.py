@@ -9,6 +9,7 @@ from marl2d.gene_mrta_v110.recombination import (
     recombine,
 )
 from marl2d.gene_mrta_v110.scenario_bank import (
+    _replacement_candidate_order,
     _validate_seed_range,
     select_diverse_indices,
 )
@@ -282,3 +283,63 @@ def test_protected_seed_ranges_are_rejected():
             99_000_000,
             100,
         )
+
+
+def test_replacement_order_prefers_nearest_unused_descriptor():
+    descriptors = np.asarray(
+        [
+            [0.0, 0.0],
+            [0.1, 0.1],
+            [2.0, 2.0],
+            [0.2, 0.2],
+            [4.0, 4.0],
+        ],
+        dtype=np.float64,
+    )
+    order = _replacement_candidate_order(
+        descriptors,
+        target_index=0,
+        excluded_indices={0, 1},
+    )
+
+    indices = [
+        idx
+        for idx, _distance in order
+    ]
+    assert indices[0] == 3
+    assert 0 not in indices
+    assert 1 not in indices
+
+
+def test_replacement_order_never_returns_original_selected_set():
+    rng = np.random.default_rng(77)
+    descriptors = rng.normal(
+        size=(30, 5)
+    )
+    selected = set(
+        select_diverse_indices(
+            descriptors,
+            8,
+        ).tolist()
+    )
+    target = next(
+        iter(selected)
+    )
+
+    order = _replacement_candidate_order(
+        descriptors,
+        target_index=target,
+        excluded_indices=set(selected),
+    )
+
+    returned = {
+        idx
+        for idx, _distance in order
+    }
+    assert returned.isdisjoint(
+        selected
+    )
+    assert len(returned) == (
+        len(descriptors)
+        - len(selected)
+    )
