@@ -11,10 +11,121 @@ from marl2d.gene_mrta_v16t.env import EnvConfig, World, generate_world
 from marl2d.gene_mrta_v16t.global_optimal_core import solve_global_time_optimum
 
 
-SCENARIO_BANK_VERSION = "v110_diverse_100_v1"
+SCENARIO_BANK_VERSION = "v110_diverse_100_v2_frozen"
 DEFAULT_SEED_BASE = 95_000_000
 DEFAULT_CANDIDATES = 500
 DEFAULT_WORLD_COUNT = 100
+
+# Frozen after the policy-independent 500-candidate descriptor coverage pass.
+# Original slot 2 seed 95,000,034 could not prove exact optimality after
+# 300 s + 900 s (MIP gap ~= 0.56185), so it was permanently replaced by
+# the nearest unused descriptor candidate 95,000,442, which proved exact.
+FROZEN_SCENARIO_SEEDS = (
+    95000284,
+    95000442,
+    95000291,
+    95000377,
+    95000263,
+    95000027,
+    95000423,
+    95000236,
+    95000417,
+    95000413,
+    95000205,
+    95000271,
+    95000099,
+    95000276,
+    95000285,
+    95000168,
+    95000030,
+    95000209,
+    95000143,
+    95000007,
+    95000084,
+    95000001,
+    95000307,
+    95000432,
+    95000157,
+    95000459,
+    95000125,
+    95000248,
+    95000037,
+    95000477,
+    95000390,
+    95000057,
+    95000492,
+    95000065,
+    95000428,
+    95000326,
+    95000332,
+    95000247,
+    95000071,
+    95000415,
+    95000212,
+    95000123,
+    95000145,
+    95000244,
+    95000042,
+    95000393,
+    95000046,
+    95000265,
+    95000450,
+    95000314,
+    95000427,
+    95000196,
+    95000437,
+    95000117,
+    95000400,
+    95000443,
+    95000047,
+    95000246,
+    95000028,
+    95000012,
+    95000070,
+    95000293,
+    95000172,
+    95000176,
+    95000031,
+    95000447,
+    95000295,
+    95000353,
+    95000151,
+    95000160,
+    95000155,
+    95000380,
+    95000050,
+    95000426,
+    95000105,
+    95000224,
+    95000290,
+    95000025,
+    95000468,
+    95000252,
+    95000122,
+    95000272,
+    95000269,
+    95000270,
+    95000364,
+    95000335,
+    95000256,
+    95000207,
+    95000144,
+    95000347,
+    95000456,
+    95000190,
+    95000039,
+    95000049,
+    95000408,
+    95000098,
+    95000202,
+    95000211,
+    95000040,
+    95000136,
+)
+
+FROZEN_FAILED_ORIGINAL_SEED = 95_000_034
+FROZEN_REPLACEMENT_SEED = 95_000_442
+FROZEN_REPLACEMENT_DESCRIPTOR_DISTANCE = 2.843834
 
 
 def _pairwise_mean_distance(points: np.ndarray) -> float:
@@ -561,52 +672,48 @@ def build_scenario_bank(
         ],
         dtype=np.float64,
     )
-    selected_ids = (
-        select_diverse_indices(
-            descriptors,
-            args.worlds,
-        )
-    )
-    selected_rows = [
-        candidate_rows[int(idx)]
-        for idx in selected_ids
-    ]
 
-    selected_index_set = {
-        int(idx)
-        for idx in selected_ids
+    # The 100-world development set is now frozen. The descriptor-selection
+    # machinery remains in this module for audit/reproduction, but build-bank
+    # no longer changes membership after the freeze.
+    seed_to_row = {
+        int(row["seed"]): row
+        for row in candidate_rows
     }
-    used_indices = set(
-        selected_index_set
-    )
-    failed_originals: list[
-        dict[str, object]
-    ] = []
-    replacements: list[
-        dict[str, object]
-    ] = []
+    missing = [
+        seed
+        for seed in FROZEN_SCENARIO_SEEDS
+        if seed not in seed_to_row
+    ]
+    if missing:
+        raise RuntimeError(
+            "Frozen V1.10 seeds are missing from "
+            f"the candidate cache: {missing}"
+        )
+    if len(FROZEN_SCENARIO_SEEDS) != args.worlds:
+        raise RuntimeError(
+            "Frozen V1.10 scenario set must contain "
+            f"exactly {args.worlds} unique worlds."
+        )
+    if len(set(FROZEN_SCENARIO_SEEDS)) != args.worlds:
+        raise RuntimeError(
+            "Frozen V1.10 scenario set contains duplicate seeds."
+        )
+
+    selected_rows = [
+        seed_to_row[seed]
+        for seed in FROZEN_SCENARIO_SEEDS
+    ]
 
     solved_rows: list[
         dict[str, object]
     ] = []
 
-    for rank, (
-        selected_idx,
-        row,
-    ) in enumerate(
-        zip(
-            selected_ids,
-            selected_rows,
-        ),
+    for rank, row in enumerate(
+        selected_rows,
         start=1,
     ):
-        selected_idx = int(
-            selected_idx
-        )
-        seed = int(
-            row["seed"]
-        )
-
+        seed = int(row["seed"])
         solved, source = (
             _solve_scenario_candidate(
                 row,
@@ -634,179 +741,19 @@ def build_scenario_bank(
             flush=True,
         )
 
-        if bool(
+        if not bool(
             solved.get(
                 "optimal",
                 False,
             )
         ):
-            solved_rows.append(
-                solved
-            )
-            continue
-
-        failed_originals.append(
-            {
-                "slot": rank,
-                "seed": seed,
-                "mip_gap": (
-                    solved.get(
-                        "mip_gap"
-                    )
-                ),
-                "time_optimum": (
-                    solved.get(
-                        "time_optimum"
-                    )
-                ),
-            }
-        )
-
-        replacement_found = False
-        for candidate_idx, distance in (
-            _replacement_candidate_order(
-                descriptors,
-                target_index=(
-                    selected_idx
-                ),
-                excluded_indices=(
-                    used_indices
-                ),
-            )
-        ):
-            used_indices.add(
-                candidate_idx
-            )
-            candidate_row = (
-                candidate_rows[
-                    candidate_idx
-                ]
-            )
-            candidate_seed = int(
-                candidate_row[
-                    "seed"
-                ]
-            )
-
-            print(
-                f"[{rank:03d}/"
-                f"{args.worlds}] "
-                "REPLACEMENT_TRY "
-                f"original={seed} "
-                f"candidate="
-                f"{candidate_seed} "
-                f"descriptor_distance="
-                f"{distance:.6f}",
-                flush=True,
-            )
-
-            candidate_solved, candidate_source = (
-                _solve_scenario_candidate(
-                    candidate_row,
-                    config=config,
-                    worlds_dir=(
-                        worlds_dir
-                    ),
-                    time_limit=(
-                        args.time_limit
-                    ),
-                    retry_time_limit=(
-                        args.retry_time_limit
-                    ),
-                )
-            )
-
-            print(
-                f"[{rank:03d}/"
-                f"{args.worlds}] "
-                f"{candidate_source} "
-                f"replacement_seed="
-                f"{candidate_seed} "
-                f"optimal="
-                f"{candidate_solved.get('optimal')} "
-                f"T*="
-                f"{candidate_solved.get('time_optimum')} "
-                f"gap="
-                f"{candidate_solved.get('mip_gap')}",
-                flush=True,
-            )
-
-            if not bool(
-                candidate_solved.get(
-                    "optimal",
-                    False,
-                )
-            ):
-                continue
-
-            accepted = dict(
-                candidate_solved
-            )
-            accepted[
-                "replacement_for_seed"
-            ] = seed
-            accepted[
-                "replacement_descriptor_distance"
-            ] = distance
-            accepted[
-                "selection_role"
-            ] = "replacement"
-            solved_rows.append(
-                accepted
-            )
-            replacements.append(
-                {
-                    "slot": rank,
-                    "original_seed": seed,
-                    "replacement_seed": (
-                        candidate_seed
-                    ),
-                    "descriptor_distance": (
-                        distance
-                    ),
-                }
-            )
-            print(
-                f"[{rank:03d}/"
-                f"{args.worlds}] "
-                "REPLACEMENT_ACCEPT "
-                f"original={seed} "
-                f"replacement="
-                f"{candidate_seed} "
-                f"distance="
-                f"{distance:.6f}",
-                flush=True,
-            )
-            replacement_found = True
-            break
-
-        if not replacement_found:
             raise RuntimeError(
-                "Scenario bank replacement "
-                "exhausted all unused candidates "
-                f"for failed seed {seed}."
+                "Frozen V1.10 scenario bank requires "
+                "a proven exact optimum for every world. "
+                f"Seed {seed} is not exact."
             )
 
-    if len(solved_rows) != args.worlds:
-        raise RuntimeError(
-            "Scenario bank incomplete after "
-            "automatic replacement: "
-            f"{len(solved_rows)}/"
-            f"{args.worlds}"
-        )
-    if not all(
-        bool(
-            row.get(
-                "optimal",
-                False,
-            )
-        )
-        for row in solved_rows
-    ):
-        raise RuntimeError(
-            "Scenario bank contains a "
-            "non-exact world after replacement."
-        )
+        solved_rows.append(solved)
 
     payload = {
         "version": (
@@ -815,8 +762,24 @@ def build_scenario_bank(
         "selection": {
             "policy_conditioned": False,
             "method": (
-                "standardized_descriptor_"
-                "farthest_point_sampling"
+                "frozen_standardized_descriptor_"
+                "coverage"
+            ),
+            "frozen": True,
+            "freeze_note": (
+                "Slot 2 seed 95000034 was permanently "
+                "replaced by nearest unused candidate "
+                "95000442 after exact MILP failed to "
+                "prove optimality within 300s + 900s."
+            ),
+            "failed_original_seed": (
+                FROZEN_FAILED_ORIGINAL_SEED
+            ),
+            "replacement_seed": (
+                FROZEN_REPLACEMENT_SEED
+            ),
+            "replacement_descriptor_distance": (
+                FROZEN_REPLACEMENT_DESCRIPTOR_DISTANCE
             ),
             "seed_base": (
                 args.seed_base
@@ -827,9 +790,10 @@ def build_scenario_bank(
             "world_count": (
                 args.worlds
             ),
-            "automatic_exact_replacement": True,
-            "failed_originals": failed_originals,
-            "replacements": replacements,
+            "automatic_exact_replacement": False,
+            "frozen_scenario_seeds": list(
+                FROZEN_SCENARIO_SEEDS
+            ),
             "protected_ranges": [
                 "98,000,000-98,000,099",
                 "99,000,000-99,000,099",
