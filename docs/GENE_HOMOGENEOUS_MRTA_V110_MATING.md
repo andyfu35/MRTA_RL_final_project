@@ -234,15 +234,27 @@ R_a(C)
 rac{S_a(C)}{B_a}
 ]
 
-A mating is accepted only when:
+A mating is accepted only under a dual inheritance gate.
+
+For each inherited axis, parent retention must satisfy:
 
 [
-oxed{
-R_a(C)ge0.95
-quad
-orall ain C_C
-}
+R_{parent,a}(C) ge 0.95
 ]
+
+and the child must also remain within 95 percent of the capability ceiling
+frozen at the start of that generation:
+
+[
+R_{ceiling,a}(C)
+=
+rac{S_a(C)}{B_a^{(generation)}}
+ge 0.95
+]
+
+for every inherited capability. This prevents repeated matings from causing
+the multiplicative decay (0.95^n) while still accumulating capability
+labels.
 
 There is no averaging that allows improvement on one capability to compensate
 for losing another.
@@ -297,3 +309,20 @@ pruned for efficiency.
 
 The exact oracle never supplies an action label. It only provides the
 capability ceiling used for external evaluation.
+
+
+## 50-generation pilot
+
+Before the 500-generation long run, V1.10 runs a 50-generation full-scale
+pilot with 128 normal offspring and 128 mating offspring per generation.
+
+The primary structural outcome is:
+
+[
+max_G |C_G^{certified}|
+]
+
+where certification is evaluated against the current capability ceilings.
+The key transition of interest is from three certified capabilities to four
+certified capabilities in one unchanged 148-parameter Direct Assignment
+policy.
