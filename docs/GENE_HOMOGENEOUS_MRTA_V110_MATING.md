@@ -142,6 +142,16 @@ No trained policy score is used when selecting the 100 worlds.
 
 Exact MILP (T^*) is then solved once and cached for all 100 selected worlds.
 
+The development set was frozen after construction. One initially selected
+world, seed 95,000,034, could not prove exact optimality within the solver
+budget (300 s followed by a 900 s retry; final recorded MIP gap about 0.562).
+It was therefore permanently replaced by the nearest unused candidate in the
+same standardized descriptor space, seed 95,000,442. The replacement proved
+exact optimality with MIP gap 0.0. After this one policy-independent solver
+feasibility substitution, the 100-seed list is immutable; later build-bank
+runs only reconstruct/verify that frozen set and do not perform dynamic
+replacement.
+
 Protected ranges:
 
 - 98,000,000-98,000,099: historical V1.8/V1.9 development evidence
@@ -277,7 +287,7 @@ pruned for efficiency.
 
 ## Protocol
 
-1. Build and freeze the 95M diverse 100-world mating bank.
+1. Reconstruct/verify the frozen 95M diverse 100-world mating bank.
 2. Run implementation tests.
 3. Use the latest frozen V1.9 checkpoint as the starting Gene Bank.
 4. Run a short V1.10 smoke.
