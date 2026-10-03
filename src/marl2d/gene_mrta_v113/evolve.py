@@ -16,8 +16,8 @@ from marl2d.gene_mrta_v18.direct_gene import ConsequenceAwareDirectGene
 from marl2d.gene_mrta_v18.global_time_test import _load_v18
 from marl2d.gene_mrta_v113.robust_metrics import evaluate_route_tail_population
 
-from .recombination import OPERATORS, RecombinationResult, offspring_family
-from .scenario_bank import load_scenario_bank
+from marl2d.gene_mrta_v110.recombination import OPERATORS, RecombinationResult, offspring_family
+from marl2d.gene_mrta_v110.scenario_bank import load_scenario_bank
 
 
 AXES = (
