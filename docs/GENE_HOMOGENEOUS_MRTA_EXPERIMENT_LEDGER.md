@@ -1,0 +1,1516 @@
+# Gene Homogeneous MRTA / SEGB Experiment Ledger
+
+Last updated: 2026-10-03
+Repository: andyfu35/MRTA_RL_final_project
+Active branch: experiment/gene-homogeneous-mrta-v1
+Author: 傅獻德 (Hsien-Te Fu)
+
+This file is the long-form experiment ledger for the Gene-based homogeneous MRTA research track.
+It is intended to preserve the complete reasoning chain between conversations.
+
+IMPORTANT FOR ANY NEW AI CONVERSATION:
+1. Read /AI_PROJECT_CONTEXT.md first.
+2. Read this ledger second.
+3. Read the latest version-specific document before changing code.
+4. Do not assume a planned experiment was executed unless this ledger explicitly records a completed result.
+5. Do not inspect the protected 99M final benchmark until the current procedure and candidate are frozen.
+
+---
+
+# 1. Research objective
+
+The research goal is not merely to solve one MRTA instance.
+
+The target is a Self-Evolving Gene Bank style system in which:
+
+- one homogeneous Policy Gene is shared by all robots;
+- multiple independent external capability axes judge behavior;
+- conflicting capabilities are preserved rather than scalarized into one weighted reward;
+- Policy Genes are stored, selected, mutated, recombined, admitted, and pruned by a Gene Bank;
+- the system eventually also evolves how Policy Genes reproduce.
+
+The current long-term architecture is therefore:
+
+Policy Gene Bank
++
+Recombination Gene Bank
+
+The Policy Gene Bank answers:
+
+What allocation behavior should survive?
+
+The Recombination Gene Bank answers:
+
+How should surviving Policy Genes reproduce?
+
+The desired research contribution is a self-improving evolutionary system, not a claim that one universal crossover formula exists for every domain.
+
+---
+
+# 2. Non-negotiable research principles
+
+## 2.1 No weighted scalar capability reward
+
+Capability axes remain independent.
+
+Do not replace the Gene Bank with a weighted score such as:
+
+0.4 * mean_time + 0.3 * tail + ...
+
+Reproductive weights may use worst declared-capability retention, but this is not a weighted scalar reward.
+
+## 2.2 Oracle role
+
+Exact MILP is an external capability reference only.
+
+Canonical statement:
+
+Oracle does not teach the action; it defines the capability ceiling.
+
+The oracle must never provide:
+
+- action labels;
+- imitation targets;
+- assignment demonstrations;
+- online matching decisions.
+
+Multiple assignments may achieve the same optimum. Compare capability value, not assignment identity.
+
+## 2.3 No global world model
+
+The project does not introduce a global learned world model.
+
+Each Policy Gene remains a direct policy parameter vector.
+
+## 2.4 Preserve conflicting skills
+
+The Gene Bank must be capable of retaining specialists and Pareto-conflicting capabilities.
+
+Do not collapse all specialist behavior into a single mandatory generalist.
+
+## 2.5 Protected benchmark discipline
+
+Current data-status rule:
+
+- 95M: development scenario bank used by V1.10 onward.
+- 98M: historical publication-final benchmark for frozen V1.8; after V1.9 failure analysis it became development/diagnostic data.
+- 99M: protected untouched final benchmark for the current research line.
+
+Do not inspect, probe, tune on, or use 99M before the architecture, procedure, and candidate are frozen.
+
+---
+
+# 3. Fixed MRTA environment after V1.6
+
+The current core environment is:
+
+- world: 100 x 100 continuous plane;
+- homogeneous robots R = 4;
+- tasks T = 20;
+- robot speed = 4;
+- task service time Uniform(2, 35);
+- task priority Uniform(0.1, 1.0);
+- soft deadline Uniform(25, 50);
+- episode horizon H = 50;
+- 10 static non-overlapping square obstacles;
+- obstacle side length Uniform(12, 20);
+- obstacle clearance = 4;
+- deterministic 8-connected A*;
+- grid resolution = 5;
+- diagonal corner cutting disabled;
+- battery capacity = 70;
+- initial battery Uniform(35, 70);
+- energy per distance = 1;
+- service time consumes no battery;
+- pair eligibility requires both horizon feasibility and battery feasibility.
+
+Task/robot points are generated in traversable connected space.
+
+Path tables are precomputed for:
+
+- initial robot nodes to tasks;
+- task nodes to tasks.
+
+This allows route-tail planning without rerunning A* during every Gene evaluation.
+
+---
+
+# 4. Core external metrics
+
+## Completion
+
+C = completed_tasks / total_tasks
+
+## Route efficiency
+
+For a completed task:
+
+route_value = 1 - path_distance / path_cost_scale
+
+The normalized episode efficiency counts unfinished tasks as zero.
+
+## Priority satisfaction
+
+P = completed_priority / total_priority
+
+## Deadline satisfaction
+
+D = tasks_completed_before_own_deadline / total_tasks
+
+## Balance
+
+Jain fairness is computed over robot workload.
+
+Balance = Completion * Jain(workload)
+
+## Time utility / time optimality
+
+For a completed task j with finish time F_j:
+
+u_j = 1 - F_j / H
+
+Episode time utility:
+
+T = (1 / N) * sum over completed tasks of u_j
+
+Therefore:
+
+0 <= T <= Completion <= 1
+
+The exact MILP time reference is T*.
+
+The primary time-retention quantity used in later experiments is:
+
+T_G / T*
+
+---
+
+# 5. Version evolution
+
+## V1 - first homogeneous Gene MRTA
+
+Environment:
+
+- no obstacles;
+- no battery;
+- fixed service time;
+- 4 robots, 20 tasks;
+- event-based simulator.
+
+Observation:
+
+- distance;
+- robot load;
+- competition;
+- slack.
+
+Policy:
+
+- four linear weights plus an ineffective shared bias;
+- same Gene shared by all robots;
+- external greedy global matching.
+
+Capabilities:
+
+- completion;
+- efficiency;
+- balance.
+
+Result:
+
+The first run showed a small advantage over a nearest-task heuristic, but exposed calibration confounds.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V1.md
+
+## V1.1 - calibration
+
+Changes:
+
+- removed ineffective shared bias;
+- four effective parameters;
+- corrected competition definition;
+- corrected efficiency loophole;
+- fixed probe worlds;
+- untouched fixed validation worlds;
+- five-seed suite.
+
+Key metric correction:
+
+efficiency = sum(route_value completed) / total_tasks
+
+so unfinished tasks contribute zero and efficiency <= completion.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V11.md
+
+## V1.2 - variable service time
+
+Added:
+
+service_time Uniform(2, 35)
+
+Robot speed calibrated to 4.
+
+Observation became:
+
+- distance;
+- service time;
+- robot workload;
+- competition.
+
+Workload became accumulated travel time + service time.
+
+Result recorded in later version documentation:
+
+V1.2 established that Gene allocation could outperform nearest, shortest-service, and shortest-total-time heuristics under variable service time.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V12.md
+
+## V1.3 - task priority
+
+Added:
+
+priority Uniform(0.1, 1.0)
+
+Observation added priority.
+
+Capabilities became:
+
+- completion;
+- efficiency;
+- priority satisfaction;
+- balance.
+
+No weighted reward.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V13.md
+
+## V1.4 - soft deadline
+
+Added:
+
+deadline Uniform(25, 50)
+
+A late task may still be completed but gets zero deadline credit.
+
+Capabilities:
+
+- completion;
+- efficiency;
+- priority satisfaction;
+- deadline satisfaction;
+- balance.
+
+Observation added deadline remaining.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V14.md
+
+## V1.5 - static obstacles and A*
+
+Added:
+
+- 10 square obstacles;
+- deterministic grid A*;
+- obstacle-aware path cost;
+- precomputed path table.
+
+Observation became seven-dimensional, including both Euclidean distance and A* path distance.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V15.md
+
+## V1.6 - finite battery
+
+Added:
+
+- battery capacity 70;
+- initial battery Uniform(35,70);
+- energy/distance = 1;
+- hard battery feasibility.
+
+Observation became eight-dimensional:
+
+1. Euclidean distance
+2. path distance
+3. service
+4. priority
+5. deadline remaining
+6. battery remaining
+7. workload
+8. competition
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V16.md
+
+## V1.6-T - time capability
+
+Environment unchanged.
+
+Added independent time-optimality axis:
+
+T = (1/N) sum_completed (1 - F_j/H)
+
+Goal:
+
+learn a low-cost Gene whose allocation behavior approaches time-oriented assignment references without receiving oracle actions.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V16T.md
+
+## V1.6-T-O - MILP oracle-guided capability evolution
+
+Added external capability:
+
+global_optimality_retention = mean(T_gene / T_star)
+
+MILP is never used online.
+
+Historical seed namespaces included separate training/probe/held-out regions.
+
+This version still used the linear bidder + external matching path.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V16TO.md
+
+## V1.7 - Direct Assignment
+
+Major architectural change:
+
+remove the external learned-path matcher.
+
+Policy sees the full R x T x 8 tensor.
+
+Autoregressive decoder:
+
+- score robot-task pairs;
+- choose one pair;
+- mask selected robot and selected task;
+- recompute context;
+- learned STOP/WAIT action;
+- zero/subset assignment allowed.
+
+hidden_dim = 8
+parameter count = 116
+
+No Hungarian/greedy matcher is used in deployment.
+
+MILP remains external capability reference only.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V17.md
+
+## V1.7-T - Direct-Time scaling
+
+Controlled time-only scaling of the V1.7 architecture.
+
+Used cached exact T* oracle worlds.
+
+Known result motivating V1.8:
+
+- 64-world oracle probe retention approximately 96.52%;
+- 20-world 97M held-out retention approximately 94.98%.
+
+Failure traces showed that STOP/WAIT was not the main bottleneck.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V17T_SCALE.md
+
+## V1.8 - Consequence-Aware Direct Assignment
+
+Hypothesis:
+
+V1.7 mainly lacked information about assignment consequences, not decoder capacity.
+
+Kept:
+
+- hidden_dim 8;
+- same direct decoder;
+- learned STOP/WAIT.
+
+Observation 8D -> 12D.
+
+Added:
+
+9. self_future_reachability
+10. self_future_best_time_utility
+11. other_robot_opportunity_cost
+12. residual_battery
+
+parameter count:
+
+116 -> 148
+
+Exact lift from V1.7 is possible by zeroing the new input weights.
+
+Frozen V1.8 run:
+
+runs/gene_mrta_v18t_scale/gene_mrta_v18t_scale_20261001_223157_seed7
+
+### V1.8 final 98M benchmark
+
+100/100 worlds were proven MILP-optimal.
+
+V1.8:
+
+- mean = 96.93972395246712%
+- std = 3.6242 percentage points
+- median = 98.1012%
+- minimum = 82.7159%
+- P10 = 91.5574%
+- P25 = 94.6710%
+- max = 100%
+- bootstrap 95% CI of mean = [96.2191%, 97.6318%]
+
+Comparison means:
+
+- V1.7 mean = 96.1490%
+- V1.6-T-O mean = 95.4079%
+- Hungarian mean = 94.1866%
+
+V1.8 paired differences:
+
+versus V1.7:
+- mean +0.79068 percentage points
+- CI95 [+0.1018, +1.5107]
+- W/T/L = 33/43/24
+- Cohen dz = 0.2178
+- Wilcoxon p = 0.0584
+- interpretation: trend / modest improvement, not a strong significance claim.
+
+versus V1.6-T-O:
+- mean +1.53182 percentage points
+- CI95 [+0.7239, +2.3449]
+- Wilcoxon p = 0.0002826
+
+versus Hungarian:
+- mean +2.75313 percentage points
+- CI95 [+1.7854, +3.7466]
+- p approximately 7.19e-7
+
+Exact T* matches:
+
+- V1.8: 34
+- V1.7: 24
+- V1.6-T-O: 18
+- Hungarian: 11
+
+Oracle solve timing:
+
+- mean 27.63 s
+- median 3.69 s
+- max 408.81 s
+
+After this benchmark was finalized, 98M was intentionally reused for V1.9 failure analysis and is no longer untouched for later versions.
+
+Primary documents:
+docs/GENE_HOMOGENEOUS_MRTA_V18.md
+docs/GENE_HOMOGENEOUS_MRTA_V18_PUBLICATION_FREEZE.md
+
+## V1.9 - Failure-derived robust Gene Bank
+
+Bottom-10 analysis of V1.8 on 98M found:
+
+- continuation_collapse: 10/10
+- fleet_reserve_risk: 7/10
+- hard_for_all: 5/10
+- v18_regression_vs_v17: 3/10
+- immediate_future_imbalance: 0/10
+
+Therefore V1.9 retained the same 12D / 148-parameter architecture and introduced four Gene Bank axes:
+
+1. mean_time
+2. hard_world_time
+3. continuation_preservation
+4. fleet_option_reserve
+
+Hard fixed worlds were the V1.8 bottom-10 98M worlds.
+
+Continuation:
+
+C_t = clip((U_t + O_after) / O_before, 0, 1)
+
+Fleet reserve:
+
+For remaining task j with feasible owner count d_j:
+
+q_j = min(d_j,2)/2
+
+Q = (1/N) sum_j q_j
+
+The episode reserve axis measures retention of future multi-robot task feasibility.
+
+Result:
+
+Specialists could be discovered, but independent specialist archives did not naturally fuse into one strong generalist.
+
+This identified the next bottleneck:
+
+specialist-to-generalist capability fusion.
+
+Primary documents:
+docs/GENE_HOMOGENEOUS_MRTA_V19_FAILURE_PROTOCOL.md
+docs/GENE_HOMOGENEOUS_MRTA_V19_ROBUST_BANK.md
+
+## V1.10 - Evolutionary Mating
+
+Goal:
+
+explicitly add mating alongside ordinary mutation to fuse capability specialists.
+
+Policy unchanged:
+
+- 12D;
+- hidden 8;
+- 148 parameters;
+- direct assignment;
+- learned STOP/WAIT.
+
+### Frozen development scenario bank
+
+Dedicated 95M namespace.
+
+Procedure:
+
+- 500 candidate worlds;
+- policy-independent descriptors;
+- standardized farthest-point sampling;
+- select 100 diverse worlds;
+- exact MILP T* cached.
+
+One selected world, seed 95000034, failed exact proof after 900 seconds and was removed.
+
+Descriptor-nearest unused replacement:
+
+seed 95000442
+
+Frozen bank version:
+
+v110_diverse_100_v2_frozen
+
+No 98M/99M seeds included.
+
+### Population
+
+Per generation:
+
+128 normal mutation
++
+128 mating
+=
+256 children
+
+Normal parent pressure:
+
+P proportional to Q^2
+
+Mating parent pressure:
+
+P proportional to Q^10
+
+with 5% uniform exploration.
+
+Quality for declared capability set C_G:
+
+Q(G) = min over a in C_G of S_a(G)/B_a
+
+clipped to [0,1].
+
+### Recombination operators
+
+Six hand-designed operators:
+
+1. parameter_blend
+2. block_pick
+3. block_blend
+4. ancestor_delta
+5. ties_delta
+6. dare_delta
+
+Four children are produced per parent pair, using four distinct operators in that family.
+
+Mating-child mutation was disabled in the first pilot.
+
+### Inheritance gate
+
+Required child capabilities:
+
+C_C = C_A union C_B
+
+Full admission requires, for every required axis:
+
+parent retention >= 0.95
+and
+current generation ceiling retention >= 0.95
+
+This prevents repeated 95%-of-parent decay.
+
+### Certification
+
+Declared capability labels are separate from current certification.
+
+A declared capability a is currently certified only when:
+
+S_a(G)/B_a_current >= 0.95
+
+Success is measured by certified capability count, not tag count.
+
+### V1.10 Pilot50 result
+
+Run:
+
+runs/gene_mrta_v110_mating/gene_mrta_v110_mating_20261003_163423_seed7
+
+Gen 0:
+
+- Bank 57
+- hybrid 16
+- accepted 16
+- max certified capability count 2
+- mean 0.9741
+- tail 0.8993
+- continuation 0.7737
+- reserve 0.8309
+
+Gen 1:
+
+- first certified 3-cap hybrid.
+
+Gen 2:
+
+- first certified 4-cap hybrid.
+- two notable accepted four-cap children:
+  - a7ad33c888c271b5936e by parameter_blend
+  - c54074219e136ee775a4 by ties_delta
+
+Certified four-capability status persisted afterward.
+
+Final Gen 49:
+
+- mean_time = 0.9779050005301373
+- tail10_time = 0.9143206459612623
+- continuation_preservation = 0.7785539293423699
+- fleet_option_reserve = 0.83879703612327
+- certified capability count = 4
+
+Operator funnel over 6400 generated mating children:
+
+parameter_blend:
+- generated 1075
+- selected 175
+- accepted 174
+- generated-to-accepted = 0.1618604651
+
+block_pick:
+- 1068 / 154 / 152
+- acceptance = 0.1423220974
+
+block_blend:
+- 1059 / 198 / 198
+- acceptance = 0.1869688385
+
+ancestor_delta:
+- 1050 / 80 / 77
+- acceptance = 0.0733333333
+
+ties_delta:
+- 1082 / 142 / 141
+- acceptance = 0.1303142329
+
+dare_delta:
+- 1066 / 51 / 49
+- acceptance = 0.0459662289
+
+Do not claim one operator is universally superior from this single seed.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V110_MATING.md
+
+## V1.11 - Empirical Recombination Law Discovery
+
+Goal:
+
+use recombination outcomes to search for an interpretable mixing law.
+
+This version searches coefficients inside a manually defined symmetric law family.
+
+For functional group k:
+
+Delta_A^(k) = theta_A^(k) - theta_0^(k)
+Delta_B^(k) = theta_B^(k) - theta_0^(k)
+
+Parent contribution:
+
+alpha_k = sigmoid(
+    beta_r * r_k
+    + beta_q * (Q_A-Q_B)
+    + beta_h * ((H_A-H_B)/4)
+)
+
+Scale:
+
+eta_k = 0.5 + sigmoid(
+    gamma_0
+    + gamma_c * c_k
+    + gamma_s * s_k
+    + gamma_m * m_k
+)
+
+Child:
+
+theta_C^(k)
+=
+theta_0^(k)
++
+eta_k [
+    alpha_k Delta_A^(k)
+    + (1-alpha_k) Delta_B^(k)
+]
+
+Seven coefficients:
+
+- beta_norm_ratio
+- beta_quality_diff
+- beta_capability_diff
+- gamma_bias
+- gamma_cosine
+- gamma_sign_agreement
+- gamma_magnitude
+
+The law is parent-swap symmetric.
+
+### V1.11 smoke
+
+Tests passed.
+
+Smoke setup:
+
+- 6 discovery pairs
+- 8 laws
+- 10 development worlds
+- 2 held-out parent pairs
+- full100 held-out evaluation.
+
+Selected law_006:
+
+beta_norm_ratio = 2.0523582511733975
+beta_quality_diff = -0.3926412285036207
+beta_capability_diff = 2.7181892936803624
+gamma_bias = -1.1873306270250525
+gamma_cosine = -0.6100233703361213
+gamma_sign_agreement = -2.1270340653846125
+gamma_magnitude = 1.322449589266319
+
+Discovery:
+
+- success rate = 1.0
+- mean min dual retention = 0.9768225
+- P10 = 0.96701277
+
+Held-out n = 2:
+
+Discovered law:
+- acceptance = 1.0
+- mean min dual retention = 0.9714228940
+
+Block blend:
+- 0.9658875747
+
+Parameter blend:
+- 0.9670835221
+
+TIES:
+- 0.9616134773
+
+Paired min-retention delta of discovered law:
+
+- vs block blend: +0.0055353194, 2W/0T/0L
+- vs parameter blend: +0.0043393719, 2W/0T/0L
+- vs TIES: +0.0098094168, 2W/0T/0L
+
+This smoke was too small for statistical claims and had no four-capability parent pairs.
+
+V1.11 conclusion:
+
+useful proof that recombination can be parameterized and empirically searched, but not a universal formula discovery.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V111_LAW_DISCOVERY.md
+
+## V1.12
+
+V1.12 was conceptually reserved for self-evolving recombination.
+
+It was not used as the final implementation version number because route-tail multi-task assignment became the next implemented architectural change.
+
+Do not assume a completed V1.12 experiment exists.
+
+## V1.13 - Route-Tail Multi-Task Assignment
+
+Research requirement changed:
+
+each robot must be able to receive multiple ordered tasks in one planning call.
+
+Old direct assignment behavior:
+
+once robot i received one task in the current autoregressive round, robot row i was masked.
+
+V1.13 change:
+
+- do not mask selected robot row;
+- only close the selected task column;
+- update that robot's virtual route tail;
+- recompute observations;
+- the same robot may be selected again.
+
+Per robot virtual state:
+
+- tail_node
+- tail_position
+- tail_time
+- battery_remaining
+- workload
+
+If task j is appended:
+
+tail_time_i
+=
+tail_time_i
++
+path(tail_i,j)/speed
++
+service_j
+
+battery_i
+=
+battery_i
+-
+path(tail_i,j) * energy_per_distance
+
+The next task candidate is evaluated from the end of the already planned route.
+
+The 12D observation and 148 parameters remain unchanged.
+
+Decoder step normalization changed from robot count to task count because up to T tasks may be selected in one planning call.
+
+Current scope:
+
+append-only route planning.
+
+Arbitrary insertion into the middle of an existing queue is not implemented.
+
+### V1.13 structural smoke
+
+Tests:
+
+9 passed.
+
+V1.10 four-capability source Gene:
+
+4b47774f9cfebff5c594
+
+Zero-shot route-tail smoke on five frozen 95M worlds:
+
+World seed 95000284:
+- routes = ((1,), (10,4,16), (6,9), (18,))
+- lengths = [1,3,2,1]
+- completed = 7
+- T = 0.190214
+
+95000442:
+- routes = ((6,12), (8,19), (3,9), (14,15,13))
+- lengths = [2,2,2,3]
+- completed = 9
+- T = 0.249890
+
+95000291:
+- completed = 5
+- max queue depth = 2
+
+95000377:
+- completed = 7
+- max queue depth = 3
+
+95000263:
+- completed = 9
+- max queue depth = 3
+
+All five worlds had at least one multi-task robot.
+
+Total assigned tasks = 37.
+
+This proved the new semantics worked before retraining.
+
+### V1.13 Route-Tail Evolution Pilot50
+
+Warm-start:
+
+V1.10 Policy parameters.
+
+Important semantic reset:
+
+old V1.10 capability labels/scores were not trusted after changing route semantics.
+All warm-start Genes were re-evaluated on the 100 frozen worlds before V1.13 archive construction.
+
+Same four capability axes:
+
+- mean_time
+- tail10_time
+- continuation_preservation
+- fleet_option_reserve
+
+Pilot50 result:
+
+Gen 0:
+- mean = 0.9680
+- tail10 = 0.8862
+- continuation = 0.8303
+- reserve = 0.8670
+- qmean = 1.85
+- qmax = 2.80
+- multi = 1.00
+- certified capability count = 3
+
+Gen 1:
+- certified capability count = 4
+
+Four-capability certification then persisted through Gen49.
+
+Final Gen49:
+
+- mean_time = 0.977920253212843
+- tail10_time = 0.9262063481487696
+- continuation_preservation = 0.8328325738169616
+- fleet_option_reserve = 0.8757350433050963
+
+Improvement from Gen0:
+
+- mean: about +0.99 percentage points
+- tail10: about +4.00 percentage points
+- continuation: about +0.25 percentage points
+- reserve: about +0.87 percentage points
+
+Queue behavior remained stable:
+
+- qmean about 1.82
+- qmax about 2.70
+- multi = 1.00
+
+Interpretation:
+
+performance improvement did not come from simply making queues longer.
+The stronger evidence is improved assignment / task ordering while multi-task behavior remained stable.
+
+V1.13 result status:
+
+Route-Tail Multi-Task Architecture = PASS on the 95M development distribution.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V113_ROUTE_TAIL.md
+
+## V1.14 - Self-Evolving Recombination Gene Bank
+
+Goal:
+
+evolve how Policy Genes mate.
+
+Two populations:
+
+1. Policy Gene Bank
+2. Recombination Gene Bank
+
+Recombination genotype:
+
+- seven continuous coefficients;
+- seven binary feature gates;
+- one self-adaptive mutation sigma.
+
+A gate removes a term from the formula.
+
+Rule mutation:
+
+sigma_R' = clip(sigma_R * exp(N(0,tau)))
+
+and coefficients mutate with N(0,sigma_R').
+
+Recombination capability axes:
+
+1. screen_yield
+2. acceptance_yield
+3. retention_quality
+4. four_capability_yield
+
+No weighted mating reward.
+
+### V1.14 tests and smoke
+
+15 tests passed.
+
+Three-generation smoke completed.
+
+### V1.14 Pilot50
+
+Started from the completed V1.13 Policy Bank.
+
+Gen0:
+
+- Policy bank 187
+- Recombination bank 32
+- certified capability count 4
+- mean 0.9779
+- tail10 0.9262
+- continuation 0.8328
+- reserve 0.8757
+
+Final Gen49:
+
+- mean_time = 0.9799838029221177
+- tail10_time = 0.9262063481487696
+- continuation_preservation = 0.8336073765542017
+- fleet_option_reserve = 0.8760983169402837
+- certified capability count = 4
+- multi = 1.00
+
+Final specialists:
+
+- screen_yield: 2292dcab9d5e0e727004
+- acceptance_yield: 2292dcab9d5e0e727004
+- retention_quality: 90fce80ad0b13e05b820
+- four_capability_yield: 2292dcab9d5e0e727004
+
+Final Pareto size = 4.
+
+Run:
+
+runs/gene_mrta_v114_self_recombination/gene_mrta_v114_self_recombination_20261003_214207_seed7
+
+### V1.14 critical finding
+
+The most-used / most-accepted rule remained an all-gates-off center law for almost the entire run:
+
+Rterms = 0
+
+For the center law:
+
+alpha = 0.5
+eta = 1
+
+so:
+
+theta_C
+=
+theta_0
++
+0.5 Delta_A
++
+0.5 Delta_B
+
+By Gen49 the repeatedly logged center rule had:
+
+54 accepted / 295 generated
+
+about 18.3%.
+
+This is not automatically evidence that the center law is truly optimal.
+
+Two confounds were identified:
+
+1. neutral center-law clones:
+   disabled coefficients and mutation sigma could produce different Gene IDs while the actual formula was identical;
+
+2. small-sample specialist bias:
+   a rule with a few lucky outcomes could outrank a mature rule using point-estimate yield.
+
+Therefore:
+
+System-level Recombination Gene Bank = PASS.
+
+Autonomous mating-law discovery = NOT YET PASS.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V114_SELF_EVOLVING_RECOMBINATION.md
+
+## V1.14.1 - Phenotype-Canonical, Evidence-Aware Recombination
+
+STATUS AS OF 2026-10-03:
+
+IMPLEMENTED, NOT YET EXPERIMENTALLY RUN.
+
+Do not report V1.14.1 paired-smoke or paired50 results until actual terminal output is provided.
+
+Purpose:
+
+fix V1.14 confounds before making a claim about autonomous mating-law discovery.
+
+### Fix 1: phenotype canonicalization
+
+If gate g_i = 0:
+
+the corresponding coefficient is forced to exactly zero.
+
+Bank identity uses only:
+
+- canonical effective coefficients;
+- gates.
+
+mutation_sigma is excluded from phenotype identity.
+
+Therefore equivalent formulas cannot occupy multiple bank slots.
+
+The center law can occupy at most one phenotype slot.
+
+A separate genotype_fingerprint still records mutation sigma differences for diagnostics.
+
+### Fix 2: correct formula display
+
+Actual implementation uses:
+
+(H_A - H_B) / 4
+
+V1.14.1 prints this normalization explicitly.
+
+### Fix 3: evidence-aware rule ranking
+
+Mature rule ranking uses a lower posterior quantile rather than a point estimate.
+
+Default quantile:
+
+q = 0.10
+
+Examples:
+
+screen yield posterior:
+Beta(1 + selected, 3 + generated - selected)
+
+acceptance yield:
+Beta(1 + accepted, 9 + generated - accepted)
+
+four-capability yield:
+Beta(0.5 + accepted_4cap, 9.5 + generated - accepted_4cap)
+
+Retention is handled as a bounded fractional-success process.
+
+### Fix 4: minimum evidence
+
+Formal specialist requirement:
+
+generated >= 32
+
+Immature rules remain provisional and may still be explored.
+
+### Fix 5: exploration reserve
+
+Formal adaptive bank:
+
+- bank limit 32
+- exploration slots 8
+- specialist size per axis 6
+- Pareto limit 12
+- uniform rule exploration 25%
+
+### Fix 6: separate random streams
+
+policy_rng = seed
+
+rule_rng = seed + 114100003
+
+This prevents adaptive rule mutation from merely shifting the normal Policy mutation random stream.
+
+### Fix 7: paired control
+
+Two conditions start from the exact same V1.13 checkpoint.
+
+Adaptive:
+Policy mutation + self-evolving Recombination Gene Bank.
+
+Center:
+Policy mutation + fixed all-gates-off center law.
+
+Both use:
+
+- same Policy architecture;
+- same Policy parameter count 148;
+- same 95M worlds;
+- same Policy mutation schedule;
+- same number of normal children;
+- same number of mating children;
+- same parent selection;
+- same seed.
+
+Comparison is per Policy axis only:
+
+Adaptive minus Center for:
+
+- mean_time
+- tail10_time
+- continuation_preservation
+- fleet_option_reserve
+
+No weighted aggregate comparison is created.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V1141_RECOMBINATION_CORRECTION.md
+
+---
+
+# 6. Current code architecture
+
+Current Policy architecture:
+
+- pair observation: 12 dimensions;
+- hidden_dim = 8;
+- parameters = 148;
+- shared homogeneous Policy Gene;
+- autoregressive direct robot-task selection;
+- learned STOP/WAIT;
+- route-tail append semantics;
+- one robot may receive multiple ordered tasks in a single planning call;
+- no external matcher;
+- no oracle action labels.
+
+Current Recombination architecture in V1.14.1:
+
+- seven continuous equation coefficients;
+- seven binary structural gates;
+- one self-adaptive sigma;
+- phenotype canonicalization;
+- evidence-aware posterior lower-bound selection;
+- mature specialist threshold;
+- Pareto preservation;
+- provisional exploration slots;
+- adaptive versus center-only paired control.
+
+---
+
+# 7. Important run directories
+
+Frozen V1.8:
+
+runs/gene_mrta_v18t_scale/gene_mrta_v18t_scale_20261001_223157_seed7
+
+Completed V1.10:
+
+runs/gene_mrta_v110_mating/gene_mrta_v110_mating_20261003_163423_seed7
+
+Completed V1.13:
+
+runs/gene_mrta_v113_route_tail_evolution/gene_mrta_v113_route_tail_20261003_203157_seed7
+
+Completed V1.14:
+
+runs/gene_mrta_v114_self_recombination/gene_mrta_v114_self_recombination_20261003_214207_seed7
+
+Current V1.14.1 paired output root when run with seed 7:
+
+runs/gene_mrta_v1141_paired_seed7/
+
+Expected files after paired50:
+
+adaptive/.../summary.json
+center/.../summary.json
+comparison_50.json
+
+---
+
+# 8. Current commands
+
+Before running any V1.14.1 experiment:
+
+git pull
+
+Tests:
+
+bash tools/run_gene_mrta_v1141_paired_mac.sh tests
+
+Paired structural smoke:
+
+bash tools/run_gene_mrta_v1141_paired_mac.sh paired-smoke
+
+Only if paired-smoke is structurally correct:
+
+bash tools/run_gene_mrta_v1141_paired_mac.sh paired50
+
+Expected adaptive smoke invariants:
+
+Rcenter <= 1
+
+Expected center-only invariants:
+
+Rbank = 1
+Rcenter = 1
+
+Formal V1.14.1 pilot invariants:
+
+- 99M untouched;
+- same V1.13 checkpoint in both arms;
+- same Policy seed;
+- separate policy_rng/rule_rng;
+- same Policy mutation budget;
+- no scalarized Policy or recombination reward.
+
+---
+
+# 9. Current unanswered scientific question
+
+The immediate question is now:
+
+Does an adaptive, phenotype-canonical, evidence-aware Recombination Gene Bank outperform a fixed center-law control when both receive the same Policy evolution budget?
+
+This must be answered before expanding the recombination formula grammar.
+
+Do not jump directly to symbolic expression trees before this controlled question is resolved.
+
+---
+
+# 10. Planned interpretation after V1.14.1 paired50
+
+For each Policy axis compute:
+
+Delta_a
+=
+S_a(adaptive)
+-
+S_a(center)
+
+Inspect:
+
+- mean_time
+- tail10_time
+- continuation_preservation
+- fleet_option_reserve
+
+Also inspect the adaptive mature Recombination specialists:
+
+- phenotype_id;
+- active term count;
+- gates;
+- effective coefficients;
+- mutation sigma;
+- generated trials;
+- screen selections;
+- accepted children;
+- four-capability accepted children;
+- posterior lower-bound evidence score;
+- complete equation.
+
+Single-seed positive differences are descriptive only.
+
+If promising:
+
+1. repeat paired experiment across multiple fixed seeds;
+2. keep the protocol frozen;
+3. create/use an independent 96M development-validation bank;
+4. only after procedure/candidate freeze evaluate 99M once.
+
+---
+
+# 11. Known pitfalls
+
+## Pitfall A: capability tag drift
+
+Declared capability labels are not proof of current capability.
+
+Always report current certification relative to current active ceiling.
+
+## Pitfall B: parent-relative decay
+
+Do not admit a child merely because it retains 95% of a weaker parent.
+
+V1.10+ dual gate requires both parent retention and generation-ceiling retention.
+
+## Pitfall C: operator statistics
+
+Generated -> accepted is different from selected -> accepted.
+
+Do not confuse screen effectiveness with raw operator quality.
+
+## Pitfall D: center-law neutral clones
+
+Fixed in V1.14.1 through phenotype canonicalization.
+
+## Pitfall E: lucky low-n specialists
+
+Fixed in V1.14.1 through:
+
+- minimum evidence threshold;
+- posterior lower-bound scoring.
+
+## Pitfall F: RNG contamination in paired controls
+
+Fixed in V1.14.1 by separating policy_rng and rule_rng.
+
+## Pitfall G: route length as fake improvement
+
+Queue depth is diagnostic only.
+
+V1.13 improvement was valuable because mean/tail improved while qmean/qmax remained approximately stable.
+
+## Pitfall H: final benchmark contamination
+
+Never inspect 99M during development.
+
+---
+
+# 12. Version-specific source locations
+
+Policy / environment history:
+
+src/marl2d/gene_mrta_v16t/
+src/marl2d/gene_mrta_v17/
+src/marl2d/gene_mrta_v18/
+src/marl2d/gene_mrta_v19/
+
+Mating:
+
+src/marl2d/gene_mrta_v110/
+
+Law discovery:
+
+src/marl2d/gene_mrta_v111/
+
+Route-tail multi-task:
+
+src/marl2d/gene_mrta_v113/
+
+First self-evolving recombination:
+
+src/marl2d/gene_mrta_v114/
+
+Current corrected self-evolving recombination:
+
+src/marl2d/gene_mrta_v1141/
+
+Current paired launcher:
+
+tools/run_gene_mrta_v1141_paired_mac.sh
+
+---
+
+# 13. Handoff checklist for a new conversation
+
+A new conversation should be able to continue the experiment if it knows only this repository.
+
+Before modifying code:
+
+1. Read AI_PROJECT_CONTEXT.md.
+2. Read this ledger.
+3. Read docs/GENE_HOMOGENEOUS_MRTA_V1141_RECOMBINATION_CORRECTION.md.
+4. Check the active branch is experiment/gene-homogeneous-mrta-v1.
+5. Check whether V1.14.1 paired-smoke has actually been run.
+6. If no terminal output exists, do not claim it passed.
+7. If paired-smoke passes, analyze invariants before paired50.
+8. If paired50 completes, record all results back into this ledger and AI_PROJECT_CONTEXT.md before starting a new version.
+9. Never use 99M during this development step.
+
+This documentation update rule is now part of the experimental workflow:
+
+Every completed experiment or architecture-changing decision must update:
+
+- AI_PROJECT_CONTEXT.md
+- docs/GENE_HOMOGENEOUS_MRTA_EXPERIMENT_LEDGER.md
+- the relevant version-specific document
+
+before beginning the next experimental version.
