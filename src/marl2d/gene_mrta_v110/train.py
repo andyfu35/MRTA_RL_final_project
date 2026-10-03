@@ -889,6 +889,28 @@ def _passes_inheritance_gate(
     )
 
 
+def _certified_capabilities(
+    record: GeneRecord,
+    capability_ceiling: dict[str, float],
+    *,
+    threshold: float,
+) -> tuple[str, ...]:
+    return tuple(
+        axis
+        for axis in record.capabilities
+        if (
+            float(record.scores[axis])
+            / max(
+                float(
+                    capability_ceiling[axis]
+                ),
+                1e-12,
+            )
+        )
+        >= threshold
+    )
+
+
 def _top_mating_full_indices(
     children: list[MatingChild],
     screen_scores: dict[str, np.ndarray],
@@ -1726,7 +1748,7 @@ def train(
             ].origin
             == "mating"
         ]
-        max_capability_count = max(
+        max_declared_capability_count = max(
             (
                 len(
                     records[
@@ -1737,6 +1759,49 @@ def train(
                 in active_ids
             ),
             default=1,
+        )
+        certified_by_id = {
+            record_id: _certified_capabilities(
+                records[record_id],
+                best,
+                threshold=(
+                    args.inheritance_threshold
+                ),
+            )
+            for record_id in active_ids
+        }
+        max_certified_capability_count = max(
+            (
+                len(
+                    certified_by_id[
+                        record_id
+                    ]
+                )
+                for record_id
+                in active_ids
+            ),
+            default=0,
+        )
+        best_certified_record_id = max(
+            active_ids,
+            key=lambda record_id: (
+                len(
+                    certified_by_id[
+                        record_id
+                    ]
+                ),
+                _quality_weight(
+                    records[
+                        record_id
+                    ],
+                    best,
+                ),
+            ),
+        )
+        best_certified_caps = (
+            certified_by_id[
+                best_certified_record_id
+            ]
         )
 
         row: dict[str, object] = {
@@ -1753,8 +1818,19 @@ def train(
             "mating_accepted": (
                 len(admitted_mating)
             ),
-            "max_capability_count": (
-                max_capability_count
+            "max_declared_capability_count": (
+                max_declared_capability_count
+            ),
+            "max_certified_capability_count": (
+                max_certified_capability_count
+            ),
+            "best_certified_record_id": (
+                best_certified_record_id
+            ),
+            "best_certified_capabilities": (
+                ",".join(
+                    best_certified_caps
+                )
             ),
             "mutation_sigma": sigma,
         }
@@ -1838,7 +1914,10 @@ def train(
                 f"bank={len(active_ids)} "
                 f"hybrid={len(hybrid_active)} "
                 f"accepted={len(admitted_mating)} "
-                f"caps={max_capability_count} "
+                f"declared_caps="
+                f"{max_declared_capability_count} "
+                f"certified_caps="
+                f"{max_certified_capability_count} "
                 f"mean={best['mean_time']:.4f} "
                 f"tail10={best['tail10_time']:.4f} "
                 f"cont={best['continuation_preservation']:.4f} "
@@ -2019,10 +2098,37 @@ def train(
             best_global
         ),
         "best_hybrids": [
-            record.to_dict()
+            {
+                **record.to_dict(),
+                "certified_capabilities_current": list(
+                    _certified_capabilities(
+                        record,
+                        best,
+                        threshold=(
+                            args.inheritance_threshold
+                        ),
+                    )
+                ),
+            }
             for record
             in best_hybrids[:20]
         ],
+        "max_certified_capability_count": max(
+            (
+                len(
+                    _certified_capabilities(
+                        records[record_id],
+                        best,
+                        threshold=(
+                            args.inheritance_threshold
+                        ),
+                    )
+                )
+                for record_id
+                in active_ids
+            ),
+            default=0,
+        ),
         "operator_generated": (
             operator_generated
         ),
