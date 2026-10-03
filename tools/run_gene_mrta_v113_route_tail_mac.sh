@@ -42,6 +42,11 @@ fi
 
 echo "V110_CHECKPOINT=$V110_CHECKPOINT"
 
+if [[ "$MODE" != "smoke" && ! -f "$V18_RUN/summary.json" ]]; then
+  echo "Missing V1.8 common ancestor: $V18_RUN/summary.json" >&2
+  exit 2
+fi
+
 if [[ "$MODE" == "smoke" ]]; then
   python -m marl2d.gene_mrta_v113.smoke \
     --scenario-bank "$SCENARIO_BANK" \
