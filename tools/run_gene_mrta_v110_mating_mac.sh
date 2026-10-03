@@ -51,6 +51,9 @@ fi
 if [[ "$MODE" == "smoke" ]]; then
   python -m marl2d.gene_mrta_v110.train     --scenario-bank "$SCENARIO_BANK"     --bootstrap-v19-checkpoint "$V19_CHECKPOINT"     --anchor-v18-run "$V18_RUN"     --generations 5     --normal-offspring 16     --mating-offspring 16     --mating-pairs 4     --children-per-pair 4     --screen-worlds 25     --normal-full-per-axis 1     --mating-full-candidates 4     --archive-size-per-axis 4     --hybrid-bank-limit 16     --mating-q-power 10     --inheritance-threshold 0.95     --mutation-sigma-start 0.03     --mutation-sigma-end 0.02     --checkpoint-every 1     --log-every 1     --seed 7
 
+elif [[ "$MODE" == "pilot50" ]]; then
+  python -m marl2d.gene_mrta_v110.train     --scenario-bank "$SCENARIO_BANK"     --bootstrap-v19-checkpoint "$V19_CHECKPOINT"     --anchor-v18-run "$V18_RUN"     --generations 50     --normal-offspring 128     --mating-offspring 128     --mating-pairs 32     --children-per-pair 4     --screen-worlds 25     --normal-full-per-axis 4     --mating-full-candidates 16     --archive-size-per-axis 16     --hybrid-bank-limit 128     --mating-q-power 10     --inheritance-threshold 0.95     --mutation-sigma-start 0.08     --mutation-sigma-end 0.02     --mating-mutation-sigma 0     --checkpoint-every 5     --log-every 1     --seed 7
+
 elif [[ "$MODE" == "long" ]]; then
   python -m marl2d.gene_mrta_v110.train     --scenario-bank "$SCENARIO_BANK"     --bootstrap-v19-checkpoint "$V19_CHECKPOINT"     --anchor-v18-run "$V18_RUN"     --generations 500     --normal-offspring 128     --mating-offspring 128     --mating-pairs 32     --children-per-pair 4     --screen-worlds 25     --normal-full-per-axis 4     --mating-full-candidates 16     --archive-size-per-axis 16     --hybrid-bank-limit 128     --mating-q-power 10     --inheritance-threshold 0.95     --mutation-sigma-start 0.08     --mutation-sigma-end 0.01     --mating-mutation-sigma 0     --checkpoint-every 10     --log-every 5     --seed 7
 
@@ -63,6 +66,6 @@ elif [[ "$MODE" == "resume" ]]; then
   python -m marl2d.gene_mrta_v110.train     --scenario-bank "$SCENARIO_BANK"     --bootstrap-v19-checkpoint "$V19_CHECKPOINT"     --anchor-v18-run "$V18_RUN"     --resume "$CHECKPOINT"     --generations 500     --normal-offspring 128     --mating-offspring 128     --mating-pairs 32     --children-per-pair 4     --screen-worlds 25     --normal-full-per-axis 4     --mating-full-candidates 16     --archive-size-per-axis 16     --hybrid-bank-limit 128     --mating-q-power 10     --inheritance-threshold 0.95     --mutation-sigma-start 0.08     --mutation-sigma-end 0.01     --mating-mutation-sigma 0     --checkpoint-every 10     --log-every 5     --seed 7
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v110_mating_mac.sh [tests|build-bank|smoke|long|resume <checkpoint.json>]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v110_mating_mac.sh [tests|build-bank|smoke|pilot50|long|resume <checkpoint.json>]" >&2
   exit 2
 fi
