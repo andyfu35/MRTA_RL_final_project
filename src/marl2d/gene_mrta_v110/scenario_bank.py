@@ -305,6 +305,164 @@ def _validate_seed_range(
             )
 
 
+
+def _solve_scenario_candidate(
+    row: dict[str, object],
+    *,
+    config: EnvConfig,
+    worlds_dir: Path,
+    time_limit: float,
+    retry_time_limit: float,
+) -> tuple[dict[str, object], str]:
+    seed = int(row["seed"])
+    world_file = (
+        worlds_dir
+        / f"world_{seed}.json"
+    )
+
+    cached = None
+    if world_file.exists():
+        try:
+            cached = json.loads(
+                world_file.read_text(
+                    encoding="utf-8"
+                )
+            )
+        except json.JSONDecodeError:
+            cached = None
+
+    if cached is not None:
+        if bool(
+            cached.get(
+                "optimal",
+                False,
+            )
+        ):
+            return cached, "CACHED"
+
+        # A previous full solve already failed to prove exact optimality.
+        # Do not burn the same 300+900 second budget again on reruns.
+        if int(
+            cached.get(
+                "oracle_attempts",
+                0,
+            )
+        ) >= 2:
+            return cached, "KNOWN_FAILED"
+
+    world = generate_world(
+        config,
+        seed,
+    )
+    print(
+        f"SOLVING seed={seed} "
+        f"limit={time_limit:g}s",
+        flush=True,
+    )
+    oracle = solve_global_time_optimum(
+        world,
+        config,
+        time_limit=time_limit,
+    )
+    attempts = 1
+
+    if (
+        not oracle.optimal
+        and retry_time_limit
+        > time_limit
+    ):
+        print(
+            f"RETRY seed={seed} "
+            f"limit={retry_time_limit:g}s",
+            flush=True,
+        )
+        oracle = solve_global_time_optimum(
+            world,
+            config,
+            time_limit=retry_time_limit,
+        )
+        attempts = 2
+
+    solved = {
+        "seed": seed,
+        "descriptor": row["descriptor"],
+        "time_optimum": (
+            oracle.time_optimality
+        ),
+        "optimal": bool(
+            oracle.optimal
+        ),
+        "mip_gap": oracle.mip_gap,
+        "solve_seconds": (
+            oracle.solve_seconds
+        ),
+        "oracle_attempts": attempts,
+    }
+    _atomic_json(
+        world_file,
+        solved,
+    )
+    return solved, "NEW"
+
+
+def _standardized_descriptors(
+    descriptors: np.ndarray,
+) -> np.ndarray:
+    x = np.asarray(
+        descriptors,
+        dtype=np.float64,
+    )
+    mean = np.mean(
+        x,
+        axis=0,
+    )
+    std = np.std(
+        x,
+        axis=0,
+    )
+    return (
+        x - mean[None, :]
+    ) / np.maximum(
+        std[None, :],
+        1e-12,
+    )
+
+
+def _replacement_candidate_order(
+    descriptors: np.ndarray,
+    *,
+    target_index: int,
+    excluded_indices: set[int],
+) -> list[tuple[int, float]]:
+    z = _standardized_descriptors(
+        descriptors
+    )
+    distances = np.linalg.norm(
+        z - z[target_index][None, :],
+        axis=1,
+    )
+
+    candidates = [
+        (
+            idx,
+            float(
+                distances[idx]
+            ),
+        )
+        for idx in range(
+            z.shape[0]
+        )
+        if idx not in excluded_indices
+    ]
+    candidates.sort(
+        key=lambda item: (
+            item[1],
+            item[0],
+        )
+    )
+    return candidates
+
+
 def build_scenario_bank(
     args: argparse.Namespace,
 ) -> Path:
@@ -414,103 +572,55 @@ def build_scenario_bank(
         for idx in selected_ids
     ]
 
+    selected_index_set = {
+        int(idx)
+        for idx in selected_ids
+    }
+    used_indices = set(
+        selected_index_set
+    )
+    failed_originals: list[
+        dict[str, object]
+    ] = []
+    replacements: list[
+        dict[str, object]
+    ] = []
+
     solved_rows: list[
         dict[str, object]
     ] = []
 
-    for rank, row in enumerate(
-        selected_rows,
+    for rank, (
+        selected_idx,
+        row,
+    ) in enumerate(
+        zip(
+            selected_ids,
+            selected_rows,
+        ),
         start=1,
     ):
-        seed = int(row["seed"])
-        world_file = (
-            worlds_dir
-            / f"world_{seed}.json"
+        selected_idx = int(
+            selected_idx
+        )
+        seed = int(
+            row["seed"]
         )
 
-        cached = None
-        if world_file.exists():
-            try:
-                cached = json.loads(
-                    world_file.read_text(
-                        encoding="utf-8"
-                    )
-                )
-            except json.JSONDecodeError:
-                cached = None
-
-        if (
-            cached is not None
-            and bool(
-                cached.get(
-                    "optimal",
-                    False,
-                )
+        solved, source = (
+            _solve_scenario_candidate(
+                row,
+                config=config,
+                worlds_dir=worlds_dir,
+                time_limit=(
+                    args.time_limit
+                ),
+                retry_time_limit=(
+                    args.retry_time_limit
+                ),
             )
-        ):
-            solved = cached
-            source = "CACHED"
-        else:
-            world = generate_world(
-                config,
-                seed,
-            )
-            oracle = (
-                solve_global_time_optimum(
-                    world,
-                    config,
-                    time_limit=(
-                        args.time_limit
-                    ),
-                )
-            )
-            attempts = 1
-            if (
-                not oracle.optimal
-                and args.retry_time_limit
-                > args.time_limit
-            ):
-                oracle = (
-                    solve_global_time_optimum(
-                        world,
-                        config,
-                        time_limit=(
-                            args.retry_time_limit
-                        ),
-                    )
-                )
-                attempts = 2
-
-            solved = {
-                "seed": seed,
-                "descriptor": (
-                    row["descriptor"]
-                ),
-                "time_optimum": (
-                    oracle.time_optimality
-                ),
-                "optimal": bool(
-                    oracle.optimal
-                ),
-                "mip_gap": (
-                    oracle.mip_gap
-                ),
-                "solve_seconds": (
-                    oracle.solve_seconds
-                ),
-                "oracle_attempts": (
-                    attempts
-                ),
-            }
-            _atomic_json(
-                world_file,
-                solved,
-            )
-            source = "NEW"
-
-        solved_rows.append(
-            solved
         )
+
         print(
             f"[{rank:03d}/"
             f"{args.worlds}] "
@@ -518,25 +628,184 @@ def build_scenario_bank(
             f"optimal="
             f"{solved.get('optimal')} "
             f"T*="
-            f"{solved.get('time_optimum')}"
+            f"{solved.get('time_optimum')} "
+            f"gap="
+            f"{solved.get('mip_gap')}",
+            flush=True,
         )
 
-    not_optimal = [
-        row
-        for row in solved_rows
-        if not bool(
+        if bool(
+            solved.get(
+                "optimal",
+                False,
+            )
+        ):
+            solved_rows.append(
+                solved
+            )
+            continue
+
+        failed_originals.append(
+            {
+                "slot": rank,
+                "seed": seed,
+                "mip_gap": (
+                    solved.get(
+                        "mip_gap"
+                    )
+                ),
+                "time_optimum": (
+                    solved.get(
+                        "time_optimum"
+                    )
+                ),
+            }
+        )
+
+        replacement_found = False
+        for candidate_idx, distance in (
+            _replacement_candidate_order(
+                descriptors,
+                target_index=(
+                    selected_idx
+                ),
+                excluded_indices=(
+                    used_indices
+                ),
+            )
+        ):
+            used_indices.add(
+                candidate_idx
+            )
+            candidate_row = (
+                candidate_rows[
+                    candidate_idx
+                ]
+            )
+            candidate_seed = int(
+                candidate_row[
+                    "seed"
+                ]
+            )
+
+            print(
+                f"[{rank:03d}/"
+                f"{args.worlds}] "
+                "REPLACEMENT_TRY "
+                f"original={seed} "
+                f"candidate="
+                f"{candidate_seed} "
+                f"descriptor_distance="
+                f"{distance:.6f}",
+                flush=True,
+            )
+
+            candidate_solved, candidate_source = (
+                _solve_scenario_candidate(
+                    candidate_row,
+                    config=config,
+                    worlds_dir=(
+                        worlds_dir
+                    ),
+                    time_limit=(
+                        args.time_limit
+                    ),
+                    retry_time_limit=(
+                        args.retry_time_limit
+                    ),
+                )
+            )
+
+            print(
+                f"[{rank:03d}/"
+                f"{args.worlds}] "
+                f"{candidate_source} "
+                f"replacement_seed="
+                f"{candidate_seed} "
+                f"optimal="
+                f"{candidate_solved.get('optimal')} "
+                f"T*="
+                f"{candidate_solved.get('time_optimum')} "
+                f"gap="
+                f"{candidate_solved.get('mip_gap')}",
+                flush=True,
+            )
+
+            if not bool(
+                candidate_solved.get(
+                    "optimal",
+                    False,
+                )
+            ):
+                continue
+
+            accepted = dict(
+                candidate_solved
+            )
+            accepted[
+                "replacement_for_seed"
+            ] = seed
+            accepted[
+                "replacement_descriptor_distance"
+            ] = distance
+            accepted[
+                "selection_role"
+            ] = "replacement"
+            solved_rows.append(
+                accepted
+            )
+            replacements.append(
+                {
+                    "slot": rank,
+                    "original_seed": seed,
+                    "replacement_seed": (
+                        candidate_seed
+                    ),
+                    "descriptor_distance": (
+                        distance
+                    ),
+                }
+            )
+            print(
+                f"[{rank:03d}/"
+                f"{args.worlds}] "
+                "REPLACEMENT_ACCEPT "
+                f"original={seed} "
+                f"replacement="
+                f"{candidate_seed} "
+                f"distance="
+                f"{distance:.6f}",
+                flush=True,
+            )
+            replacement_found = True
+            break
+
+        if not replacement_found:
+            raise RuntimeError(
+                "Scenario bank replacement "
+                "exhausted all unused candidates "
+                f"for failed seed {seed}."
+            )
+
+    if len(solved_rows) != args.worlds:
+        raise RuntimeError(
+            "Scenario bank incomplete after "
+            "automatic replacement: "
+            f"{len(solved_rows)}/"
+            f"{args.worlds}"
+        )
+    if not all(
+        bool(
             row.get(
                 "optimal",
                 False,
             )
         )
-    ]
-    if not_optimal:
+        for row in solved_rows
+    ):
         raise RuntimeError(
-            "Scenario bank incomplete: "
-            f"{len(not_optimal)} worlds "
-            "do not have a proven optimum. "
-            "Rerun to retry cached failures."
+            "Scenario bank contains a "
+            "non-exact world after replacement."
         )
 
     payload = {
@@ -558,6 +827,9 @@ def build_scenario_bank(
             "world_count": (
                 args.worlds
             ),
+            "automatic_exact_replacement": True,
+            "failed_originals": failed_originals,
+            "replacements": replacements,
             "protected_ranges": [
                 "98,000,000-98,000,099",
                 "99,000,000-99,000,099",
