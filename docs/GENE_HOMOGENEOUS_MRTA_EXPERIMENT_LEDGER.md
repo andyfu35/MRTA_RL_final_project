@@ -1393,7 +1393,7 @@ Do not inspect 99M.
 
 STATUS AS OF 2026-10-04:
 
-IMPLEMENTED. TESTS / SMOKE / FORMAL128 NOT YET RUN.
+TESTS PASSED (14/14). MATCHED-PAIR SMOKE PASSED. FORMAL128 NOT YET RUN.
 
 V1.14.1 left one causal ambiguity: after adaptive and center Policy Banks evolve independently, their parent populations diverge, so later-generation offspring are not born from identical parent pairs.
 
@@ -1446,6 +1446,72 @@ Primary document:
 docs/GENE_HOMOGENEOUS_MRTA_V1142_MATCHED_PAIR_ASSAY.md
 
 99M remains untouched.
+
+
+### V1.14.2 completed smoke
+
+Tests:
+
+14 passed.
+
+Smoke run:
+
+runs/gene_mrta_v1142_matched_pair_smoke/gene_mrta_v1142_matched_pair_20261004_101048_seed7
+
+Smoke design:
+
+- 8 unique unordered frozen parent pairs;
+- same pair manifest for adaptive and center;
+- one child per pair per condition;
+- full 100-world 95M evaluation;
+- no Policy mutation or bank drift.
+
+Results:
+
+- non-center adaptive pairs = 6
+- identical adaptive/center children = 2
+
+Adaptive minus center:
+
+mean_time:
+- delta +0.00027892
+- W/T/L 4/3/1
+
+tail10_time:
+- delta -0.00015336
+- W/T/L 2/4/2
+
+continuation_preservation:
+- delta +0.00046004
+- W/T/L 4/3/1
+
+fleet_option_reserve:
+- delta -0.00052722
+- W/T/L 1/3/4
+
+Dominance:
+- tie 3
+- adaptive 1
+- neither 4
+
+Dual gate:
+- adaptive 5/8
+- center 5/8
+
+Four-capability:
+- adaptive 4/8
+- center 4/8
+
+Interpretation:
+
+Structural assay PASS.
+
+The smoke is too small for a scientific comparison, but demonstrates that exact-parent matched treatment, non-center adaptive sampling, center-equivalent identical children, symmetric gate evaluation, and direct full100 child evaluation all work.
+
+Next frozen action:
+
+run formal128 with no code/protocol changes.
+
 
 ---
 
