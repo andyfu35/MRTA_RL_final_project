@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-PLANNED. IMPLEMENTATION MUST START AFTER V1.14.3 OFFLINE ANALYSIS IS RECORDED.
+V1.15A FULL-SYSTEM ZERO-SHOT SCALING IMPLEMENTED. TESTS/SMOKE NOT YET RUN.
 
 ## Objective
 
@@ -241,3 +241,112 @@ Possible outcomes include:
 
 Scaling tests should use new dedicated seed namespaces and must be recorded in
 AI_PROJECT_CONTEXT.md and the experiment ledger.
+
+
+## Implemented V1.15A benchmark
+
+Files:
+
+- src/marl2d/gene_mrta_v115/scaling.py
+- tests/test_gene_mrta_v115_scaling.py
+- tools/run_gene_mrta_v115_scaling_mac.sh
+
+Frozen Policy selection:
+
+The benchmark loads the completed V1.13 checkpoint and deterministically selects
+one active currently four-capability Gene by maximizing minimum normalized
+retention across the four V1.13 axes.
+
+The selected Gene is converted to the V1.13 route-tail decoder and frozen for
+all scale cases.
+
+No scale-specific retraining occurs.
+
+Dedicated scaling seed namespace starts at:
+
+115000000
+
+### Implemented scale modes
+
+Tests:
+
+    bash tools/run_gene_mrta_v115_scaling_mac.sh tests
+
+Initial smoke:
+
+    bash tools/run_gene_mrta_v115_scaling_mac.sh smoke
+
+Smoke cases:
+
+- 4R/20T
+- 8R/40T
+- 16R/80T
+
+one world each.
+
+Primary extreme ladder after smoke:
+
+    bash tools/run_gene_mrta_v115_scaling_mac.sh ladder3
+
+Cases:
+
+- 4R/20T
+- 8R/40T
+- 16R/80T
+- 32R/160T
+- 64R/320T
+- 128R/640T
+
+three worlds each, stopping after a scale has zero successful worlds.
+
+Task-dense smoke:
+
+    bash tools/run_gene_mrta_v115_scaling_mac.sh dense-smoke
+
+Fixed-map crowding diagnostic:
+
+    bash tools/run_gene_mrta_v115_scaling_mac.sh fixed-map-smoke
+
+### Failure separation
+
+Failures are explicitly labeled:
+
+- geometry
+- path
+- policy
+
+A path/A* timeout therefore cannot be misreported as a Policy failure.
+
+### Outputs
+
+Each run writes:
+
+- scaling_results.csv
+- scaling_case_summary.csv
+- timing_breakdown.csv
+- memory_breakdown.csv
+- scaling_summary.json
+
+### Scale-normalization diagnostic
+
+The current Policy's original distance features normalize by the map diagonal.
+
+When spatial density is preserved by increasing map size, local physical
+nearest-neighbor distances may remain comparable while normalized distances
+shrink because the global map diagonal grows.
+
+V1.15A deliberately does not change this observation definition.
+
+Every world records:
+
+- mean nearest physical robot-task distance;
+- median nearest physical robot-task distance;
+- mean nearest robot-task distance divided by the current map diagonal.
+
+Therefore a future quality collapse can be separated into:
+
+- computational/path bottleneck;
+- Policy compute bottleneck;
+- observation-scale distribution shift.
+
+No result is claimed until the tests and smoke are actually run.
