@@ -662,3 +662,128 @@ V1.15B must remain clearly labeled as Policy-only and must not replace the
 V1.15A full-system result.
 
 99M remains untouched.
+
+
+## Implemented V1.15B Policy-only scaling
+
+Status:
+
+IMPLEMENTED. TESTS / SMOKE NOT YET RUN.
+
+Purpose:
+
+V1.15A found that the full-system limit occurs in obstacle-aware A* path
+precomputation before the Policy decoder can be evaluated at 128R/640T.
+
+V1.15B therefore removes obstacle-A* preprocessing while preserving:
+
+- the same frozen V1.13 Policy Gene;
+- the same 148 Policy parameters;
+- the same route-tail autoregressive decoder;
+- the same robot/task feature semantics where possible;
+- the same world-size scaling;
+- no scale-specific retraining.
+
+The only path-model substitution is:
+
+dense vectorized Euclidean robot/task and task/task distance table.
+
+This makes V1.15B a Policy-only scalability benchmark, not a replacement for
+the V1.15A full-system result.
+
+Files:
+
+- src/marl2d/gene_mrta_v115/policy_only.py
+- tests/test_gene_mrta_v115b_policy_only.py
+- tools/run_gene_mrta_v115b_policy_only_mac.sh
+
+### V1.15B execution order
+
+Tests:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh tests
+
+Smoke:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh smoke
+
+Smoke cases:
+
+- 64R/320T
+- 128R/640T
+
+one world each.
+
+If smoke passes:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
+
+Policy-only ladder:
+
+- 64R/320T
+- 128R/640T
+- 256R/1280T
+- 512R/2560T
+
+three worlds each.
+
+Only if 512R/2560T remains tractable:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh extreme1
+
+Extreme diagnostic:
+
+- 1024R/5120T
+- one world
+- Policy timeout 600 s
+
+### V1.15B measurements
+
+For each case:
+
+- Euclidean table construction time;
+- path-table entries and memory;
+- Policy planning time;
+- decoder steps;
+- pair slots scored;
+- Policy time per decoder step;
+- Policy time per pair slot;
+- assignment/completion;
+- raw time utility;
+- balance;
+- queue depth;
+- process RSS peak.
+
+The summary also fits empirical timing exponents against task count.
+
+### Memory implementation note
+
+The Euclidean table uses the identity:
+
+||x-y||^2 = ||x||^2 + ||y||^2 - 2 x dot y
+
+instead of constructing a full (nodes x tasks x 2) displacement tensor.
+
+This reduces temporary memory and makes the extreme Policy-only cases more
+meaningful.
+
+### Interpretation guardrail
+
+Behavioral scores from V1.15B cannot be compared directly with V1.15A because
+V1.15B removes obstacle detours.
+
+V1.15B answers:
+
+How far can the fixed 148-parameter route-tail Policy decoder scale if the
+routing-preprocessing bottleneck is removed?
+
+It does not answer:
+
+How large can the full obstacle-aware system scale?
+
+That answer remains:
+
+64R/320T succeeds; 128R/640T is blocked by A* preprocessing under the frozen
+300 s timeout.
+
+99M remains untouched.
