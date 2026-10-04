@@ -1165,3 +1165,124 @@ If 384 succeeds, the 300 s limit is likely between 384R/1920T and
 If 384 fails, the bracket becomes 256R/1280T to 384R/1920T.
 
 99M remains untouched.
+
+
+## V1.15B probe384 result
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe384
+
+Tests:
+
+    7 passed
+
+Run:
+
+    runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_191351_seed115140000
+
+Case:
+
+- robots = 384
+- tasks = 1920
+- tasks per robot = 5
+- world size = 979.795897
+- initial pair count = 737,280
+- frozen Policy parameters = 148
+
+Result:
+
+SUCCESS under the frozen 300 s Policy budget.
+
+Observed:
+
+- Euclidean table build = 0.024640 s
+- path table entries = 4,423,680
+- path table memory = 33.75 MB
+- Policy time = 296.507200 s
+- decoder steps = 758
+- pair slots scored = 448,687,488
+- Policy / decoder step = 0.391170 s
+- Policy / pair slot = 6.6083e-7 s
+- assigned tasks = 758
+- completion = 0.394792
+- raw time utility = 0.211622
+- balance = 0.364720
+- mean queue depth = 1.97396
+- max queue depth = 4
+- RSS peak = 1038.42 MB
+
+### Interpretation
+
+384R/1920T is the largest successfully completed Policy-only scale measured so
+far under the frozen 300 s budget.
+
+The run finishes only about:
+
+    300.0 - 296.5072 = 3.4928 s
+
+below the timeout.
+
+Therefore 384R/1920T is effectively at the practical 300 s wall on this
+machine/implementation.
+
+The behavioral diagnostics remain consistent with smaller scales:
+
+- completion remains near 0.40;
+- raw time utility remains near 0.21;
+- mean queue depth remains near 2.
+
+This supports the conclusion that the observed limit is computational rather
+than a collapse in the learned allocation behavior.
+
+### Updated empirical scaling fit
+
+Using the completed Policy-only mean/single-point times:
+
+- 64R/320T: 1.447824 s
+- 128R/640T: 9.910586 s
+- 256R/1280T: 81.533248 s
+- 384R/1920T: 296.507200 s
+
+the descriptive log-log exponent becomes approximately:
+
+    2.9707
+
+This is even closer to cubic scaling.
+
+Using this fit from the 384R/1920T point predicts approximately:
+
+- 388R/1940T: ~306 s
+- 392R/1960T: ~315 s
+- 400R/2000T: ~335 s
+
+Therefore the next and final threshold-localization probe is:
+
+    388R/1940T
+
+with one world and the same 300 s Policy timeout.
+
+A launcher mode is added:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe388
+
+If 388 fails, the practical frozen-budget threshold is localized extremely
+tightly between 384R/1920T and 388R/1940T.
+
+If 388 succeeds, continue only with another small increment; do not return to
+large jumps such as 512.
+
+### Current architectural conclusion
+
+The fixed 148-parameter Policy itself remains behaviorally stable up to at
+least 384R/1920T.
+
+The current implementation limit is the near-cubic autoregressive repeated
+pair rescoring cost, not Policy parameter count.
+
+After the threshold-localization probe, the next architecture study should
+target decoder compute reduction rather than increasing model size.
+
+99M remains untouched.
