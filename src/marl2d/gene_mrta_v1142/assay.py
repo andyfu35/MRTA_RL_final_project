@@ -84,6 +84,8 @@ def _load_policy_records(
 
 def _load_adaptive_rule_bank(
     checkpoint: Path,
+    *,
+    min_generations: int,
 ) -> dict[str, RecombinationRecord]:
     data = json.loads(
         checkpoint.read_text(
@@ -99,6 +101,17 @@ def _load_adaptive_rule_bank(
     ) != "adaptive":
         raise RuntimeError(
             "V1.14.2 requires the adaptive V1.14.1 arm"
+        )
+    completed_generations = int(
+        data.get(
+            "next_generation",
+            0,
+        )
+    )
+    if completed_generations < min_generations:
+        raise RuntimeError(
+            "Adaptive V1.14.1 checkpoint is too early: "
+            f"{completed_generations} < {min_generations}"
         )
 
     result: dict[
@@ -446,7 +459,10 @@ def run_assay(
         _load_adaptive_rule_bank(
             Path(
                 args.adaptive_v1141_checkpoint
-            )
+            ),
+            min_generations=(
+                args.adaptive_min_generations
+            ),
         )
     )
     center_rule = _center_rule()
@@ -1026,7 +1042,39 @@ def run_assay(
             exact_identical
         ),
         "adaptive_rule_usage": {
-            rule_id: int(count)
+            rule_id: {
+                "count": int(count),
+                "active_term_count": (
+                    adaptive_rules[
+                        rule_id
+                    ].gene.active_term_count
+                ),
+                "generated_in_v1141": (
+                    adaptive_rules[
+                        rule_id
+                    ].generated
+                ),
+                "accepted_in_v1141": (
+                    adaptive_rules[
+                        rule_id
+                    ].accepted
+                ),
+                "four_capability_accepted_in_v1141": (
+                    adaptive_rules[
+                        rule_id
+                    ].four_capability_accepted
+                ),
+                "acceptance_evidence_q10": (
+                    adaptive_rules[
+                        rule_id
+                    ].evidence_score(
+                        "acceptance_yield",
+                        quantile=(
+                            args.rule_evidence_quantile
+                        ),
+                    )
+                ),
+            }
             for rule_id, count
             in rule_usage.most_common()
         },
@@ -1121,6 +1169,11 @@ def parser() -> argparse.ArgumentParser:
         "--pairs",
         type=int,
         default=128,
+    )
+    p.add_argument(
+        "--adaptive-min-generations",
+        type=int,
+        default=50,
     )
     p.add_argument(
         "--archive-size-per-axis",
