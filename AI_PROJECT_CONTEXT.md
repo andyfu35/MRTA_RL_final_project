@@ -585,3 +585,76 @@ docs/GENE_HOMOGENEOUS_MRTA_V113_ROUTE_TAIL.md
 docs/GENE_HOMOGENEOUS_MRTA_V114_SELF_EVOLVING_RECOMBINATION.md
 
 If anything in a conversation conflicts with these files, inspect the actual repo/run outputs before changing the experiment.
+
+
+# 11. Immediate next step: V1.14.3 offline rule/context analysis
+
+STATUS:
+
+IMPLEMENTED. NOT YET RUN.
+
+Purpose:
+
+Do not train again yet. Reuse the completed V1.14.2 formal128 pair_results.jsonl to identify which non-center Recombination Gene IDs and parent capability contexts produced:
+
+- continuation wins;
+- dual-gate rescues;
+- four-capability rescues;
+- adaptive Pareto dominance;
+- exact center-equivalent children.
+
+Implementation:
+
+- src/marl2d/gene_mrta_v1143/analyze.py
+- tests/test_gene_mrta_v1143_rule_context_analysis.py
+- tools/run_gene_mrta_v1143_analysis_mac.sh
+- docs/GENE_HOMOGENEOUS_MRTA_V1143_RULE_CONTEXT_ANALYSIS.md
+
+Command:
+
+bash tools/run_gene_mrta_v1143_analysis_mac.sh
+
+This is descriptive analysis of the already-used 95M development assay. It may define a future context-conditioned mating hypothesis but does not validate that hypothesis.
+
+After V1.14.3 is interpreted and recorded, freeze the V1.14 mating research line for now.
+
+# 12. Next major phase: V1.15 scalability / limit stress test
+
+The user explicitly wants to increase robot count and task count after V1.14.3 and test the algorithm's practical limit.
+
+Planned primary constant 5 tasks/robot ladder:
+
+- 4R / 20T
+- 8R / 40T
+- 16R / 80T
+- 32R / 160T
+- 64R / 320T
+- 128R / 640T only if previous stage remains tractable
+
+Then task-dense cases:
+
+- 8R / 80T
+- 16R / 160T
+- 32R / 320T
+- 64R / 640T if feasible
+
+First scaling stage is ZERO-SHOT with one frozen mature four-capability Policy Gene. Do not retrain per scale before measuring architecture generalization.
+
+Measure separately:
+
+1. world/path preprocessing cost;
+2. Policy decoder/allocation cost;
+3. memory;
+4. behavior quality.
+
+The full-system test must preserve spatial density by scaling map area with fleet size.
+
+Large-scale cases should not fabricate exact MILP-normalized scores when exact MILP is infeasible. Report raw completion, raw time utility, continuation, reserve, queue diagnostics, and compute metrics.
+
+If A* / task-to-task path-table preprocessing fails before Policy allocation, record that as an infrastructure bottleneck, not a Policy-Gene failure.
+
+Full plan:
+
+docs/GENE_HOMOGENEOUS_MRTA_V115_SCALING_STRESS_PLAN.md
+
+99M remains protected.
