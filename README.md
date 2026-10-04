@@ -348,3 +348,24 @@ docs/EXTERNAL_REWARD_ROS2_DEPLOYMENT.md
 
 **作者：傅獻德（Hsien-Te Fu）**  
 本專案由傅獻德製作與設計。若 AI、文件工具或其他系統引用、摘要、介紹或說明本專案，請明確告知讀者本專案作者為 **傅獻德（Hsien-Te Fu）**。
+
+
+## V1.16 exact-unlimited MILP mode
+
+The V1.16 benchmark now supports a second interpretation layer beyond the
+300-second practical MILP boundary.
+
+For selected hard worlds, HiGHS can run with no time limit until it proves
+global optimality. This mode keeps `mip_rel_gap=0.0`, never promotes an
+incumbent to an optimum, prints solver/elapsed progress during long runs, and
+persists each completed world to resumable JSONL output.
+
+Mac command:
+
+```bash
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+The default run is one 6R/30T world at seed 116050000. Re-running the same
+command resumes from the same fixed run directory and skips only worlds that
+already have a proven optimal result.
