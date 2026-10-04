@@ -1393,7 +1393,7 @@ Do not inspect 99M.
 
 STATUS AS OF 2026-10-04:
 
-TESTS PASSED (14/14). MATCHED-PAIR SMOKE PASSED. FORMAL128 NOT YET RUN.
+TESTS PASSED (14/14). MATCHED-PAIR SMOKE PASSED. FORMAL128 COMPLETED FOR seed=7.
 
 V1.14.1 left one causal ambiguity: after adaptive and center Policy Banks evolve independently, their parent populations diverge, so later-generation offspring are not born from identical parent pairs.
 
@@ -1511,6 +1511,78 @@ The smoke is too small for a scientific comparison, but demonstrates that exact-
 Next frozen action:
 
 run formal128 with no code/protocol changes.
+
+
+
+### V1.14.2 formal128 result
+
+Run:
+
+runs/gene_mrta_v1142_matched_pair/gene_mrta_v1142_matched_pair_20261004_110044_seed7
+
+Formal matched-parent result:
+
+- pairs = 128
+- non-center adaptive pairs = 115
+- exact identical children = 19
+
+Adaptive - Center:
+
+mean_time:
+- +0.00064842
+- W/T/L 47/38/43
+
+tail10_time:
+- +0.00104946
+- W/T/L 40/54/34
+
+continuation_preservation:
+- +0.00029748
+- W/T/L 62/29/37
+
+fleet_option_reserve:
+- -0.00006791
+- W/T/L 51/31/46
+
+Dominance:
+
+- tie 29
+- adaptive 19
+- neither 67
+- center 13
+
+Dual gate:
+
+- adaptive 98/128
+- center 95/128
+
+Four-capability:
+
+- adaptive 90/128
+- center 87/128
+
+Exploratory exact sign tests on W/L only:
+
+- mean p 0.7520
+- tail p 0.5614
+- continuation p 0.01543
+- reserve p 0.6849
+
+With four tested Policy axes, continuation does not survive a simple Bonferroni 0.05 threshold (adjusted approximately 0.0617).
+
+Interpretation:
+
+Adaptive shows a reproducible directional continuation advantage and small positive mean/tail changes, but not universal Pareto superiority. Reserve is nearly neutral/slightly negative.
+
+Adaptive also produced 3 additional dual-gate children and 3 additional four-capability children.
+
+This supports the narrower statement that learned non-center mating can help some same-parent offspring, especially continuation, while preserving multi-capability fusion.
+
+It does not support a claim that the adaptive rule bank is globally superior.
+
+Next frozen action:
+
+analyze pair_results.jsonl by adaptive rule phenotype and parent capability context before changing the formula family or touching 99M.
 
 
 ---
