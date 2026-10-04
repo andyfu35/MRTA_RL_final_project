@@ -21,6 +21,8 @@ class GlobalTimeOptimum:
     solve_seconds: float
     mip_gap: float | None
     routes: tuple[tuple[int, ...], ...]
+    mip_node_count: int | None = None
+    time_optimality_upper_bound: float | None = None
 
 
 def solve_global_time_optimum(
@@ -223,6 +225,34 @@ def solve_global_time_optimum(
         if abs(rebuilt - score) > 1e-6:
             raise RuntimeError(f"objective mismatch: solver={score}, rebuilt={rebuilt}")
 
+    raw_dual_bound = getattr(
+        res,
+        "mip_dual_bound",
+        None,
+    )
+    upper_bound = None
+    if raw_dual_bound is not None:
+        raw_dual_bound = float(
+            raw_dual_bound
+        )
+        if math.isfinite(
+            raw_dual_bound
+        ):
+            upper_bound = float(
+                -raw_dual_bound
+            )
+
+    raw_node_count = getattr(
+        res,
+        "mip_node_count",
+        None,
+    )
+    node_count = (
+        int(raw_node_count)
+        if raw_node_count is not None
+        else None
+    )
+
     return GlobalTimeOptimum(
         optimal=optimal,
         status=int(res.status),
@@ -232,4 +262,6 @@ def solve_global_time_optimum(
         solve_seconds=float(elapsed),
         mip_gap=float(res.mip_gap) if getattr(res, "mip_gap", None) is not None else None,
         routes=tuple(routes),
+        mip_node_count=node_count,
+        time_optimality_upper_bound=upper_bound,
     )
