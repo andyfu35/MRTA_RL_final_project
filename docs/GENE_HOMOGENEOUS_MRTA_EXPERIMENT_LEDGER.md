@@ -2480,3 +2480,66 @@ Default hard world:
 The first goal is to obtain one real 6R/30T global optimum. Only after that
 result is understood should more seeds or 7R/35T / 8R/40T unlimited exact
 experiments be considered.
+
+
+## V1.16 first 6R/30T exact-unlimited result
+
+Status:
+
+FIRST HARD EXACT WORLD COMPLETED.
+
+Run:
+
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+
+Pre-run tests:
+
+9 passed.
+
+World:
+
+6R/30T, seed 116050000.
+
+Exact result:
+
+- HiGHS status Optimal;
+- T* = 0.28074964073648145;
+- Policy T = 0.2756685668779121;
+- absolute gap = 0.005081073858569374;
+- relative gap = 0.018098238149977172;
+- retention = 0.9819017618500229;
+- both methods complete 14 tasks.
+
+Runtime:
+
+- Policy = 0.008538166999642272 s;
+- MILP solver = 717.154159042002 s;
+- MILP total = 717.1704191659992 s;
+- MILP / Policy = 83995.82945567204x.
+
+Search effort:
+
+- 276137 branch-and-bound nodes;
+- 8274628 LP iterations;
+- peak RSS 290.953125 MB.
+
+Key interpretation:
+
+The final incumbent value was found at about 138.5 s, but the dual bound did
+not close to zero gap until about 717.1 s.
+
+Thus the main cost was proving optimality rather than finding the final best
+solution.
+
+This validates the distinction between:
+
+1. practical MILP usefulness under a fixed 300 s budget; and
+2. offline exact-oracle certification with unlimited solve time.
+
+At 6R/30T the Policy is millisecond-scale and within 1.81% of the proven
+global optimum for this first hard world, while exact certification takes
+about 11.95 minutes.
+
+This is n=1 exact evidence only. The next frozen action is to run the remaining
+two worlds in the same 6R/30T namespace via resume before considering 7R/35T or
+8R/40T.
