@@ -839,7 +839,7 @@ Full-system result:
 - 128R/640T fails 3/3 in A* path preprocessing after 300 s;
 - Policy inference is not reached at 128R/640T.
 
-V1.15B Policy-only scaling is now implemented.
+V1.15B Policy-only scaling tests and smoke are complete.
 
 It replaces obstacle-A* path preprocessing with a dense vectorized Euclidean
 distance table while retaining the same frozen 148-parameter route-tail Policy.
@@ -857,5 +857,55 @@ Execution:
 
 V1.15B is compute-isolation only; its behavioral scores are not directly
 comparable with obstacle-aware V1.15A.
+
+99M remains untouched.
+
+
+## V1.15B smoke result
+
+Tests: 7 passed.
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_141132_seed115100000
+
+64R/320T:
+- Policy 1.9705 s
+- pair slots 2,174,016
+- completion 0.41875
+- time utility 0.215997
+- queue mean 2.09375
+- RSS 130.97 MB
+
+128R/640T:
+- Policy 14.8367 s
+- pair slots 16,744,320
+- completion 0.39844
+- time utility 0.209678
+- queue mean 1.99219
+- RSS 209.28 MB
+
+Both succeeded with the same frozen 148-parameter Gene.
+
+This confirms the V1.15A 128R/640T failure was A* preprocessing, not Policy inference.
+
+64->128:
+- pair slots x7.70
+- Policy time x7.53
+- Policy time per pair slot remains approximately constant.
+
+The measured two-point Policy exponent is 2.91254.
+With R proportional to T and decoder steps approximately proportional to T,
+the current autoregressive implementation is expected to approach O(T^3)
+pair-scoring work.
+
+Next:
+bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
+
+The updated ladder3 stops at 256R/1280T with 3 worlds.
+If successful, run:
+bash tools/run_gene_mrta_v115b_policy_only_mac.sh extreme512
+
+512R/2560T is now a one-world extreme test because current scaling predicts it
+may exceed the frozen 300 s Policy timeout.
 
 99M remains untouched.
