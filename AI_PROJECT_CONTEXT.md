@@ -1027,3 +1027,46 @@ After threshold localization, move to decoder-compute optimization rather than
 increasing Policy parameter count.
 
 99M remains untouched.
+
+
+## V1.15 closeout
+
+V1.15 scaling study is complete and frozen.
+
+Final observed full-system result:
+- 64R/320T succeeds 3/3;
+- 128R/640T fails 3/3 in obstacle-aware A* preprocessing before Policy inference.
+
+Final observed Policy-only result:
+- 256R/1280T succeeds 3/3, mean Policy 81.53 s;
+- 384R/1920T succeeds in 296.5072 s;
+- 388R/1940T fails at Policy timeout 300.0242 s;
+- 512R/2560T also fails at Policy timeout.
+
+Largest observed successful Policy-only scale under the frozen 300 s budget:
+384R/1920T.
+
+Important caveat:
+384 and 388 are different one-world probes. Treat 384-388 as an observed
+practical wall, not a mathematically exact threshold.
+
+Behavior remains approximately stable through the largest successful scales:
+completion ~0.40, raw time utility ~0.21, mean queue depth ~2.
+
+Main bottlenecks:
+- full system: A* path preprocessing;
+- Policy-only: near-cubic repeated pair rescoring.
+
+The 148 Policy parameters are not the scaling bottleneck.
+
+Do not test 385/386/387.
+Freeze V1.15 and move to a decoder-compute optimization study.
+
+Recommended next version:
+V1.16 Efficient Route-Tail Decoder.
+
+Primary goal:
+reduce inference complexity while preserving the exact frozen 148-parameter
+Gene and, initially, the original decision semantics.
+
+99M remains untouched.
