@@ -437,6 +437,76 @@ center mode generates four deterministic center children per parent pair, so its
 
 ---
 
+
+
+## V1.14.2 formal128 result
+
+Run:
+
+runs/gene_mrta_v1142_matched_pair/gene_mrta_v1142_matched_pair_20261004_110044_seed7
+
+Design:
+
+- 128 unique frozen parent pairs;
+- same parents for adaptive and center;
+- one child per pair per condition;
+- full 100-world 95M evaluation;
+- no mutation/bank feedback;
+- mating rule is the treatment difference.
+
+Counts:
+
+- non-center adaptive pairs = 115/128
+- exact identical adaptive/center children = 19/128
+
+Adaptive - Center:
+
+mean_time:
+- delta +0.00064842
+- W/T/L 47/38/43
+
+tail10_time:
+- delta +0.00104946
+- W/T/L 40/54/34
+
+continuation_preservation:
+- delta +0.00029748
+- W/T/L 62/29/37
+
+fleet_option_reserve:
+- delta -0.00006791
+- W/T/L 51/31/46
+
+Dominance:
+- tie 29
+- adaptive 19
+- neither 67
+- center 13
+
+Dual gate:
+- adaptive 98/128
+- center 95/128
+
+Four-capability:
+- adaptive 90/128
+- center 87/128
+
+Exploratory sign-test p-values on non-tied pairs:
+- mean 0.7520
+- tail 0.5614
+- continuation 0.01543
+- reserve 0.6849
+
+Continuation is nominally significant alone, but Bonferroni over four axes gives approximately 0.0617, so no corrected multi-axis superiority claim is justified yet.
+
+Current interpretation:
+
+Adaptive is not universally better than center.
+It shows small positive mean/tail changes, a clearer continuation advantage, essentially neutral/slightly negative reserve change, and +3 dual-gate / +3 four-capability children.
+
+The next step is NOT a new formula family.
+Analyze pair_results.jsonl to identify which non-center rules and parent contexts create the continuation and four-capability gains.
+
 # 8. Protected data policy
 
 95M:
@@ -453,15 +523,16 @@ CURRENTLY UNTOUCHED AND PROTECTED.
 
 Do not inspect 99M during V1.14.1 development.
 
-Current seed=7 evidence is not sufficient to justify 99M or a larger formula grammar.
+V1.14.2 seed=7 formal128 is complete. It is still 95M development evidence and is not sufficient to justify 99M or a larger formula grammar.
 
 Next:
-1. fix unique-child control asymmetry;
-2. rerun paired control;
-3. if adaptive remains promising, repeat paired seeds;
-4. then use independent 96M development-validation if required;
-5. freeze procedure/candidate;
-6. only then evaluate 99M.
+1. analyze V1.14.2 pair_results.jsonl by non-center rule ID and parent capability context;
+2. determine whether continuation/four-capability gains concentrate in specific rules/contexts;
+3. only if a context-conditioned signal is present, freeze that selection hypothesis;
+4. then repeat paired seeds;
+5. use independent 96M development-validation if required;
+6. freeze procedure/candidate;
+7. only then evaluate 99M.
 
 ---
 
