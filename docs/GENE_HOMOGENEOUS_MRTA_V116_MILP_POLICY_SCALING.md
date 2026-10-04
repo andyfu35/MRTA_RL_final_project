@@ -660,3 +660,40 @@ V116_EXACT_WORLDS=3 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlim
 
 Resume should skip the already-proven seed 116050000 and solve seeds 116050001
 and 116050002.
+
+
+## 6R/30T multi-seed exact worst-case study
+
+After the first 6R/30T world reached a proven optimum, the next goal is to
+measure distribution-level variability.
+
+For each exact seed:
+
+    relative_gap = (T* - T_policy) / T*
+    retention = T_policy / T*
+
+Primary worst-case quantities:
+
+    max_exact_relative_gap
+    min_exact_retention
+    max_milp_total_seconds
+
+The summary also records the seed responsible for each extreme.
+
+The first formal batch is 10 seeds:
+
+    116050000 through 116050009
+
+Run:
+
+    V116_EXACT_WORLDS=10 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+
+Seed 116050000 is already complete and should be skipped automatically by
+resume.
+
+The final report should include per-seed T*, T_policy, retention, relative gap,
+Policy time, MILP time, and MILP/Policy ratio, plus mean/median/max runtime and
+the maximum observed exact gap.
+
+The phrase "worst case" must be qualified as "worst observed among the tested
+seeds"; this is not a proof of the theoretical worst possible MRTA instance.
