@@ -2336,3 +2336,34 @@ Next planned architecture study:
 V1.16 Efficient Route-Tail Decoder, preserving the frozen Gene while reducing
 inference dataflow/computation.
 
+
+
+### V1.16 MILP vs Policy scaling plan
+
+V1.15 is frozen.
+
+Next user-requested phase:
+compare the current frozen 148-parameter route-tail Gene directly against the
+existing exact MILP on identical worlds.
+
+Measure simultaneously:
+- exact objective gap when MILP proves optimal;
+- Policy and MILP compute time;
+- MILP proof rate;
+- problem-size growth;
+- practical bottleneck scale.
+
+Frozen Gene:
+7ee7c18fca2280022ac5.
+
+Objective:
+T=(1/N) sum_completed (1-F_j/H).
+
+New seeds:
+116M namespace.
+
+Initial smoke:
+2R/10T, 3R/15T, 4R/20T.
+
+No training occurs.
+
