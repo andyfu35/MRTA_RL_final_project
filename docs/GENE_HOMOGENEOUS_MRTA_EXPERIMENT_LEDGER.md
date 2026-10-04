@@ -2266,3 +2266,37 @@ Combined with the prior 512R/2560T 300 s timeout, the current Policy-only
 Next probe:
 384R/1920T, one world, 300 s timeout.
 
+
+
+### V1.15B probe384 result
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_191351_seed115140000
+
+384R/1920T:
+- success
+- Policy 296.5072 s
+- decoder steps 758
+- pair slots 448,687,488
+- completion 0.394792
+- raw time utility 0.211622
+- balance 0.364720
+- queue mean 1.97396
+- RSS peak 1038.42 MB
+- Euclidean table build 0.02464 s
+
+This is only 3.4928 s below the frozen 300 s Policy timeout.
+
+Updated descriptive scaling exponent using 64/128/256/384:
+~2.9707.
+
+Interpretation:
+384R/1920T is the largest measured successful Policy-only scale and is
+effectively at the practical 300 s compute wall.
+
+Next:
+probe388 = 388R/1940T, one world, same 300 s timeout.
+
+After threshold localization, move to decoder-compute optimization rather than
+increasing Policy size.
+
