@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-DESIGNED / IMPLEMENTATION NEXT. NO RESULT YET.
+IMPLEMENTED. TESTS / SMOKE / FORMAL128 NOT YET RUN.
 
 ## Why this experiment is needed
 
@@ -191,3 +191,33 @@ This is still 95M development evidence and is not a generalization claim.
 5. only then decide whether multi-seed replication is justified
 
 99M remains protected.
+
+
+## Implemented files
+
+- src/marl2d/gene_mrta_v1142/__init__.py
+- src/marl2d/gene_mrta_v1142/assay.py
+- tests/test_gene_mrta_v1142_matched_pair_assay.py
+- tools/run_gene_mrta_v1142_matched_pair_mac.sh
+
+The formal assay requires a completed adaptive V1.14.1 checkpoint with at least 50 generations.
+
+Commands:
+
+    bash tools/run_gene_mrta_v1142_matched_pair_mac.sh tests
+
+Then:
+
+    bash tools/run_gene_mrta_v1142_matched_pair_mac.sh smoke
+
+Only if smoke is structurally correct:
+
+    bash tools/run_gene_mrta_v1142_matched_pair_mac.sh formal128
+
+Expected formal outputs:
+
+- pair_manifest.json
+- pair_results.jsonl
+- summary.json
+
+No V1.14.2 result should be claimed until actual terminal output is provided.
