@@ -73,15 +73,31 @@ def build_euclidean_world(
     )
 
     start = time.perf_counter()
-    delta = (
-        nodes[:, None, :]
-        - tasks[None, :, :]
-    )
-    path_to_tasks = np.sqrt(
-        np.sum(
-            delta * delta,
-            axis=-1,
+    node_sq = np.sum(
+        nodes * nodes,
+        axis=1,
+    )[:, None]
+    task_sq = np.sum(
+        tasks * tasks,
+        axis=1,
+    )[None, :]
+    path_to_tasks = (
+        node_sq
+        + task_sq
+        - 2.0
+        * (
+            nodes
+            @ tasks.T
         )
+    )
+    np.maximum(
+        path_to_tasks,
+        0.0,
+        out=path_to_tasks,
+    )
+    np.sqrt(
+        path_to_tasks,
+        out=path_to_tasks,
     )
     build_seconds = (
         time.perf_counter()
