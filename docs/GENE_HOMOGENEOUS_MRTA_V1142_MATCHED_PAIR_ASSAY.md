@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-IMPLEMENTED. TESTS / SMOKE / FORMAL128 NOT YET RUN.
+TESTS AND SMOKE PASSED. FORMAL128 NOT YET RUN.
 
 ## Why this experiment is needed
 
@@ -221,3 +221,104 @@ Expected formal outputs:
 - summary.json
 
 No V1.14.2 result should be claimed until actual terminal output is provided.
+
+
+## Completed regression test and smoke result
+
+Date: 2026-10-04
+
+Regression command:
+
+    bash tools/run_gene_mrta_v1142_matched_pair_mac.sh tests
+
+Result:
+
+    14 passed
+
+Smoke command:
+
+    bash tools/run_gene_mrta_v1142_matched_pair_mac.sh smoke
+
+Frozen inputs resolved to:
+
+V1.13 Policy checkpoint:
+
+    runs/gene_mrta_v113_route_tail_evolution/gene_mrta_v113_route_tail_20261003_203157_seed7/checkpoint.json
+
+Completed adaptive V1.14.1 checkpoint:
+
+    runs/gene_mrta_v1141_paired_seed7/adaptive/gene_mrta_v1141_recombination_20261003_231301_seed7/checkpoint.json
+
+Smoke used:
+
+- seed = 7
+- 8 unique unordered frozen parent pairs
+- one adaptive child per pair
+- one center child per pair
+- all 100 frozen 95M worlds per child
+- no Policy mutation
+- no Policy-bank feedback
+
+Smoke output:
+
+- pairs = 8
+- adaptive non-center rule pairs = 6
+- exact identical adaptive/center children = 2
+
+Per-axis Adaptive - Center:
+
+mean_time:
+- mean delta = +0.00027892
+- W/T/L = 4/3/1
+
+tail10_time:
+- mean delta = -0.00015336
+- W/T/L = 2/4/2
+
+continuation_preservation:
+- mean delta = +0.00046004
+- W/T/L = 4/3/1
+
+fleet_option_reserve:
+- mean delta = -0.00052722
+- W/T/L = 1/3/4
+
+Axiswise dominance:
+
+- tie = 3
+- adaptive weakly dominates = 1
+- neither dominates = 4
+- center weakly dominates = 0 in this eight-pair smoke
+
+Dual 0.95 inheritance gate:
+
+- adaptive = 5/8
+- center = 5/8
+
+Four-capability certification:
+
+- adaptive = 4/8
+- center = 4/8
+
+Smoke run directory:
+
+    runs/gene_mrta_v1142_matched_pair_smoke/gene_mrta_v1142_matched_pair_20261004_101048_seed7
+
+Interpretation:
+
+The matched-pair assay is structurally valid.
+
+The smoke is intentionally too small for a scientific comparison. It shows that:
+
+1. the exact same frozen parent pairs are compared;
+2. adaptive and center receive one child per pair;
+3. both conditions use the same 100 evaluation worlds;
+4. non-center adaptive rules are actually being sampled (6/8 pairs);
+5. center-equivalent adaptive samples correctly produce identical children (2/8);
+6. dual-gate and four-capability counts are computed symmetrically.
+
+The mixed signs across the four axes are expected and must not be scalarized.
+
+The formal128 assay is now authorized as the next step.
+
+99M remains untouched.
