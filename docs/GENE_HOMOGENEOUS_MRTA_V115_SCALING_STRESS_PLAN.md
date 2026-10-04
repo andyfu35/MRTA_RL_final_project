@@ -913,3 +913,103 @@ This prevents wasting three full timeout periods at a scale already predicted
 to exceed the frozen compute budget.
 
 99M remains untouched.
+
+
+## V1.15B extreme512 result
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh extreme512
+
+Tests before run:
+
+    7 passed
+
+Run:
+
+    runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_175225_seed115120000
+
+Case:
+
+- robots = 512
+- tasks = 2560
+- tasks per robot = 5
+- world size = 1131.37085
+- initial pair count = 1,310,720
+- frozen Policy parameters = 148
+
+Result:
+
+FAILED at Policy stage under the frozen 300 s timeout.
+
+Observed:
+
+- failure_stage = policy
+- Policy time at timeout = 300.055545 s
+- Euclidean table build = 0.029270 s
+- path table entries = 7,864,320
+- path table memory = 60.0 MB
+- RSS peak = 961.14 MB
+
+The Euclidean routing table was built essentially instantly relative to the
+Policy timeout, so this is a clean Policy-compute limit rather than a routing
+preprocessing failure.
+
+### Current Policy-only limit bracket
+
+Known successful:
+
+128R / 640T
+- Policy = 14.8367 s
+- one-world smoke success
+
+Known failed under 300 s:
+
+512R / 2560T
+- Policy timeout at 300.06 s
+
+Therefore the current frozen-budget Policy-only limit is bracketed between:
+
+128R/640T and 512R/2560T.
+
+This bracket is intentionally incomplete because 256R/1280T has not yet been
+measured in the formal three-world ladder.
+
+### Scaling consistency
+
+Using the 64R/320T -> 128R/640T smoke exponent of approximately 2.9125,
+extrapolating from 128R/640T predicts roughly 800-900 s for 512R/2560T.
+
+The observed 300 s timeout is therefore consistent with the near-cubic
+autoregressive pair-rescoring trend.
+
+At 512R/2560T the initial pair tensor already contains 1.31 million pairs.
+Because the route-tail decoder repeatedly rescans the remaining pair set after
+every accepted task, total pair-slot work is much larger than the initial pair
+count.
+
+RSS reaching about 961 MB also shows that Policy-side temporary tensors and
+rescoring state, not the 60 MB Euclidean table itself, are becoming a meaningful
+systems cost at this scale.
+
+### Next frozen action
+
+Do not increase the 512 timeout yet.
+
+Run:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
+
+This measures 64R/320T, 128R/640T, and 256R/1280T with three worlds each.
+
+The 256R/1280T result will determine whether the practical 300 s Policy limit is:
+
+- above 256R/1280T, or
+- already at/below 256R/1280T.
+
+Only after that result should an intermediate one-world scale such as
+320R/1600T or 384R/1920T be added to tighten the limit bracket.
+
+99M remains untouched.
