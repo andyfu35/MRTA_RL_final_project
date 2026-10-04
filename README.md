@@ -16,7 +16,7 @@ Current experimental status as of 2026-10-04:
 - V1.14.2 Frozen-Parent Matched-Pair Recombination Assay: formal128 completed for seed=7; adaptive shows a directional continuation advantage and +3 four-capability children, but no global superiority claim.
 - V1.14.3 Offline Rule / Parent-Context Analysis: completed; V1.14 recombination research is frozen for now.
 - V1.15A Scalability Stress Test: extreme ladder completed; 64R/320T succeeds 3/3 while 128R/640T fails 3/3 in A* path preprocessing before Policy inference; next is V1.15B Policy-only scaling.
-- V1.16 MILP vs Policy Scaling: implemented, not yet run; compares exact solution gap and computation time as R/T grow.
+- V1.16 MILP vs Policy Scaling: smoke + 3-world ladder completed; MILP proves 3/3 through 5R/25T but 0/3 at 6R/30T under 300 s, while the frozen Policy remains ~10 ms at 6R/30T. Boundary replication is next.
 - 99M remains protected and must not be inspected.
 
 All future architecture changes and completed experimental results must be written back to AI_PROJECT_CONTEXT.md and the experiment ledger before starting the next version.
