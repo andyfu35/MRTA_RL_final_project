@@ -2300,3 +2300,39 @@ probe388 = 388R/1940T, one world, same 300 s timeout.
 After threshold localization, move to decoder-compute optimization rather than
 increasing Policy size.
 
+
+
+### V1.15B probe388 and V1.15 closeout
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_193511_seed115150000
+
+388R/1940T:
+- failure_stage=policy
+- Policy timeout 300.0242 s
+- Euclidean table 0.02346 s
+- path table 34.46 MB
+- RSS peak 985.81 MB
+- initial pairs 752,720
+
+Largest observed successful Policy-only case:
+384R/1920T at 296.5072 s.
+
+Because 384 and 388 use different single-world seeds, this is an observed
+practical wall rather than an exact deterministic threshold.
+
+V1.15 final conclusions:
+- full-system limit: A* preprocessing blocks 128R/640T;
+- Policy-only behavior remains stable through 384R/1920T;
+- Policy-only 300 s compute wall is observed near 384-388 robots at 5 tasks/robot;
+- current Policy inference approaches cubic scaling because of repeated pair
+  rescoring;
+- 148 Policy parameters are not the bottleneck.
+
+V1.15 is frozen.
+Do not chase 385/386/387.
+
+Next planned architecture study:
+V1.16 Efficient Route-Tail Decoder, preserving the frozen Gene while reducing
+inference dataflow/computation.
+
