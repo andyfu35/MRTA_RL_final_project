@@ -1393,7 +1393,7 @@ Do not inspect 99M.
 
 STATUS AS OF 2026-10-04:
 
-DESIGNED. IMPLEMENTATION IN PROGRESS. NO RESULT YET.
+IMPLEMENTED. TESTS / SMOKE / FORMAL128 NOT YET RUN.
 
 V1.14.1 left one causal ambiguity: after adaptive and center Policy Banks evolve independently, their parent populations diverge, so later-generation offspring are not born from identical parent pairs.
 
