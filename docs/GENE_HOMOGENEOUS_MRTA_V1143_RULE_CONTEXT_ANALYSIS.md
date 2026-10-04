@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-IMPLEMENTED. NOT YET RUN.
+COMPLETED. V1.14 RECOMBINATION SERIES FROZEN FOR NOW.
 
 ## Purpose
 
@@ -99,3 +99,105 @@ After the output is interpreted and recorded, the V1.14 research series is
 frozen for now.
 
 The next major stage is V1.15 scalability / stress testing.
+
+
+## Completed analysis result
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v1143_analysis_mac.sh
+
+Tests:
+
+    3 passed
+
+Source:
+
+    runs/gene_mrta_v1142_matched_pair/gene_mrta_v1142_matched_pair_20261004_110044_seed7
+
+Output:
+
+    runs/gene_mrta_v1142_matched_pair/gene_mrta_v1142_matched_pair_20261004_110044_seed7/v1143_rule_context_analysis.json
+
+Observed counts:
+
+- source pairs = 128
+- non-center adaptive pairs = 115
+- four-capability rescues = 3
+- four-capability losses = 0
+- candidate rule/context groups = 8
+- non-center exact-center-equivalent children = 6
+
+Non-center Adaptive - Center:
+
+mean_time:
+- mean delta = +0.00072172
+- W/T/L = 47/25/43
+
+tail10_time:
+- mean delta = +0.00116809
+- W/T/L = 40/41/34
+
+continuation_preservation:
+- mean delta = +0.00033111
+- W/T/L = 62/16/37
+
+fleet_option_reserve:
+- mean delta = -0.00007559
+- W/T/L = 51/18/46
+
+Most notable reliable rules from the default >=5-use descriptive filter:
+
+1. 6858fcfc2c9540c2f0fd
+   - n = 18
+   - active terms = 2
+   - continuation mean delta = +0.0004531036432003304
+   - continuation W/T/L = 11/1/6
+   - four-capability rescue-minus-loss = +1
+
+2. 5ef9b51bed957fe3b4b0
+   - n = 16
+   - active terms = 1
+   - continuation mean delta = +0.00004560764417711749
+   - continuation W/T/L = 5/6/5
+   - four-capability rescue-minus-loss = +1
+   - dominance margin = +1
+
+3. e43f02f17b588a421ca9
+   - n = 5
+   - active terms = 3
+   - continuation mean delta = +0.0004215382751630248
+   - continuation W/T/L = 4/0/1
+   - dominance margin = +2
+   - sample count remains small
+
+Other reliable rules showed weaker, neutral, or negative continuation effects.
+
+Interpretation:
+
+The development evidence is consistent with context-specific usefulness of
+non-center recombination, not one globally superior non-center law.
+
+The strongest current observation is:
+
+- non-center rules generated 3 four-capability rescues and 0 four-capability losses;
+- continuation was the clearest positive capability direction;
+- benefits are distributed unevenly across rule phenotypes;
+- eight rule/context combinations met the descriptive candidate filter.
+
+This is hypothesis-generating evidence only because the same 95M development
+assay is being re-analyzed.
+
+No context-conditioned selector is trained or claimed validated here.
+
+V1.14 series freeze decision:
+
+Do not perform additional formula tuning on 95M now.
+
+Preserve the current results and move to V1.15 scalability / limit stress
+testing. A context-conditioned mating selector may be revisited later using
+independent validation data.
+
+99M remains untouched.
