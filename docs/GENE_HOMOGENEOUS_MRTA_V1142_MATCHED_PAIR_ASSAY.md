@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-TESTS AND SMOKE PASSED. FORMAL128 NOT YET RUN.
+FORMAL128 COMPLETED (seed=7).
 
 ## Why this experiment is needed
 
@@ -320,5 +320,169 @@ The smoke is intentionally too small for a scientific comparison. It shows that:
 The mixed signs across the four axes are expected and must not be scalarized.
 
 The formal128 assay is now authorized as the next step.
+
+99M remains untouched.
+
+
+## Completed formal128 result
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v1142_matched_pair_mac.sh formal128
+
+Regression tests before formal run:
+
+    14 passed
+
+Frozen inputs:
+
+V1.13 Policy checkpoint:
+
+    runs/gene_mrta_v113_route_tail_evolution/gene_mrta_v113_route_tail_20261003_203157_seed7/checkpoint.json
+
+Adaptive V1.14.1 Recombination checkpoint:
+
+    runs/gene_mrta_v1141_paired_seed7/adaptive/gene_mrta_v1141_recombination_20261003_231301_seed7/checkpoint.json
+
+Formal run directory:
+
+    runs/gene_mrta_v1142_matched_pair/gene_mrta_v1142_matched_pair_20261004_110044_seed7
+
+Formal design:
+
+- 128 unique unordered frozen Policy-parent pairs;
+- same parent-pair manifest for adaptive and center;
+- one child per pair per condition;
+- no Policy mutation;
+- no Policy-bank feedback;
+- no generational drift;
+- all children evaluated on the same 100 frozen 95M worlds;
+- no scalarized Policy score.
+
+Observed adaptive rule usage summary:
+
+- adaptive non-center rule pairs = 115/128;
+- center-rule adaptive samples = 13/128;
+- exact adaptive/center identical Policy children = 19/128.
+
+Because every adaptive center-rule sample must equal the center child, at least 6 additional non-center rule samples collapsed to the same exact Policy child for their specific parent pair. This is a context-specific effective-equivalence observation, not a protocol error.
+
+### Primary per-axis matched result
+
+Adaptive - Center:
+
+mean_time:
+- mean delta = +0.00064842
+- W/T/L = 47/38/43
+- non-tied adaptive win rate = 47/90 = 52.22%
+
+tail10_time:
+- mean delta = +0.00104946
+- W/T/L = 40/54/34
+- non-tied adaptive win rate = 40/74 = 54.05%
+
+continuation_preservation:
+- mean delta = +0.00029748
+- W/T/L = 62/29/37
+- non-tied adaptive win rate = 62/99 = 62.63%
+
+fleet_option_reserve:
+- mean delta = -0.00006791
+- W/T/L = 51/31/46
+- non-tied adaptive win rate = 51/97 = 52.58%
+
+The largest directional advantage is continuation_preservation.
+
+### Exploratory exact sign tests on non-tied pairs
+
+These tests use only W/L counts and ignore ties.
+
+mean_time:
+- p = 0.7520
+
+tail10_time:
+- p = 0.5614
+
+continuation_preservation:
+- p = 0.01543
+
+fleet_option_reserve:
+- p = 0.6849
+
+The continuation result is nominally significant at 0.05 as a single exploratory test.
+
+However, four Policy axes were examined. A simple Bonferroni correction would give approximately:
+
+0.01543 * 4 = 0.0617
+
+Therefore this formal128 run does not justify a corrected multi-axis statistical superiority claim yet.
+
+### Axiswise dominance
+
+Across 128 exact parent pairs:
+
+- tie = 29
+- adaptive weakly dominates center = 19
+- center weakly dominates adaptive = 13
+- neither dominates = 67
+
+Among pairs with a strict weak-dominance outcome only:
+
+- adaptive 19
+- center 13
+
+This direction favors adaptive but is not statistically strong by itself.
+
+### Inheritance and four-capability fusion
+
+Dual 0.95 inheritance gate:
+
+- adaptive = 98/128
+- center = 95/128
+
+Four-capability certification:
+
+- adaptive = 90/128
+- center = 87/128
+
+Thus adaptive produced 3 additional dual-gate-passing children and 3 additional four-capability children in this matched-parent development assay.
+
+The difference is small but directionally favorable to adaptive.
+
+### Scientific interpretation
+
+The correct V1.14.2 conclusion is:
+
+1. Adaptive mating is not a universal improvement over center.
+2. It shows a small positive average change on mean_time and tail10_time.
+3. It shows the clearest directional advantage on continuation_preservation.
+4. fleet_option_reserve is essentially neutral/slightly negative on average.
+5. Adaptive produces slightly more dual-gate and four-capability children.
+6. Most parent pairs remain trade-off cases rather than one method dominating on every axis.
+
+Therefore:
+
+- "Adaptive recombination always beats center" is NOT supported.
+- "Adaptive recombination can improve some capability dimensions for the same parents while preserving multi-capability fusion" IS supported as development evidence.
+- "A learned non-center rule family is statistically superior overall" is NOT yet supported.
+
+### Next required analysis before a new architecture
+
+Do not change the mating formula family yet.
+
+The next step is to inspect the already-written formal summary/pair_results and isolate the 115 non-center adaptive pairs.
+
+Required questions:
+
+1. Which non-center Recombination Gene IDs produced the continuation wins?
+2. Are the wins concentrated in one or more rule phenotypes?
+3. What parent capability combinations were present in those wins?
+4. Do any non-center rules increase four-capability certification relative to center on the same pair?
+5. Which six non-center samples collapsed to an exactly identical center child and why?
+6. Are there context patterns that predict when a non-center rule should be used?
+
+This is the first place where context-conditioned rule selection may be justified.
 
 99M remains untouched.
