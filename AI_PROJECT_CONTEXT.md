@@ -1337,3 +1337,56 @@ Do not yet generalize 98.19% retention to the whole 6R/30T distribution from n=1
 
 Recommended next action:
 extend exact-unlimited to 3 worlds at 6R/30T using resume so world 1 is skipped.
+
+
+## V1.16 6R/30T multi-seed worst-case exact benchmark
+
+Next experiment decision:
+
+Run multiple exact-unlimited 6R/30T seeds to measure not only mean Policy
+quality but the worst observed exact error and exact-proof runtime.
+
+Per-seed exact error:
+
+    e_s = (T*_s - T_policy,s) / T*_s
+
+Primary worst-case statistic:
+
+    e_max = max_s e_s
+
+Equivalent worst observed retention:
+
+    retention_min = min_s T_policy,s / T*_s
+
+Runtime statistics:
+
+- mean / median / max MILP total seconds;
+- slowest MILP seed;
+- mean / median / max Policy seconds;
+- slowest Policy seed;
+- per-seed MILP / Policy time ratio.
+
+The V1.16 case summary now records:
+
+- max_exact_relative_gap;
+- max_exact_absolute_gap;
+- worst_exact_gap_seed;
+- worst_exact_gap_policy_score;
+- worst_exact_gap_optimum_score;
+- max_milp_total_seconds;
+- slowest_milp_seed;
+- max_policy_seconds;
+- slowest_policy_seed.
+
+Recommended first formal batch:
+
+10 exact seeds at 6R/30T: 116050000 through 116050009.
+
+Existing seed 116050000 is already proven optimal and will be skipped via resume.
+
+Command:
+
+    V116_EXACT_WORLDS=10 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+
+Do not call the resulting maximum a theoretical upper bound. It is the maximum
+observed exact gap over the tested seed set.
