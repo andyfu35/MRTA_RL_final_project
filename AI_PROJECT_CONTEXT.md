@@ -1106,3 +1106,25 @@ Primary document:
 docs/GENE_HOMOGENEOUS_MRTA_V116_MILP_POLICY_SCALING.md
 
 99M remains untouched.
+
+
+## V1.16 implementation status
+
+MILP-vs-frozen-Policy scaling benchmark is implemented but not yet run.
+
+Code:
+src/marl2d/gene_mrta_v116/milp_policy_scaling.py
+
+Tests:
+tests/test_gene_mrta_v116_milp_policy_scaling.py
+
+Launcher:
+tools/run_gene_mrta_v116_milp_policy_mac.sh
+
+Existing MILP core now exposes incumbent dual upper bound and node count.
+
+First commands:
+1. bash tools/run_gene_mrta_v116_milp_policy_mac.sh tests
+2. bash tools/run_gene_mrta_v116_milp_policy_mac.sh smoke
+
+Do not claim any V1.16 result before user terminal output exists.
