@@ -564,3 +564,99 @@ proven, and worlds 2-3 continue.
 
 No 7R/35T or 8R/40T unlimited exact claim should be made before the first
 6R/30T exact result is obtained and interpreted.
+
+
+## Completed first exact-unlimited 6R/30T world
+
+Command:
+
+```bash
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+Tests:
+
+9 passed.
+
+Run:
+
+```
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+```
+
+World:
+
+```
+6R / 30T
+seed = 116050000
+```
+
+HiGHS result:
+
+```
+Status = Optimal
+Gap = 0%
+T* = 0.28074964073648145
+```
+
+Frozen Policy:
+
+```
+T_policy = 0.2756685668779121
+exact_absolute_gap = 0.005081073858569374
+exact_relative_gap = 0.018098238149977172
+exact_retention = 0.9819017618500229
+```
+
+Both MILP and Policy complete 14 tasks.
+
+Runtime:
+
+```
+Policy = 0.008538166999642272 s
+MILP solver = 717.154159042002 s
+MILP total = 717.1704191659992 s
+MILP / Policy = 83995.82945567204x
+```
+
+MILP search diagnostics:
+
+```
+nodes = 276137
+LP iterations = 8274628
+peak RSS = 290.953125 MB
+```
+
+### Most important interpretation
+
+The final optimum value was already present as the best incumbent by roughly
+138.5 s.
+
+However, the solver did not prove that no better solution existed until about
+717.1 s.
+
+So on this world:
+
+- solution discovery happened relatively early;
+- exact proof dominated the remaining compute;
+- the 300 s practical timeout was mainly a proof-certification failure, not a
+  failure to find the eventual optimum.
+
+This distinction is important for reporting.
+
+The 300 s result still correctly demonstrates loss of real-time exactness.
+The unlimited result establishes the true capability ceiling.
+
+For this first hard exact world, the 148-parameter Policy is 98.19% of the
+global optimum while using about 1/83,996 of the MILP method time.
+
+Do not report 98.19% as the mean 6R/30T retention yet because n=1.
+
+Next:
+
+```bash
+V116_EXACT_WORLDS=3 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+Resume should skip the already-proven seed 116050000 and solve seeds 116050001
+and 116050002.
