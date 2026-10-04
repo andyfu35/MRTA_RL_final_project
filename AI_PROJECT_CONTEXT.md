@@ -591,7 +591,7 @@ If anything in a conversation conflicts with these files, inspect the actual rep
 
 STATUS:
 
-IMPLEMENTED. NOT YET RUN.
+COMPLETED. V1.14 RECOMBINATION SERIES FROZEN FOR NOW.
 
 Purpose:
 
@@ -658,3 +658,34 @@ Full plan:
 docs/GENE_HOMOGENEOUS_MRTA_V115_SCALING_STRESS_PLAN.md
 
 99M remains protected.
+
+
+## V1.14.3 completed result and freeze
+
+Source pairs = 128; non-center pairs = 115.
+
+Non-center results:
+- mean_time +0.00072172, W/T/L 47/25/43
+- tail10 +0.00116809, W/T/L 40/41/34
+- continuation +0.00033111, W/T/L 62/16/37
+- reserve -0.00007559, W/T/L 51/18/46
+- four-capability rescue = 3
+- four-capability loss = 0
+- candidate rule/context groups = 8
+- identical non-center children = 6
+
+Leading descriptive rule:
+6858fcfc2c9540c2f0fd
+- n=18
+- active terms=2
+- continuation W/T/L=11/1/6
+- continuation mean delta=+0.0004531036432003304
+- four-cap rescue-minus-loss=+1
+
+Conclusion:
+non-center mating can be useful in specific parent contexts, especially for continuation and occasional four-capability rescue, but there is no validated globally superior non-center law.
+
+Decision:
+freeze V1.14 mating research now. Do not tune further on 95M.
+
+Proceed directly to V1.15 fleet/task scalability stress testing.
