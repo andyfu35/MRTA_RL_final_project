@@ -45,22 +45,31 @@ if [[ "$MODE" == "smoke" ]]; then
 elif [[ "$MODE" == "ladder3" ]]; then
   python -m marl2d.gene_mrta_v115.policy_only \
     --v113-checkpoint "$V113_CHECKPOINT" \
-    --cases "64x320,128x640,256x1280,512x2560" \
+    --cases "64x320,128x640,256x1280" \
     --worlds-per-case 3 \
     --seed-base 115110000 \
     --world-timeout 180 \
     --policy-timeout 300
 
-elif [[ "$MODE" == "extreme1" ]]; then
+elif [[ "$MODE" == "extreme512" ]]; then
+  python -m marl2d.gene_mrta_v115.policy_only \
+    --v113-checkpoint "$V113_CHECKPOINT" \
+    --cases "512x2560" \
+    --worlds-per-case 1 \
+    --seed-base 115120000 \
+    --world-timeout 300 \
+    --policy-timeout 300
+
+elif [[ "$MODE" == "extreme1024" ]]; then
   python -m marl2d.gene_mrta_v115.policy_only \
     --v113-checkpoint "$V113_CHECKPOINT" \
     --cases "1024x5120" \
     --worlds-per-case 1 \
-    --seed-base 115120000 \
+    --seed-base 115130000 \
     --world-timeout 300 \
     --policy-timeout 600
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v115b_policy_only_mac.sh [tests|smoke|ladder3|extreme1]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v115b_policy_only_mac.sh [tests|smoke|ladder3|extreme512|extreme1024]" >&2
   exit 2
 fi
