@@ -1,6 +1,6 @@
 # Gene Homogeneous MRTA / SEGB Experiment Ledger
 
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 Repository: andyfu35/MRTA_RL_final_project
 Active branch: experiment/gene-homogeneous-mrta-v1
 Author: 傅獻德 (Hsien-Te Fu)
@@ -1135,11 +1135,15 @@ docs/GENE_HOMOGENEOUS_MRTA_V114_SELF_EVOLVING_RECOMBINATION.md
 
 ## V1.14.1 - Phenotype-Canonical, Evidence-Aware Recombination
 
-STATUS AS OF 2026-10-03:
+STATUS AS OF 2026-10-04:
 
-IMPLEMENTED, NOT YET EXPERIMENTALLY RUN.
+COMPLETED SINGLE-SEED PAIRED SMOKE AND PAIRED50 FOR seed=7.
 
-Do not report V1.14.1 paired-smoke or paired50 results until actual terminal output is provided.
+Regression tests:
+
+15 passed.
+
+The paired-smoke and paired50 results below are now completed development evidence.
 
 Purpose:
 
@@ -1254,6 +1258,136 @@ No weighted aggregate comparison is created.
 Primary document:
 docs/GENE_HOMOGENEOUS_MRTA_V1141_RECOMBINATION_CORRECTION.md
 
+
+### V1.14.1 paired-smoke result
+
+Adaptive smoke:
+
+- Gen0: Rbank 10, Rpareto 0, Rmature 0, Rcenter 1.
+- Gen1: Rbank 12, Rpareto 1, Rmature 1, Rcenter 1.
+- Gen2: Rbank 12, Rpareto 2, Rmature 2, Rcenter 1.
+- final Policy best:
+  - mean_time 0.977920253212843
+  - tail10_time 0.9262063481487696
+  - continuation_preservation 0.8328795356499624
+  - fleet_option_reserve 0.8757350433050963
+- final adaptive smoke Pareto size = 2.
+
+Center smoke:
+
+- Rbank = 1 throughout.
+- Rcenter = 1 throughout.
+- final Policy best exactly matched adaptive smoke.
+- final Pareto size = 1.
+
+Therefore the phenotype-canonical structural invariants passed.
+
+### V1.14.1 formal paired50 result
+
+Common bootstrap:
+
+runs/gene_mrta_v113_route_tail_evolution/gene_mrta_v113_route_tail_20261003_203157_seed7/checkpoint.json
+
+Scenario bank:
+
+runs/gene_mrta_v110_scenario_bank/scenario_bank_100.json
+
+Adaptive:
+
+runs/gene_mrta_v1141_paired_seed7/adaptive/gene_mrta_v1141_recombination_20261003_231301_seed7
+
+Center:
+
+runs/gene_mrta_v1141_paired_seed7/center/gene_mrta_v1141_recombination_20261004_013416_seed7
+
+Comparison:
+
+runs/gene_mrta_v1141_paired_seed7/comparison_50.json
+
+Adaptive final Policy best:
+
+- mean_time = 0.9797388961714149
+- tail10_time = 0.9273987323265199
+- continuation_preservation = 0.8334576354631884
+- fleet_option_reserve = 0.8757350433050963
+
+Center final Policy best:
+
+- mean_time = 0.9795402913092378
+- tail10_time = 0.9273987323265199
+- continuation_preservation = 0.8345021458732124
+- fleet_option_reserve = 0.8762071604639012
+
+Adaptive - Center:
+
+- mean_time = +0.0001986048621770431
+- tail10_time = 0
+- continuation_preservation = -0.0010445104100239577
+- fleet_option_reserve = -0.0004721171588049078
+
+Percentage-point interpretation:
+
+- mean_time approximately +0.01986 pp adaptive;
+- tail10 exact tie;
+- continuation approximately -0.10445 pp adaptive;
+- reserve approximately -0.04721 pp adaptive.
+
+Because the project explicitly keeps these capability axes independent, this result must not be converted into one weighted scalar verdict.
+
+### Recombination-bank finding
+
+Phenotype canonicalization worked:
+
+Rcenter = 1 throughout the adaptive formal run.
+
+The adaptive run developed up to roughly twenty mature rule phenotypes and transient Pareto fronts of size 2–3, but finished with mature Pareto size 1.
+
+All four final mature recombination specialists were:
+
+c7723fa1e0127975e49e
+
+This is the canonical all-gates-off center law.
+
+Its adaptive-arm evidence:
+
+- active terms = 0;
+- generated = 884;
+- screen_selected = 189;
+- accepted = 189;
+- four-capability accepted = 183.
+
+Thus the V1.14 center-law dominance survives removal of neutral phenotype clones and low-evidence specialist promotion.
+
+Current interpretation:
+
+- V1.14.1 correction mechanics = PASS.
+- Adaptive Recombination Bank implementation = PASS.
+- Adaptive > center claim = NOT SUPPORTED for seed=7.
+- Non-center mature formula superiority = NOT SUPPORTED for seed=7.
+
+### New control caveat found
+
+The center-only arm uses one deterministic center rule.
+
+The formal launcher still uses:
+
+32 parent pairs x 4 children/pair = 128 mating children.
+
+For a given parent pair, the four center-law children can be identical because the rule is deterministic.
+
+Adaptive mode can generate different rule phenotypes for those four children.
+
+Therefore equal nominal offspring count does not imply equal unique-child search diversity.
+
+This asymmetry tends to handicap the center control, not the adaptive arm.
+
+Despite that handicap, center matched or exceeded adaptive on tail, continuation, and reserve, while adaptive was only slightly higher on mean time.
+
+Before publication-grade claims, the next paired control should match unique-child opportunity, e.g. one deterministic center child per distinct parent pair with enough distinct pairs to reach the same unique candidate budget, or explicit deduplication followed by equalized unique screening budget.
+
+Do not inspect 99M.
+
+
 ---
 
 # 6. Current code architecture
@@ -1355,13 +1489,21 @@ Formal V1.14.1 pilot invariants:
 
 # 9. Current unanswered scientific question
 
-The immediate question is now:
+The seed=7 V1.14.1 paired experiment did not demonstrate a consistent adaptive advantage over the canonical center law.
 
-Does an adaptive, phenotype-canonical, evidence-aware Recombination Gene Bank outperform a fixed center-law control when both receive the same Policy evolution budget?
+The immediate unresolved question is now whether this remains true after matching UNIQUE child opportunity between the adaptive and deterministic-center arms.
 
-This must be answered before expanding the recombination formula grammar.
+Preferred next experiment:
 
-Do not jump directly to symbolic expression trees before this controlled question is resolved.
+- preserve the V1.13 bootstrap;
+- preserve the frozen 95M development bank;
+- preserve Policy architecture and all four capability axes;
+- preserve separate policy_rng/rule_rng;
+- make center and adaptive arms receive equal unique Policy-child opportunity before screening;
+- compare four axes separately;
+- keep 99M untouched.
+
+Do not expand the formula grammar or move to symbolic expression trees until this remaining control asymmetry is resolved.
 
 ---
 
@@ -1499,10 +1641,10 @@ Before modifying code:
 2. Read this ledger.
 3. Read docs/GENE_HOMOGENEOUS_MRTA_V1141_RECOMBINATION_CORRECTION.md.
 4. Check the active branch is experiment/gene-homogeneous-mrta-v1.
-5. Check whether V1.14.1 paired-smoke has actually been run.
-6. If no terminal output exists, do not claim it passed.
-7. If paired-smoke passes, analyze invariants before paired50.
-8. If paired50 completes, record all results back into this ledger and AI_PROJECT_CONTEXT.md before starting a new version.
+5. V1.14.1 paired-smoke and paired50 are completed for seed=7.
+6. The result does not show a consistent adaptive advantage over center.
+7. The next control should equalize unique-child opportunity before multi-seed replication.
+8. Record the new control design in this ledger/context before implementation.
 9. Never use 99M during this development step.
 
 This documentation update rule is now part of the experimental workflow:
