@@ -2424,3 +2424,59 @@ observed MILP proof wall = between 5R/25T and 6R/30T under the frozen 300 s budg
 Next:
 boundary5, five new worlds each at 4R/20T, 5R/25T, 6R/30T.
 
+
+
+## V1.16 exact-unlimited extension
+
+STATUS:
+
+IMPLEMENTED, NOT YET RUN TO COMPLETION.
+
+After the 6R/30T ladder produced 0/3 optimal proofs under the frozen 300 s
+budget, the user explicitly decided that MILP must not stop merely because the
+online/practical budget is exceeded. The exact reference should continue until
+global optimality is actually proved.
+
+The practical 300 s result is still retained as a runtime result. The new
+unlimited experiment serves a different purpose: establish the true capability
+ceiling T* for selected hard worlds.
+
+Implemented rules:
+
+- `time_limit=None` means no HiGHS time-limit option is supplied;
+- exact relative gap / retention still require `status == optimal`;
+- `mip_rel_gap=0.0`;
+- no precision relaxation;
+- no incumbent-as-optimum interpretation;
+- native solver output can be enabled;
+- independent elapsed-time heartbeat confirms the process is alive;
+- completed worlds are fsynced to JSONL immediately;
+- fixed run directories support resume;
+- exact resume skips only rows already proven optimal.
+
+Regression launcher:
+
+```
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-regression
+```
+
+Hard-world launcher:
+
+```
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+Default hard world:
+
+- 6R/30T
+- seed 116050000
+- 1 world initially
+- no MILP time limit
+- 30 s heartbeat
+- HiGHS display enabled
+- frozen Gene 7ee7c18fca2280022ac5
+- 148 Policy parameters
+
+The first goal is to obtain one real 6R/30T global optimum. Only after that
+result is understood should more seeds or 7R/35T / 8R/40T unlimited exact
+experiments be considered.
