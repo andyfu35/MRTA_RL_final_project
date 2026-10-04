@@ -2543,3 +2543,46 @@ about 11.95 minutes.
 This is n=1 exact evidence only. The next frozen action is to run the remaining
 two worlds in the same 6R/30T namespace via resume before considering 7R/35T or
 8R/40T.
+
+
+## V1.16 6R/30T multi-seed worst-case exact protocol
+
+The next exact study will use multiple seeds at fixed 6R/30T.
+
+Goal:
+
+quantify the largest observed Policy-vs-global-optimum error and the slowest
+exact MILP proof, not only the mean.
+
+For each seed s:
+
+    relative_gap_s = (T*_s - T_policy,s) / T*_s
+    retention_s = T_policy,s / T*_s
+
+Report:
+
+- mean exact retention;
+- minimum exact retention;
+- mean exact relative gap;
+- maximum exact relative gap;
+- seed with maximum exact relative gap;
+- mean / median / maximum MILP total time;
+- seed with maximum MILP time;
+- mean / median / maximum Policy time;
+- exact proof rate.
+
+Initial batch size:
+
+10 seeds, 116050000 through 116050009.
+
+The already completed seed 116050000 is reused and resume-skipped rather than
+recomputed.
+
+Command:
+
+    V116_EXACT_WORLDS=10 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+
+Interpretation rule:
+
+maximum observed gap over 10 seeds is an empirical worst case, not a guaranteed
+global worst-case bound over all possible worlds.
