@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-IMPLEMENTED. TESTS / SMOKE NOT YET RUN.
+SMOKE AND THREE-WORLD LADDER COMPLETED. EXACT-MILP PRACTICAL WALL OBSERVED BETWEEN 5R/25T AND 6R/30T UNDER 300 S.
 
 ## Objective
 
@@ -288,3 +288,169 @@ This mode is intended only after the smoke/ladder identify a reasonable exact
 MILP range.
 
 No result is claimed until these commands are actually executed.
+
+
+## Completed smoke and ladder3 results
+
+Date: 2026-10-04
+
+Tests:
+
+    5 passed
+
+Smoke run:
+
+    runs/gene_mrta_v116_milp_policy/gene_mrta_v116_milp_policy_20261004_201534_seed116000000
+
+Ladder run:
+
+    runs/gene_mrta_v116_milp_policy/gene_mrta_v116_milp_policy_20261004_201755_seed116010000
+
+Frozen Gene:
+
+    7ee7c18fca2280022ac5
+
+Parameters:
+
+    148
+
+### Smoke
+
+2R/10T:
+- Policy = 0.001932 s
+- MILP = 0.095153 s
+- exact retention = 0.953380
+- MILP/Policy time ratio = 49.24x
+
+3R/15T:
+- Policy = 0.003714 s
+- MILP = 0.054417 s
+- exact retention = 1.000000
+- MILP/Policy time ratio = 14.65x
+
+4R/20T:
+- Policy = 0.007082 s
+- MILP = 9.687818 s
+- exact retention = 0.938533
+- MILP/Policy time ratio = 1367.92x
+
+Smoke structural result:
+
+PASS.
+
+### Three-world ladder aggregate
+
+2R/10T:
+- MILP proof rate = 3/3
+- mean Policy time = 0.001377 s
+- mean MILP time = 0.195471 s
+- mean exact retention = 0.991087
+- mean exact relative gap = 0.008913
+- minimum exact retention = 0.973260
+- mean per-world MILP/Policy ratio = 129.46x
+
+3R/15T:
+- MILP proof rate = 3/3
+- mean Policy time = 0.002730 s
+- mean MILP time = 7.901246 s
+- mean exact retention = 0.946564
+- mean exact relative gap = 0.053436
+- minimum exact retention = 0.907421
+- mean per-world MILP/Policy ratio = 2644.40x
+
+4R/20T:
+- MILP proof rate = 3/3
+- mean Policy time = 0.003387 s
+- mean MILP time = 20.814807 s
+- mean exact retention = 0.977449
+- mean exact relative gap = 0.022551
+- minimum exact retention = 0.944180
+- mean per-world MILP/Policy ratio = 5053.38x
+
+5R/25T:
+- MILP proof rate = 3/3
+- mean Policy time = 0.004702 s
+- mean MILP time = 41.553477 s
+- median MILP time = 7.509629 s
+- one world required 112.500683 s
+- mean exact retention = 0.942129
+- mean exact relative gap = 0.057871
+- minimum exact retention = 0.930872
+- mean per-world MILP/Policy ratio = 9060.85x
+
+6R/30T:
+- MILP proof rate = 0/3
+- all three MILP runs reached the frozen 300 s time limit
+- mean Policy time = 0.010127 s
+- mean MILP call time = 300.050995 s
+- mean per-world MILP/Policy ratio = 30,883.87x
+- exact retention unavailable because optimality was not proved
+- mean guaranteed Policy-retention lower bound from the MILP dual upper bound = 0.620293
+- Policy / MILP incumbent ratios are approximately 0.9819, 1.0000, and 0.9815
+- mean Policy / incumbent ratio is approximately 0.9878
+
+The Policy-incumbent ratio is NOT an exact optimality metric because the MILP
+incumbent is only the best feasible solution found before timeout.
+
+### Primary result
+
+Under the frozen 300 s exact-solve budget, the observed MILP practical
+optimality-proof wall occurs between:
+
+    5R/25T and 6R/30T
+
+for the tested obstacle-aware task distribution.
+
+The frozen 148-parameter Policy remains millisecond-scale at this boundary.
+
+At 5R/25T the Policy retains about 94.2% of the proven optimum on average while
+being orders of magnitude faster.
+
+At 6R/30T exact optimality can no longer be established in any of the three
+tested worlds, while the Policy still returns a solution in roughly 10 ms.
+
+### Important runtime variability
+
+MILP runtime is highly world-dependent.
+
+Examples:
+
+- 3R/15T ranges from about 0.47 s to 20.98 s in the three-world ladder;
+- 4R/20T ranges from about 0.70 s to 59.51 s;
+- 5R/25T ranges from about 4.65 s to 112.50 s.
+
+Therefore fleet/task size alone does not determine MILP hardness.
+
+Formal reporting must include proof rate and runtime distributions, not only
+mean runtime.
+
+### Next validation step
+
+The current n=3 ladder is enough to identify the qualitative bottleneck but is
+not a publication-grade estimate of the transition.
+
+A new launcher mode is added:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh boundary5
+
+It tests:
+
+- 4R/20T
+- 5R/25T
+- 6R/30T
+
+with five new worlds per scale, a frozen 300 s MILP limit, and new 116100000
+seed namespace.
+
+This will strengthen estimates of:
+
+- exact retention before the MILP wall;
+- MILP proof probability near the wall;
+- runtime heavy-tail behavior;
+- Policy quality relative to MILP incumbents after exact proof becomes
+  impractical.
+
+Do not proceed to 8R/40T exact MILP until this boundary replication is
+interpreted.
+
+99M remains untouched.
