@@ -721,3 +721,50 @@ Failure stages are separated into geometry, path, and policy.
 Outputs include detailed timing/memory CSVs and raw quality metrics.
 
 99M remains untouched.
+
+
+## V1.15A initial smoke result
+
+Run:
+runs/gene_mrta_v115_scaling/gene_mrta_v115_scaling_20261004_121633_seed115000000
+
+Frozen Gene:
+7ee7c18fca2280022ac5
+
+Parameters:
+148
+
+4R/20T:
+- path 0.0310 s
+- Policy 0.00277 s
+- completion 0.35
+- time utility 0.18348
+- continuation 0.82888
+- reserve 0.86209
+
+8R/40T:
+- path 0.1778 s
+- Policy 0.01656 s
+- completion 0.525
+- time utility 0.27173
+- continuation 0.90578
+- reserve 0.94628
+
+16R/80T:
+- path 1.27874 s
+- Policy 0.04424 s
+- completion 0.375
+- time utility 0.19886
+- continuation 0.90529
+- reserve 0.94504
+
+Interpretation:
+- smoke structural PASS;
+- same frozen 148-parameter Gene runs zero-shot through 16R/80T;
+- A* path preprocessing is already the dominant compute cost;
+- path-table memory remains small;
+- normalized distance shrinks with map size while physical nearest distance remains similar, confirming observation-scale distribution shift;
+- one world per scale is not enough for behavioral scaling claims.
+
+Next command:
+bash tools/run_gene_mrta_v115_scaling_mac.sh ladder3
