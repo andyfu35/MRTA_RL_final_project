@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-V1.15A FULL-SYSTEM ZERO-SHOT SCALING IMPLEMENTED. TESTS/SMOKE NOT YET RUN.
+V1.15A TESTS PASSED AND INITIAL ZERO-SHOT SMOKE PASSED. EXTREME LADDER NOT YET RUN.
 
 ## Objective
 
@@ -350,3 +350,128 @@ Therefore a future quality collapse can be separated into:
 - observation-scale distribution shift.
 
 No result is claimed until the tests and smoke are actually run.
+
+
+## Completed V1.15A initial smoke
+
+Date: 2026-10-04
+
+Tests:
+
+    4 passed
+
+Frozen Policy:
+
+    7ee7c18fca2280022ac5
+
+Parameter count:
+
+    148
+
+Smoke run:
+
+    runs/gene_mrta_v115_scaling/gene_mrta_v115_scaling_20261004_121633_seed115000000
+
+### 4R / 20T
+
+- world size = 100
+- obstacles = 10
+- path preprocessing = 0.031005708 s
+- Policy planning = 0.002770000 s
+- decoder steps = 7
+- pair slots scored = 476
+- completion = 0.35
+- raw time utility = 0.183477256
+- continuation = 0.828880100
+- reserve = 0.862087259
+- mean queue depth = 1.75
+- max queue depth = 2
+- mean nearest physical robot-task distance = 37.1913
+- normalized nearest distance = 0.262982
+- RSS peak = 70.95 MB
+
+### 8R / 40T
+
+- world size = 141.421356
+- obstacles = 20
+- path preprocessing = 0.177800708 s
+- Policy planning = 0.016564500 s
+- decoder steps = 21
+- pair slots scored = 5040
+- completion = 0.525
+- raw time utility = 0.271732244
+- continuation = 0.905777154
+- reserve = 0.946279206
+- mean queue depth = 2.625
+- max queue depth = 4
+- mean nearest physical robot-task distance = 28.1493
+- normalized nearest distance = 0.140746
+- RSS peak = 71.02 MB
+
+### 16R / 80T
+
+- world size = 200
+- obstacles = 40
+- path preprocessing = 1.278738291 s
+- Policy planning = 0.044244333 s
+- decoder steps = 30
+- pair slots scored = 31440
+- completion = 0.375
+- raw time utility = 0.198862617
+- continuation = 0.905288690
+- reserve = 0.945038368
+- mean queue depth = 1.875
+- max queue depth = 3
+- mean nearest physical robot-task distance = 28.3613
+- normalized nearest distance = 0.100272
+- RSS peak = 71.30 MB
+
+### Smoke interpretation
+
+Structural result:
+
+PASS.
+
+The same frozen 148-parameter Policy Gene runs zero-shot at all three tested
+fleet/task sizes.
+
+The dominant early computational cost is path/A* preprocessing, not the Policy
+decoder.
+
+Observed path preprocessing:
+
+0.0310 s -> 0.1778 s -> 1.2787 s
+
+Observed Policy planning:
+
+0.00277 s -> 0.01656 s -> 0.04424 s
+
+At 16R/80T, path preprocessing is already about 29 times the Policy planning
+latency for this world.
+
+Path-table storage itself remains small:
+
+0.00366 MB -> 0.01465 MB -> 0.05859 MB.
+
+Therefore the initial systems bottleneck is A* computation time rather than path
+table memory.
+
+The normalization diagnostic also behaves as expected:
+
+physical nearest distance is similar for 8R/40T and 16R/80T
+(about 28.15 vs 28.36), while normalized nearest distance falls
+(about 0.1407 -> 0.1003) because the global map diagonal grows.
+
+This confirms an observation-distribution shift exists under map scaling and
+must be kept visible when interpreting larger zero-shot cases.
+
+Behavioral quality must NOT be inferred from this one-world-per-scale smoke.
+The 4R/20T, 8R/40T and 16R/80T completion values are single-world observations,
+not scale-level means.
+
+Next frozen action:
+
+run the three-world extreme ladder with the same Policy and no architecture
+changes.
+
+99M remains untouched.
