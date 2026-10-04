@@ -990,3 +990,40 @@ bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe384
 384R/1920T is predicted around 265 s from the measured exponent and is the most informative next probe.
 
 99M remains untouched.
+
+
+## V1.15B probe384 result
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_191351_seed115140000
+
+384R/1920T:
+- SUCCESS
+- Policy 296.5072 s
+- decoder steps 758
+- pair slots 448,687,488
+- completion 0.394792
+- time utility 0.211622
+- balance 0.364720
+- queue mean 1.97396
+- RSS 1038.42 MB
+- Euclidean table only 0.02464 s
+
+This is only 3.4928 s below the frozen 300 s Policy timeout.
+
+Largest measured successful Policy-only scale:
+384R/1920T.
+
+Updated descriptive exponent using 64/128/256/384:
+~2.9707.
+
+Next:
+bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe388
+
+388R/1940T is predicted around 306 s and is intended as the final tight
+threshold-localization probe.
+
+After threshold localization, move to decoder-compute optimization rather than
+increasing Policy parameter count.
+
+99M remains untouched.
