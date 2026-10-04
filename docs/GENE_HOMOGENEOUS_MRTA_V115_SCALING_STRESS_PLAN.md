@@ -1013,3 +1013,155 @@ Only after that result should an intermediate one-world scale such as
 320R/1600T or 384R/1920T be added to tighten the limit bracket.
 
 99M remains untouched.
+
+
+## V1.15B ladder3 result
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
+
+Tests:
+
+    7 passed
+
+Run:
+
+    runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_180029_seed115110000
+
+Frozen Policy:
+
+    7ee7c18fca2280022ac5
+
+Parameters:
+
+    148
+
+All three tested scales completed 3/3 worlds.
+
+### 64R / 320T
+
+Three-world mean:
+
+- Policy = 1.447824 s
+- decoder steps = 127.333
+- pair slots scored = 2,092,501
+- completion = 0.397917
+- raw time utility = 0.212987
+- balance = 0.368421
+- mean queue depth = 1.98958
+- path table = 0.9375 MB
+- RSS peak = 144.90 MB
+
+### 128R / 640T
+
+Three-world mean:
+
+- Policy = 9.910586 s
+- decoder steps = 260.0
+- pair slots scored = 16,986,752
+- completion = 0.406250
+- raw time utility = 0.213276
+- balance = 0.378176
+- mean queue depth = 2.03125
+- path table = 3.75 MB
+- RSS peak = 238.17 MB
+
+### 256R / 1280T
+
+Three-world mean:
+
+- Policy = 81.533248 s
+- decoder steps = 511.0
+- pair slots scored = 134,082,304
+- completion = 0.399219
+- raw time utility = 0.212191
+- balance = 0.370496
+- mean queue depth = 1.99609
+- path table = 15.0 MB
+- RSS peak = 516.41 MB
+
+### Policy scaling fit
+
+The three-scale empirical exponent is:
+
+    2.9077150801970753
+
+The observed doubling ratios are approximately:
+
+- 64R/320T -> 128R/640T: Policy x6.85
+- 128R/640T -> 256R/1280T: Policy x8.23
+
+Pair-slot counts increase approximately eightfold at each doubling.
+
+Policy time per pair slot remains on the order of 0.6-0.7 microseconds across
+the ladder.
+
+This is strong implementation evidence that the near-cubic wall is driven by
+repeated pair rescoring, not by the fixed 148 Policy parameters themselves.
+
+### Zero-shot behavioral stability
+
+Across 64R/320T, 128R/640T, and 256R/1280T:
+
+completion:
+
+0.3979, 0.4063, 0.3992
+
+raw time utility:
+
+0.2130, 0.2133, 0.2122
+
+mean queue depth:
+
+1.9896, 2.0313, 1.9961
+
+balance:
+
+0.3684, 0.3782, 0.3705
+
+These three-world means are remarkably stable under 4x fleet/task scaling from
+64R/320T to 256R/1280T.
+
+This is strong structural zero-shot scaling evidence, while still not a
+publication-grade large-sample generalization study.
+
+### Updated 300 s Policy-limit bracket
+
+Known successful:
+
+256R / 1280T
+- 3/3 worlds
+- mean Policy = 81.53 s
+
+Known failed:
+
+512R / 2560T
+- 0/1
+- Policy timeout = 300.06 s
+
+Using the measured exponent 2.9077, the approximate one-world Policy-time
+predictions from the 256R/1280T mean are:
+
+- 320R/1600T: ~156 s
+- 352R/1760T: ~206 s
+- 384R/1920T: ~265 s
+- 416R/2080T: ~335 s
+
+Therefore 384R/1920T is the most informative next single probe for a frozen
+300 s budget.
+
+A new launcher mode is added:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe384
+
+It runs one world at 384R/1920T with the same frozen 300 s Policy timeout.
+
+If 384 succeeds, the 300 s limit is likely between 384R/1920T and
+512R/2560T, and 416R/2080T becomes the next likely threshold probe.
+
+If 384 fails, the bracket becomes 256R/1280T to 384R/1920T.
+
+99M remains untouched.
