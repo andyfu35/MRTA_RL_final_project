@@ -60,6 +60,15 @@ elif [[ "$MODE" == "probe384" ]]; then
     --world-timeout 300 \
     --policy-timeout 300
 
+elif [[ "$MODE" == "probe388" ]]; then
+  python -m marl2d.gene_mrta_v115.policy_only \
+    --v113-checkpoint "$V113_CHECKPOINT" \
+    --cases "388x1940" \
+    --worlds-per-case 1 \
+    --seed-base 115150000 \
+    --world-timeout 300 \
+    --policy-timeout 300
+
 elif [[ "$MODE" == "extreme512" ]]; then
   python -m marl2d.gene_mrta_v115.policy_only \
     --v113-checkpoint "$V113_CHECKPOINT" \
@@ -79,6 +88,6 @@ elif [[ "$MODE" == "extreme1024" ]]; then
     --policy-timeout 600
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v115b_policy_only_mac.sh [tests|smoke|ladder3|probe384|extreme512|extreme1024]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v115b_policy_only_mac.sh [tests|smoke|ladder3|probe384|probe388|extreme512|extreme1024]" >&2
   exit 2
 fi
