@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-PLANNED / IMPLEMENTATION IN PROGRESS.
+IMPLEMENTED. TESTS / SMOKE NOT YET RUN.
 
 ## Objective
 
@@ -228,3 +228,63 @@ Every completed run must be persisted in:
 - README current status
 
 before changing the next benchmark stage.
+
+
+## Implemented files
+
+- src/marl2d/gene_mrta_v116/milp_policy_scaling.py
+- tests/test_gene_mrta_v116_milp_policy_scaling.py
+- tools/run_gene_mrta_v116_milp_policy_mac.sh
+
+The existing MILP result object was also extended to expose:
+
+- mip_node_count
+- time_optimality_upper_bound
+
+so timeout worlds can retain useful proof-bound information.
+
+## Launcher modes
+
+Tests only:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh tests
+
+Initial smoke:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh smoke
+
+Smoke:
+- 2R/10T
+- 3R/15T
+- 4R/20T
+- one world each
+- MILP limit 60 s/world
+
+Staged 3-world ladder:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh ladder3
+
+Cases:
+- 2R/10T
+- 3R/15T
+- 4R/20T
+- 5R/25T
+- 6R/30T
+- 8R/40T
+
+MILP limit:
+300 s/world.
+
+The ladder stops after a scale has zero proven-optimal MILP worlds.
+
+Small-scale 10-world comparison:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh small10
+
+Cases:
+2R/10T, 3R/15T, 4R/20T.
+
+This mode is intended only after the smoke/ladder identify a reasonable exact
+MILP range.
+
+No result is claimed until these commands are actually executed.
