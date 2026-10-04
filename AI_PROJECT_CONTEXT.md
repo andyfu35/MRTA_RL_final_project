@@ -939,3 +939,54 @@ bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
 Do not increase the 512 timeout yet. Use 256R/1280T to tighten the limit bracket first.
 
 99M remains untouched.
+
+
+## V1.15B ladder3 result
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_180029_seed115110000
+
+All scales completed 3/3 worlds.
+
+64R/320T:
+- Policy 1.447824 s
+- pair slots 2,092,501
+- completion 0.397917
+- time utility 0.212987
+- queue mean 1.98958
+- RSS 144.90 MB
+
+128R/640T:
+- Policy 9.910586 s
+- pair slots 16,986,752
+- completion 0.406250
+- time utility 0.213276
+- queue mean 2.03125
+- RSS 238.17 MB
+
+256R/1280T:
+- Policy 81.533248 s
+- pair slots 134,082,304
+- completion 0.399219
+- time utility 0.212191
+- queue mean 1.99609
+- RSS 516.41 MB
+
+Empirical Policy exponent:
+2.9077150801970753
+
+Interpretation:
+- near-cubic repeated pair rescoring is confirmed over three scales;
+- zero-shot behavioral metrics remain remarkably stable through 256R/1280T;
+- fixed 148 Policy parameters are not the source of scaling cost.
+
+Current 300 s bracket:
+- 256R/1280T succeeds 3/3 at mean 81.53 s
+- 512R/2560T fails at 300 s
+
+Next:
+bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe384
+
+384R/1920T is predicted around 265 s from the measured exponent and is the most informative next probe.
+
+99M remains untouched.
