@@ -2367,3 +2367,24 @@ Initial smoke:
 
 No training occurs.
 
+
+
+### V1.16 implementation
+
+Implemented, not yet run.
+
+Code:
+src/marl2d/gene_mrta_v116/milp_policy_scaling.py
+
+Launcher:
+tools/run_gene_mrta_v116_milp_policy_mac.sh
+
+Tests:
+tests/test_gene_mrta_v116_milp_policy_scaling.py
+
+The benchmark records exact optimality gap only for MILP-proven worlds and
+uses dual-bound retention lower bounds for non-proven worlds.
+
+First smoke:
+2R/10T, 3R/15T, 4R/20T, one world each, 60 s MILP budget.
+
