@@ -1,6 +1,8 @@
 import numpy as np
 
 from marl2d.gene_mrta_v116.milp_policy_scaling import (
+    _is_completed_row,
+    _parse_optional_float,
     gap_metrics,
     milp_problem_size,
 )
@@ -97,4 +99,37 @@ def test_timeout_bound_is_not_exact_gap():
             "policy_to_milp_incumbent_ratio"
         ],
         0.72 / 0.70,
+    )
+
+
+def test_unlimited_time_limit_parser():
+    assert _parse_optional_float("unlimited") is None
+    assert _parse_optional_float("none") is None
+    assert np.isclose(
+        _parse_optional_float("300"),
+        300.0,
+    )
+
+
+def test_resume_requires_optimal_for_exact_unlimited():
+    timed_out = {
+        "status": "ok",
+        "milp_optimal": False,
+    }
+    proven = {
+        "status": "ok",
+        "milp_optimal": True,
+    }
+
+    assert _is_completed_row(
+        timed_out,
+        exact_required=False,
+    )
+    assert not _is_completed_row(
+        timed_out,
+        exact_required=True,
+    )
+    assert _is_completed_row(
+        proven,
+        exact_required=True,
     )
