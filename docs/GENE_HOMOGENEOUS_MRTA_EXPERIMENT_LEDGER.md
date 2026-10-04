@@ -1902,7 +1902,7 @@ docs/GENE_HOMOGENEOUS_MRTA_V1143_RULE_CONTEXT_ANALYSIS.md
 
 STATUS AS OF 2026-10-04:
 
-V1.15A TESTS PASSED (4/4) AND INITIAL ZERO-SHOT SMOKE PASSED. EXTREME LADDER NOT YET RUN.
+V1.15A EXTREME LADDER COMPLETED. FULL-SYSTEM LIMIT IS A* PATH PRECOMPUTATION BETWEEN 64R/320T AND 128R/640T.
 
 User objective:
 
@@ -2055,4 +2055,42 @@ One world per scale is diagnostic only, not behavioral evidence.
 
 Next frozen action:
 run ladder3 unchanged.
+
+
+
+### V1.15A extreme ladder result
+
+Run:
+runs/gene_mrta_v115_scaling/gene_mrta_v115_scaling_20261004_121902_seed115010000
+
+Frozen Gene:
+7ee7c18fca2280022ac5
+
+Successful:
+4R/20T, 8R/40T, 16R/80T, 32R/160T, 64R/320T all 3/3.
+
+128R/640T:
+0/3, all failed in path preprocessing after 300 s; Policy never ran.
+
+Mean path preprocessing:
+0.02538, 0.19041, 1.12575, 7.54657, 55.20587 s.
+
+Mean Policy:
+0.00334, 0.01250, 0.04817, 0.24790, 1.24652 s.
+
+Mean completion:
+0.4000, 0.4083, 0.3958, 0.4104, 0.4000.
+
+Mean raw time utility:
+0.1929, 0.2140, 0.2099, 0.2162, 0.2129.
+
+Mean queue depth stays approximately 2.
+
+Empirical timing exponents:
+path ~ T^2.75, Policy ~ T^2.14 over measured range.
+
+Conclusion:
+full-system bottleneck = obstacle-aware A* preprocessing.
+Behavioral zero-shot scaling remains stable through 64R/320T on this three-world diagnostic.
+Proceed to V1.15B Policy-only scaling rather than increasing A* timeout.
 
