@@ -1388,6 +1388,65 @@ Before publication-grade claims, the next paired control should match unique-chi
 Do not inspect 99M.
 
 
+
+## V1.14.2 - Frozen-Parent Matched-Pair Recombination Assay
+
+STATUS AS OF 2026-10-04:
+
+DESIGNED. IMPLEMENTATION IN PROGRESS. NO RESULT YET.
+
+V1.14.1 left one causal ambiguity: after adaptive and center Policy Banks evolve independently, their parent populations diverge, so later-generation offspring are not born from identical parent pairs.
+
+In addition, deterministic center mating can waste nominal offspring budget on duplicate children when the same parent pair is repeated.
+
+V1.14.2 removes both issues by freezing the parent population.
+
+Frozen sources:
+
+- completed V1.13 Policy checkpoint;
+- completed V1.14.1 adaptive Recombination checkpoint;
+- frozen V1.8 common ancestor;
+- frozen 95M 100-world development bank.
+
+Exactly 128 unique unordered parent pairs are sampled once and saved as a manifest.
+
+For each pair:
+
+Center:
+- one canonical center child.
+
+Adaptive:
+- one child using one rule sampled from the frozen V1.14.1 adaptive rule bank with the evidence-aware rule-selection protocol.
+
+Both children are evaluated on all 100 worlds.
+
+No Policy mutation, no Policy-bank admission feedback, no generational drift, and no primary 25-world screening.
+
+The paired report records independently:
+
+- mean_time;
+- tail10_time;
+- continuation_preservation;
+- fleet_option_reserve;
+- per-axis adaptive-minus-center differences;
+- per-axis win/tie/loss;
+- dual 0.95 inheritance-gate success;
+- four-capability certification;
+- adaptive-dominates-center count;
+- center-dominates-adaptive count;
+- neither-dominates count;
+- exact-identical-child count;
+- sampled rule usage;
+- non-center-rule subset results.
+
+No weighted aggregate score is allowed.
+
+Primary document:
+
+docs/GENE_HOMOGENEOUS_MRTA_V1142_MATCHED_PAIR_ASSAY.md
+
+99M remains untouched.
+
 ---
 
 # 6. Current code architecture
