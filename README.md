@@ -6,13 +6,14 @@ Before any AI assistant or new conversation changes the Gene-MRTA experiment, it
 
 1. AI_PROJECT_CONTEXT.md
 2. docs/GENE_HOMOGENEOUS_MRTA_EXPERIMENT_LEDGER.md
-3. docs/GENE_HOMOGENEOUS_MRTA_V1141_RECOMBINATION_CORRECTION.md
+3. docs/GENE_HOMOGENEOUS_MRTA_V1142_MATCHED_PAIR_ASSAY.md
 
-Current experimental status as of 2026-10-03:
+Current experimental status as of 2026-10-04:
 
 - V1.13 Route-Tail Multi-Task Evolution: completed.
 - V1.14 Self-Evolving Recombination Bank: completed; exposed center-law clone / evidence confounds.
-- V1.14.1 phenotype-canonical, evidence-aware adaptive-vs-center control: paired-smoke + paired50 completed for seed=7; no consistent adaptive advantage over center was demonstrated.\n- V1.14.2 Frozen-Parent Matched-Pair Recombination Assay: implemented, not yet run.
+- V1.14.1 phenotype-canonical, evidence-aware adaptive-vs-center control: paired-smoke + paired50 completed for seed=7; no consistent adaptive advantage over center was demonstrated.
+- V1.14.2 Frozen-Parent Matched-Pair Recombination Assay: formal128 completed for seed=7; adaptive shows a directional continuation advantage and +3 four-capability children, but no global superiority claim.
 - 99M remains protected and must not be inspected.
 
 All future architecture changes and completed experimental results must be written back to AI_PROJECT_CONTEXT.md and the experiment ledger before starting the next version.
