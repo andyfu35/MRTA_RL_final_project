@@ -193,12 +193,12 @@ The protected 99M benchmark remains untouched.
 
 # Current implementation status
 
-Status as of 2026-10-03:
+Status as of 2026-10-04:
 
-IMPLEMENTED, NOT YET RUN.
+COMPLETED SINGLE-SEED PAIRED SMOKE AND PAIRED50 (seed=7).
 
 The V1.14.1 code, tests, paired comparator, and launcher exist in the repository.
-No paired-smoke or paired50 result should be claimed until terminal output is actually produced.
+Paired-smoke and paired50 have now been executed for seed=7. This is still development evidence only and is not a multi-seed or protected-final claim.
 
 Current implementation files:
 
@@ -241,3 +241,188 @@ Before a new experimental version is started, all completed results and architec
 New AI conversations must read the root context file and experiment ledger before continuing development.
 
 The protected 99M benchmark remains untouched.
+
+
+---
+
+# V1.14.1 completed results — seed 7
+
+## Regression tests
+
+Command:
+
+    bash tools/run_gene_mrta_v1141_paired_mac.sh tests
+
+Result:
+
+    15 passed
+
+## Paired structural smoke
+
+Command:
+
+    bash tools/run_gene_mrta_v1141_paired_mac.sh paired-smoke
+
+Adaptive smoke:
+
+- Rcenter remained exactly 1;
+- Rbank reached 12;
+- mature-rule evidence became available;
+- non-center formulas survived and entered the small Pareto set;
+- Policy remained four-capability certified;
+- route-tail multi-task behavior remained active.
+
+Center smoke:
+
+- Rbank = 1;
+- Rcenter = 1;
+- only the canonical center phenotype existed.
+
+Smoke final Policy scores were identical between adaptive and center on all four axes.
+
+This validates the intended structural invariants of phenotype canonicalization and center-only control.
+
+## Formal paired50
+
+Command:
+
+    bash tools/run_gene_mrta_v1141_paired_mac.sh paired50
+
+Common bootstrap:
+
+    runs/gene_mrta_v113_route_tail_evolution/gene_mrta_v113_route_tail_20261003_203157_seed7/checkpoint.json
+
+Development scenario bank:
+
+    runs/gene_mrta_v110_scenario_bank/scenario_bank_100.json
+
+Adaptive run:
+
+    runs/gene_mrta_v1141_paired_seed7/adaptive/gene_mrta_v1141_recombination_20261003_231301_seed7
+
+Center-only run:
+
+    runs/gene_mrta_v1141_paired_seed7/center/gene_mrta_v1141_recombination_20261004_013416_seed7
+
+Comparison:
+
+    runs/gene_mrta_v1141_paired_seed7/comparison_50.json
+
+### Adaptive final Policy best
+
+- mean_time = 0.9797388961714149
+- tail10_time = 0.9273987323265199
+- continuation_preservation = 0.8334576354631884
+- fleet_option_reserve = 0.8757350433050963
+
+### Center-only final Policy best
+
+- mean_time = 0.9795402913092378
+- tail10_time = 0.9273987323265199
+- continuation_preservation = 0.8345021458732124
+- fleet_option_reserve = 0.8762071604639012
+
+### Adaptive minus Center
+
+- mean_time = +0.0001986048621770431
+- tail10_time = 0.0
+- continuation_preservation = -0.0010445104100239577
+- fleet_option_reserve = -0.0004721171588049078
+
+In percentage-point units:
+
+- mean_time: approximately +0.01986 pp
+- tail10_time: 0.00000 pp
+- continuation_preservation: approximately -0.10445 pp
+- fleet_option_reserve: approximately -0.04721 pp
+
+The four capability axes therefore do not show a consistent adaptive advantage.
+
+Adaptive is slightly higher on mean time, tied on tail10, and lower on continuation and fleet reserve.
+
+Because capability axes are intentionally not scalarized, there is no valid basis to collapse these four outcomes into a single win/loss score.
+
+## Recombination result
+
+The phenotype canonicalization fix worked.
+
+Across the formal adaptive run:
+
+- Rcenter stayed exactly 1;
+- the bank did not accumulate duplicate center phenotypes;
+- mature Recombination Genes increased from 0 to about 20;
+- transient Pareto sizes of 2–3 appeared;
+- final mature Pareto size = 1.
+
+At the final generation, all four mature recombination specialists were the same canonical center phenotype:
+
+    c7723fa1e0127975e49e
+
+Center phenotype:
+
+- active_term_count = 0;
+- all seven gates = false;
+- all effective coefficients = 0;
+- mutation_sigma = 0.35.
+
+Within the adaptive arm, the canonical center rule accumulated:
+
+- generated = 884;
+- screen_selected = 189;
+- accepted = 189;
+- four_capability_accepted = 183.
+
+Its final evidence scores were sufficient to dominate the mature adaptive Pareto set on all four recombination axes.
+
+Therefore the V1.14 center-law dominance cannot be explained only by neutral duplicate IDs.
+
+## Scientific interpretation
+
+V1.14.1 successfully removed the two original confounds:
+
+1. duplicate neutral center phenotypes;
+2. low-evidence specialist promotion.
+
+However, after those corrections, the adaptive Recombination Gene Bank still did not outperform the fixed center-law control on the four Policy capability axes for seed=7.
+
+Current conclusion:
+
+- phenotype/evidence correction: PASS;
+- self-evolving Recombination Bank machinery: PASS;
+- evidence that adaptive mating is superior to center law: NOT SUPPORTED for seed=7;
+- evidence that a non-center mature mating formula is superior: NOT SUPPORTED for seed=7.
+
+The center formula is now an empirical baseline, not merely an implementation artifact.
+
+## Additional control caveat discovered after paired50
+
+The center-only arm uses one deterministic center rule for four children per parent pair.
+
+With:
+
+32 parent pairs x 4 children
+
+the four children belonging to a single pair are formula-identical and can become identical Policy children.
+
+The adaptive arm can produce different rule phenotypes for the four children of one parent pair.
+
+Thus the two arms have equal nominal generated/evaluation budgets but not necessarily equal unique-child diversity.
+
+This does not create a false adaptive disadvantage; if anything it can handicap the center control's search diversity.
+
+Because center still matched or exceeded adaptive on three of four Policy axes, the current result strengthens the observation that the center law is a strong baseline.
+
+For a publication-grade causal comparison, a future control should match unique-child opportunity as well as nominal offspring count, for example by using one center child per distinct parent pair or by explicitly deduplicating Policy children before screening and equalizing the number of unique candidates evaluated.
+
+## Frozen next action
+
+Do not inspect 99M.
+
+Do not expand to symbolic-expression recombination yet.
+
+The next controlled question should be one of:
+
+1. repeat the corrected comparison with a unique-child-matched center control; or
+2. if retaining the present control, run multiple paired seeds and treat center law as the primary baseline.
+
+The preferred next step is unique-child-matched control first, because it removes the remaining experimental asymmetry before spending multi-seed compute.
