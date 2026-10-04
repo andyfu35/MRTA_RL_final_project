@@ -768,3 +768,63 @@ Interpretation:
 
 Next command:
 bash tools/run_gene_mrta_v115_scaling_mac.sh ladder3
+
+
+## V1.15A extreme ladder result
+
+Run:
+runs/gene_mrta_v115_scaling/gene_mrta_v115_scaling_20261004_121902_seed115010000
+
+Frozen Gene:
+7ee7c18fca2280022ac5
+
+Parameters:
+148
+
+Successful zero-shot scales:
+- 4R/20T: 3/3
+- 8R/40T: 3/3
+- 16R/80T: 3/3
+- 32R/160T: 3/3
+- 64R/320T: 3/3
+
+128R/640T:
+- 0/3 successful
+- all three failure_stage=path
+- all three hit 300 s A* path-precompute timeout
+- Policy inference was never reached
+
+Three-world mean path / Policy time:
+- 4/20: 0.02538 s / 0.00334 s
+- 8/40: 0.19041 s / 0.01250 s
+- 16/80: 1.12575 s / 0.04817 s
+- 32/160: 7.54657 s / 0.24790 s
+- 64/320: 55.20587 s / 1.24652 s
+
+Three-world mean completion:
+- 4/20: 0.4000
+- 8/40: 0.4083
+- 16/80: 0.3958
+- 32/160: 0.4104
+- 64/320: 0.4000
+
+Three-world mean raw time utility:
+- 0.1929, 0.2140, 0.2099, 0.2162, 0.2129
+
+Mean queue depth remains approximately 2 across all successful scales.
+
+Empirical descriptive timing fits over 20..320 tasks:
+- A* path preprocessing ~ T^2.75
+- Policy planning ~ T^2.14
+
+Interpretation:
+the first observed full-system scaling limit is A* preprocessing, not the 148-parameter Policy.
+At 64R/320T path preprocessing is ~44x slower than Policy planning.
+Path-table memory is still below 1 MB at 64R/320T.
+
+Continuation/reserve increase with scale and are not treated as scale-invariant absolute quality evidence.
+
+Next:
+implement/run V1.15B Policy-only scaling with Euclidean/precomputed path tables to test the route-tail decoder beyond 128R/640T.
+
+99M remains untouched.
