@@ -98,6 +98,7 @@ def gap_metrics(
         "policy_gap_upper_bound": None,
         "bound_consistent": None,
         "policy_minus_milp_incumbent": None,
+        "policy_to_milp_incumbent_ratio": None,
     }
 
     if milp_incumbent_score is not None:
@@ -107,6 +108,16 @@ def gap_metrics(
             policy_score
             - milp_incumbent_score
         )
+        if (
+            milp_incumbent_score
+            > EPS
+        ):
+            result[
+                "policy_to_milp_incumbent_ratio"
+            ] = float(
+                policy_score
+                / milp_incumbent_score
+            )
 
     if (
         milp_upper_bound_score
@@ -369,6 +380,12 @@ def _case_summary(
             _safe_mean(
                 valid,
                 "policy_retention_lower_bound",
+            )
+        ),
+        "mean_policy_to_milp_incumbent_ratio": (
+            _safe_mean(
+                valid,
+                "policy_to_milp_incumbent_ratio",
             )
         ),
         "milp_binary_variables": (
