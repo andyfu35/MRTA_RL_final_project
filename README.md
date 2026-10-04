@@ -369,3 +369,25 @@ bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
 The default run is one 6R/30T world at seed 116050000. Re-running the same
 command resumes from the same fixed run directory and skips only worlds that
 already have a proven optimal result.
+
+
+## V1.16 first hard exact result
+
+The first unlimited 6R/30T MILP world is now globally proven optimal.
+
+Seed 116050000:
+
+- MILP T* = 0.28074964073648145
+- Policy T = 0.2756685668779121
+- exact retention = 98.190176%
+- Policy = 8.54 ms
+- MILP total = 717.17 s
+- MILP / Policy time ratio = about 83,996x
+
+The final MILP incumbent was already found around 138.5 s, but proving global
+optimality required about 717 s. This shows that beyond the 300 s practical
+boundary, proof certification becomes a major cost even when the final best
+solution may already have been discovered.
+
+This is one exact hard world only; do not generalize the 98.19% retention to
+all 6R/30T instances yet.
