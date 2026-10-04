@@ -1902,7 +1902,7 @@ docs/GENE_HOMOGENEOUS_MRTA_V1143_RULE_CONTEXT_ANALYSIS.md
 
 STATUS AS OF 2026-10-04:
 
-V1.15A IMPLEMENTED. TESTS/SMOKE NOT YET RUN.
+V1.15A TESTS PASSED (4/4) AND INITIAL ZERO-SHOT SMOKE PASSED. EXTREME LADDER NOT YET RUN.
 
 User objective:
 
@@ -2020,4 +2020,39 @@ Failure stage is recorded separately as geometry/path/policy.
 Outputs include:
 scaling_results.csv, scaling_case_summary.csv, timing_breakdown.csv,
 memory_breakdown.csv, scaling_summary.json.
+
+
+
+### V1.15A initial zero-shot smoke result
+
+Tests: 4 passed.
+
+Run:
+runs/gene_mrta_v115_scaling/gene_mrta_v115_scaling_20261004_121633_seed115000000
+
+Frozen Policy Gene:
+7ee7c18fca2280022ac5
+
+Parameter count:
+148
+
+4R/20T:
+path 0.0310 s, policy 0.00277 s, completion 0.35,
+time utility 0.18348, continuation 0.82888, reserve 0.86209.
+
+8R/40T:
+path 0.1778 s, policy 0.01656 s, completion 0.525,
+time utility 0.27173, continuation 0.90578, reserve 0.94628.
+
+16R/80T:
+path 1.27874 s, policy 0.04424 s, completion 0.375,
+time utility 0.19886, continuation 0.90529, reserve 0.94504.
+
+Conclusion:
+structural zero-shot scaling PASS through 16R/80T.
+A* path preprocessing is already the dominant runtime bottleneck.
+One world per scale is diagnostic only, not behavioral evidence.
+
+Next frozen action:
+run ladder3 unchanged.
 
