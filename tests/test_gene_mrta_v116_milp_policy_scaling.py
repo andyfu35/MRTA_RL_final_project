@@ -1,6 +1,7 @@
 import numpy as np
 
 from marl2d.gene_mrta_v116.milp_policy_scaling import (
+    _case_summary,
     _is_completed_row,
     _parse_optional_float,
     gap_metrics,
@@ -133,3 +134,66 @@ def test_resume_requires_optimal_for_exact_unlimited():
         proven,
         exact_required=True,
     )
+
+
+def test_case_summary_reports_worst_gap_and_runtime_seed():
+    rows = [
+        {
+            "case": "6R_30T",
+            "robots": 6,
+            "tasks": 30,
+            "status": "ok",
+            "milp_optimal": True,
+            "seed": 101,
+            "common_preprocess_seconds": 0.1,
+            "policy_seconds": 0.01,
+            "milp_total_seconds": 10.0,
+            "milp_solver_seconds": 9.9,
+            "milp_over_policy_time_ratio": 1000.0,
+            "policy_time_optimality": 0.29,
+            "exact_retention": 0.97,
+            "exact_relative_gap": 0.03,
+            "exact_absolute_gap": 0.009,
+            "policy_retention_lower_bound": 0.97,
+            "policy_to_milp_incumbent_ratio": 0.97,
+            "milp_incumbent_score": 0.299,
+            "milp_binary_variables": 5580,
+            "milp_continuous_variables": 180,
+            "milp_total_variables": 5760,
+            "milp_approx_constraints": 5982,
+        },
+        {
+            "case": "6R_30T",
+            "robots": 6,
+            "tasks": 30,
+            "status": "ok",
+            "milp_optimal": True,
+            "seed": 102,
+            "common_preprocess_seconds": 0.1,
+            "policy_seconds": 0.02,
+            "milp_total_seconds": 20.0,
+            "milp_solver_seconds": 19.9,
+            "milp_over_policy_time_ratio": 1000.0,
+            "policy_time_optimality": 0.27,
+            "exact_retention": 0.90,
+            "exact_relative_gap": 0.10,
+            "exact_absolute_gap": 0.03,
+            "policy_retention_lower_bound": 0.90,
+            "policy_to_milp_incumbent_ratio": 0.90,
+            "milp_incumbent_score": 0.30,
+            "milp_binary_variables": 5580,
+            "milp_continuous_variables": 180,
+            "milp_total_variables": 5760,
+            "milp_approx_constraints": 5982,
+        },
+    ]
+
+    summary = _case_summary(rows)
+
+    assert np.isclose(summary["max_exact_relative_gap"], 0.10)
+    assert np.isclose(summary["max_exact_absolute_gap"], 0.03)
+    assert summary["worst_exact_gap_seed"] == 102
+    assert np.isclose(summary["max_milp_total_seconds"], 20.0)
+    assert summary["slowest_milp_seed"] == 102
+    assert np.isclose(summary["max_policy_seconds"], 0.02)
+    assert summary["slowest_policy_seed"] == 102
