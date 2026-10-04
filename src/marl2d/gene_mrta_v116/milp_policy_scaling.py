@@ -4,6 +4,7 @@ import argparse
 import csv
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import time
 import threading
@@ -538,6 +539,10 @@ def _run_world(
         "status": "started",
         "failure_stage": "",
         "error": "",
+        "milp_time_limit_seconds": milp_time_limit,
+        "milp_exact_unlimited": (
+            milp_time_limit is None
+        ),
         **milp_problem_size(
             robots,
             tasks,
@@ -983,6 +988,10 @@ def run(
                             ensure_ascii=False,
                         )
                         + "\n"
+                    )
+                    file.flush()
+                    os.fsync(
+                        file.fileno()
                     )
                 existing_by_key[key] = row
 
