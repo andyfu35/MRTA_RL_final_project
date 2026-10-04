@@ -1110,7 +1110,7 @@ docs/GENE_HOMOGENEOUS_MRTA_V116_MILP_POLICY_SCALING.md
 
 ## V1.16 implementation status
 
-MILP-vs-frozen-Policy scaling benchmark is implemented but not yet run.
+MILP-vs-frozen-Policy smoke and three-world ladder are complete.
 
 Code:
 src/marl2d/gene_mrta_v116/milp_policy_scaling.py
@@ -1128,3 +1128,64 @@ First commands:
 2. bash tools/run_gene_mrta_v116_milp_policy_mac.sh smoke
 
 Do not claim any V1.16 result before user terminal output exists.
+
+
+## V1.16 smoke and ladder result
+
+Tests:
+5 passed.
+
+Smoke:
+2R/10T, 3R/15T, 4R/20T all MILP-optimal.
+
+Ladder run:
+runs/gene_mrta_v116_milp_policy/gene_mrta_v116_milp_policy_20261004_201755_seed116010000
+
+Three-world aggregates:
+
+2R/10T:
+- MILP proof 3/3
+- Policy 0.001377 s
+- MILP 0.195471 s
+- exact retention 0.991087
+
+3R/15T:
+- MILP proof 3/3
+- Policy 0.002730 s
+- MILP 7.901246 s
+- exact retention 0.946564
+
+4R/20T:
+- MILP proof 3/3
+- Policy 0.003387 s
+- MILP 20.814807 s
+- exact retention 0.977449
+
+5R/25T:
+- MILP proof 3/3
+- Policy 0.004702 s
+- MILP 41.553477 s mean
+- exact retention 0.942129
+- one MILP world took 112.50 s
+
+6R/30T:
+- MILP proof 0/3
+- all hit 300 s
+- Policy 0.010127 s
+- MILP/Policy per-world ratio mean 30,883.87x
+- exact retention unavailable
+- Policy / MILP incumbent ratio mean approximately 0.9878
+
+Primary result:
+observed exact-MILP practical proof wall under 300 s lies between 5R/25T and 6R/30T.
+
+MILP runtime is strongly world-dependent/heavy-tailed.
+
+Next:
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh boundary5
+
+boundary5 uses five new worlds each at 4R/20T, 5R/25T, 6R/30T.
+
+Do not run 8R/40T exact MILP yet.
+
+99M remains untouched.
