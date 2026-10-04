@@ -668,7 +668,7 @@ V1.15A full-system result.
 
 Status:
 
-IMPLEMENTED. TESTS / SMOKE NOT YET RUN.
+TESTS PASSED (7/7) AND POLICY-ONLY SMOKE PASSED THROUGH 128R/640T.
 
 Purpose:
 
@@ -785,5 +785,131 @@ That answer remains:
 
 64R/320T succeeds; 128R/640T is blocked by A* preprocessing under the frozen
 300 s timeout.
+
+99M remains untouched.
+
+
+## Completed V1.15B smoke
+
+Date: 2026-10-04
+
+Tests:
+
+    7 passed
+
+Run:
+
+    runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_141132_seed115100000
+
+Frozen Policy:
+
+    7ee7c18fca2280022ac5
+
+Parameter count:
+
+    148
+
+### 64R / 320T
+
+- Euclidean table build = 0.002422 s
+- path table entries = 122,880
+- path table = 0.9375 MB
+- Policy = 1.970497 s
+- decoder steps = 134
+- pair slots scored = 2,174,016
+- Policy / decoder step = 0.014705 s
+- Policy / pair slot = 9.0639e-7 s
+- completion = 0.41875
+- raw time utility = 0.215997
+- balance = 0.387412
+- mean queue depth = 2.09375
+- RSS peak = 130.97 MB
+
+### 128R / 640T
+
+- Euclidean table build = 0.001655 s
+- path table entries = 491,520
+- path table = 3.75 MB
+- Policy = 14.836715 s
+- decoder steps = 255
+- pair slots scored = 16,744,320
+- Policy / decoder step = 0.058183 s
+- Policy / pair slot = 8.8607e-7 s
+- completion = 0.3984375
+- raw time utility = 0.209678
+- balance = 0.367342
+- mean queue depth = 1.99219
+- RSS peak = 209.28 MB
+
+### Primary smoke conclusion
+
+V1.15B confirms that 128R/640T is not beyond the fixed Policy's current
+computational capability.
+
+With A* removed, the exact same 148-parameter route-tail Policy successfully
+plans 255 task assignments at 128R/640T in about 14.84 s.
+
+The V1.15A 128R/640T failure is therefore attributable to obstacle-aware path
+precomputation under the frozen 300 s timeout, not to Policy inference.
+
+Behavior also does not collapse in this one-world diagnostic:
+
+- completion changes from 0.41875 at 64R/320T to 0.39844 at 128R/640T;
+- raw time utility changes from 0.21600 to 0.20968;
+- mean queue depth stays near 2.
+
+These are single-world observations and are not formal quality estimates.
+
+### Decoder scaling interpretation
+
+When R and T both double:
+
+- initial pair tensor size grows 4x;
+- decoder steps grow from 134 to 255 (~1.90x);
+- total pair slots scored grow from 2.174M to 16.744M (~7.70x);
+- Policy time grows from 1.9705 s to 14.8367 s (~7.53x);
+- Policy time per pair slot remains nearly constant (~0.9 microseconds).
+
+This strongly indicates that the current implementation cost is dominated by
+the number of pair slots repeatedly rescored, rather than by increased neural
+parameter cost.
+
+With approximately constant tasks per robot and decoder steps proportional to
+T, the current autoregressive implementation has an expected leading work term
+on the order of:
+
+R * T * decoder_steps
+
+and therefore approximately:
+
+O(T^3)
+
+when R is proportional to T.
+
+The two-point empirical exponent reported by the smoke is:
+
+2.91254
+
+which is consistent with this near-cubic interpretation, but is not itself a
+theoretical proof.
+
+### Staged next experiment
+
+Extrapolating the measured 64->128 ratio predicts approximately:
+
+- 256R/1280T: about 110-120 s Policy time;
+- 512R/2560T: well above 300 s if the same scaling continues.
+
+Therefore the next protocol is intentionally staged:
+
+1. ladder3:
+   64R/320T, 128R/640T, 256R/1280T, three worlds each;
+2. only after that, extreme512:
+   512R/2560T, one world, 300 s Policy timeout;
+3. extreme1024 is attempted only if justified by the 512 result or after a
+   separate decoder optimization study.
+
+This prevents wasting three full timeout periods at a scale already predicted
+to exceed the frozen compute budget.
 
 99M remains untouched.
