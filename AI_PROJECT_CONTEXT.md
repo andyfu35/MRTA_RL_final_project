@@ -1258,3 +1258,82 @@ Scientific rule remains unchanged:
 Oracle does not teach the action; it defines the capability ceiling.
 
 99M remains untouched.
+
+
+## V1.16 exact-unlimited completed first hard world
+
+Run:
+
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+
+Tests before run:
+
+9 passed.
+
+Frozen Gene:
+
+7ee7c18fca2280022ac5
+
+Parameters:
+
+148.
+
+Exact hard world:
+
+- case = 6R/30T
+- seed = 116050000
+- MILP time limit = None
+- mip_rel_gap = 0.0
+- HiGHS status = Optimal
+- MILP optimum T* = 0.28074964073648145
+- Policy T = 0.2756685668779121
+- exact absolute gap = 0.005081073858569374
+- exact relative gap = 0.018098238149977172
+- exact retention = 0.9819017618500229
+- MILP completed tasks = 14
+- Policy completed tasks = 14
+- Policy solve = 0.008538166999642272 s
+- MILP solver = 717.154159042002 s
+- MILP total = 717.1704191659992 s
+- MILP/Policy method-time ratio = 83995.82945567204x
+- MILP nodes = 276137
+- LP iterations = 8274628
+- RSS peak = 290.953125 MB
+
+Important solver-dynamics observation:
+
+The final best solution value 0.2807496407 was already found around 138.5 s,
+but global optimality was not proved until about 717.1 s.
+
+Therefore most of the remaining MILP runtime on this world was optimality
+certification, not discovery of a better incumbent.
+
+This sharpens the V1.16 conclusion:
+
+- under a 300 s operational budget, 6R/30T is already beyond the reliable exact-proof regime;
+- nevertheless, the frozen 148-parameter Policy is only about 1.81% below the true global optimum on this first hard exact world;
+- the Policy returns in about 8.54 ms;
+- exact MILP proof requires about 11.95 minutes;
+- the observed method-time ratio is about 84,000x.
+
+Regression exact-unlimited checks also passed:
+
+4R/20T, seed 116030000:
+- T_policy = T* = 0.21914552147298996
+- exact retention = 1.0
+- MILP total = 0.7096404160001839 s
+- Policy = 0.0037326669989852235 s
+
+5R/25T, seed 116040000:
+- T* = 0.18523070152476162
+- T_policy = 0.1769690430944892
+- exact retention = 0.9553980071215785
+- exact relative gap = 0.04460199287842149
+- MILP total = 109.60991570900296 s
+- Policy = 0.004382666000310564 s
+
+The first 6R/30T exact world is now complete.
+Do not yet generalize 98.19% retention to the whole 6R/30T distribution from n=1.
+
+Recommended next action:
+extend exact-unlimited to 3 worlds at 6R/30T using resume so world 1 is skipped.
