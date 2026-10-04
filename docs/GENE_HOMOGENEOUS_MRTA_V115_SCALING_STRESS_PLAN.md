@@ -2,7 +2,7 @@
 
 Status as of 2026-10-04:
 
-V1.15A TESTS PASSED AND INITIAL ZERO-SHOT SMOKE PASSED. EXTREME LADDER NOT YET RUN.
+V1.15A EXTREME LADDER COMPLETED. FULL-SYSTEM LIMIT IS A* PATH PRECOMPUTATION BETWEEN 64R/320T AND 128R/640T.
 
 ## Objective
 
@@ -473,5 +473,192 @@ Next frozen action:
 
 run the three-world extreme ladder with the same Policy and no architecture
 changes.
+
+99M remains untouched.
+
+
+## Completed V1.15A extreme ladder
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v115_scaling_mac.sh ladder3
+
+Tests before run:
+
+    4 passed
+
+Frozen Policy Gene:
+
+    7ee7c18fca2280022ac5
+
+Parameter count:
+
+    148
+
+Run:
+
+    runs/gene_mrta_v115_scaling/gene_mrta_v115_scaling_20261004_121902_seed115010000
+
+Each successful scale used three worlds.
+
+### Mean results by scale
+
+4R / 20T:
+- path preprocessing = 0.025383 s
+- Policy = 0.003340 s
+- completion = 0.400000
+- raw time utility = 0.192855
+- balance = 0.390321
+- continuation = 0.817841
+- reserve = 0.843393
+- mean queue depth = 2.000
+- RSS peak = 70.28 MB
+
+8R / 40T:
+- path preprocessing = 0.190411 s
+- Policy = 0.012502 s
+- completion = 0.408333
+- raw time utility = 0.214036
+- balance = 0.385639
+- continuation = 0.891299
+- reserve = 0.904090
+- mean queue depth = 2.0417
+- RSS peak = 70.48 MB
+
+16R / 80T:
+- path preprocessing = 1.125755 s
+- Policy = 0.048175 s
+- completion = 0.395833
+- raw time utility = 0.209933
+- balance = 0.361391
+- continuation = 0.931922
+- reserve = 0.942528
+- mean queue depth = 1.9792
+- RSS peak = 71.99 MB
+
+32R / 160T:
+- path preprocessing = 7.546574 s
+- Policy = 0.247902 s
+- completion = 0.410417
+- raw time utility = 0.216213
+- balance = 0.387233
+- continuation = 0.954358
+- reserve = 0.965232
+- mean queue depth = 2.0521
+- RSS peak = 84.97 MB
+
+64R / 320T:
+- path preprocessing = 55.205867 s
+- Policy = 1.246522 s
+- completion = 0.400000
+- raw time utility = 0.212930
+- balance = 0.369836
+- continuation = 0.975437
+- reserve = 0.980648
+- mean queue depth = 2.000
+- RSS peak = 130.38 MB
+
+128R / 640T:
+- 0 / 3 worlds completed;
+- all three failed in failure_stage = path;
+- each hit the 300 s path-precomputation timeout;
+- Policy planning was never reached.
+
+### Primary V1.15A conclusion
+
+The full-system practical limit in the tested implementation is not the
+148-parameter Policy Gene.
+
+The first hard limit is obstacle-aware A* path precomputation.
+
+64R / 320T succeeds on 3/3 worlds.
+128R / 640T fails on 3/3 worlds before Policy inference begins.
+
+At 64R / 320T:
+
+- A* preprocessing ~55.21 s;
+- Policy allocation ~1.25 s;
+- path preprocessing is about 44 times slower than Policy allocation;
+- path-table storage is only 0.9375 MB.
+
+Therefore the observed bottleneck is CPU/path-search time, not path-table
+storage capacity.
+
+### Empirical scaling trend
+
+Across 20, 40, 80, 160, and 320 tasks while robot count scales proportionally:
+
+- path-precomputation time is approximately proportional to T^2.75 over this
+  measured range;
+- Policy planning time is approximately proportional to T^2.14 over this
+  measured range.
+
+These are descriptive empirical fits, not theoretical complexity proofs.
+
+The observed path-time doubling ratios are roughly:
+
+7.50, 5.91, 6.70, 7.32.
+
+The observed Policy-time doubling ratios are roughly:
+
+3.74, 3.85, 5.15, 5.03.
+
+The measured 128R / 640T A* timeout is therefore consistent with the prior
+scaling curve.
+
+### Behavioral zero-shot result
+
+From 4R/20T through 64R/320T, the frozen Gene's three-world mean completion is:
+
+0.4000, 0.4083, 0.3958, 0.4104, 0.4000.
+
+Raw time utility is:
+
+0.1929, 0.2140, 0.2099, 0.2162, 0.2129.
+
+Mean queue depth remains approximately two tasks per robot:
+
+2.0000, 2.0417, 1.9792, 2.0521, 2.0000.
+
+This is strong structural evidence that the fixed-size Policy does not
+immediately lose allocation behavior as fleet/task count grows to 64R/320T.
+
+Because only three worlds were used per scale, this is still a scaling
+diagnostic rather than a publication-grade behavioral generalization claim.
+
+Continuation and reserve rise toward 1 as the problem size grows. Those
+metrics include quantities normalized by the number of remaining tasks/options
+and are not assumed scale-invariant. Their absolute cross-scale increase must
+not be interpreted as proof that large-scale behavior is inherently better.
+
+### Observation scaling diagnostic
+
+Mean physical nearest robot-task distance remains around 25-30 for the larger
+cases, while diagonal-normalized distance falls strongly:
+
+- 4R/20T: 0.20994
+- 8R/40T: 0.14497
+- 16R/80T: 0.09578
+- 32R/160T: 0.06484
+- 64R/320T: 0.04529
+
+Thus the current Policy receives a significant feature-distribution shift as
+map size grows, yet completion and raw time utility remain approximately
+stable through 64R/320T.
+
+### Next frozen action
+
+V1.15A has identified the full-system bottleneck.
+
+Do not increase the A* timeout merely to claim a larger full-system scale.
+
+Proceed to V1.15B Policy-Only Scaling using Euclidean/precomputed synthetic path
+tables so that the same route-tail decoder can be tested beyond 128R/640T
+without obstacle-A* preprocessing.
+
+V1.15B must remain clearly labeled as Policy-only and must not replace the
+V1.15A full-system result.
 
 99M remains untouched.
