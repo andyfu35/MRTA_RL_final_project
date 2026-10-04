@@ -689,3 +689,35 @@ Decision:
 freeze V1.14 mating research now. Do not tune further on 95M.
 
 Proceed directly to V1.15 fleet/task scalability stress testing.
+
+
+## V1.15A implementation status
+
+V1.14.3 is complete and V1.14 is frozen.
+
+V1.15A full-system zero-shot scaling is now implemented.
+
+Files:
+- src/marl2d/gene_mrta_v115/scaling.py
+- tests/test_gene_mrta_v115_scaling.py
+- tools/run_gene_mrta_v115_scaling_mac.sh
+
+First commands:
+1. bash tools/run_gene_mrta_v115_scaling_mac.sh tests
+2. bash tools/run_gene_mrta_v115_scaling_mac.sh smoke
+
+Smoke cases:
+4R/20T, 8R/40T, 16R/80T, one world each.
+
+If smoke is structurally valid, next:
+bash tools/run_gene_mrta_v115_scaling_mac.sh ladder3
+
+The ladder continues through 32R/160T, 64R/320T and 128R/640T unless a scale has zero successful worlds.
+
+The benchmark freezes one mature four-capability V1.13 Policy Gene; no scale-specific retraining is allowed in V1.15A.
+
+Failure stages are separated into geometry, path, and policy.
+
+Outputs include detailed timing/memory CSVs and raw quality metrics.
+
+99M remains untouched.
