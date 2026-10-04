@@ -909,3 +909,33 @@ bash tools/run_gene_mrta_v115b_policy_only_mac.sh extreme512
 may exceed the frozen 300 s Policy timeout.
 
 99M remains untouched.
+
+
+## V1.15B extreme512 result
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_175225_seed115120000
+
+512R/2560T:
+- 0/1 successful
+- failure_stage=policy
+- Policy timeout at 300.0555 s
+- Euclidean table build 0.02927 s
+- path table 60.0 MB
+- RSS peak 961.14 MB
+- initial pair count 1,310,720
+
+This is a clean Policy-compute limit because routing-table construction is negligible.
+
+Current known Policy-only bracket under the frozen 300 s budget:
+- 128R/640T succeeds in 14.84 s
+- 512R/2560T fails at 300 s
+
+256R/1280T has not yet been measured in the three-world ladder.
+
+Next frozen command:
+bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
+
+Do not increase the 512 timeout yet. Use 256R/1280T to tighten the limit bracket first.
+
+99M remains untouched.
