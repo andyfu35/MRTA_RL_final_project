@@ -51,6 +51,15 @@ elif [[ "$MODE" == "ladder3" ]]; then
     --milp-time-limit 300 \
     --policy-timeout 60
 
+elif [[ "$MODE" == "boundary5" ]]; then
+  python -m marl2d.gene_mrta_v116.milp_policy_scaling \
+    --v113-checkpoint "$V113_CHECKPOINT" \
+    --cases "4x20,5x25,6x30" \
+    --worlds-per-case 5 \
+    --seed-base 116100000 \
+    --milp-time-limit 300 \
+    --policy-timeout 60
+
 elif [[ "$MODE" == "small10" ]]; then
   python -m marl2d.gene_mrta_v116.milp_policy_scaling \
     --v113-checkpoint "$V113_CHECKPOINT" \
@@ -61,6 +70,6 @@ elif [[ "$MODE" == "small10" ]]; then
     --policy-timeout 60
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v116_milp_policy_mac.sh [tests|smoke|ladder3|small10]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v116_milp_policy_mac.sh [tests|smoke|ladder3|boundary5|small10]" >&2
   exit 2
 fi
