@@ -1189,3 +1189,72 @@ boundary5 uses five new worlds each at 4R/20T, 5R/25T, 6R/30T.
 Do not run 8R/40T exact MILP yet.
 
 99M remains untouched.
+
+
+## V1.16 exact-unlimited MILP extension
+
+User decision on 2026-10-04:
+
+The 300 s boundary is not the final exact reference. MILP must be allowed to
+continue until HiGHS actually proves the global optimum so that the true
+Policy-vs-optimum gap is known.
+
+Implementation status:
+
+IMPLEMENTED, NOT YET EXECUTED ON MAC.
+
+Core changes:
+
+- `solve_global_time_optimum(..., time_limit=None)` is supported;
+- when `time_limit=None`, the HiGHS `time_limit` option is omitted entirely;
+- `mip_rel_gap=0.0` remains frozen;
+- unlimited mode accepts a result as exact only when HiGHS returns
+  `status == 0` with a solution;
+- an unlimited run that terminates without optimal proof raises an error;
+- incumbent solutions are never relabelled as optimum.
+
+Long-run observability / durability:
+
+- optional native HiGHS display;
+- elapsed-time `MILP_ALIVE` heartbeat every 30 s by default;
+- each completed world is appended immediately to `per_world.jsonl`;
+- JSONL writes are flushed and fsynced;
+- a fixed `--run-dir` can be reused;
+- resume is enabled by default and skips only completed worlds;
+- in exact-unlimited mode, only rows with `milp_optimal=true` are skippable.
+
+New launcher modes:
+
+```
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-regression
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+`exact-regression` uses the same ladder-equivalent seeds for 4R/20T and
+5R/25T.
+
+`exact-unlimited` starts with one 6R/30T world using seed 116050000, which is
+the first 6R/30T world from the previous ladder namespace, and therefore
+directly revisits a known 300 s timeout instance rather than selecting a new
+easier world.
+
+Default exact-unlimited run directory:
+
+```
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+```
+
+To extend to additional 6R/30T worlds after the first exact result:
+
+```
+V116_EXACT_WORLDS=3 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+The same fixed run directory and resume semantics preserve already completed
+worlds.
+
+Scientific rule remains unchanged:
+
+Oracle does not teach the action; it defines the capability ceiling.
+
+99M remains untouched.
