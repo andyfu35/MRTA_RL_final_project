@@ -1,6 +1,6 @@
 # AI PROJECT CONTEXT — Gene Homogeneous MRTA / SEGB
 
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 Repository: andyfu35/MRTA_RL_final_project
 Active branch: experiment/gene-homogeneous-mrta-v1
 Author: 傅獻德 (Hsien-Te Fu)
@@ -299,10 +299,16 @@ Autonomous mating-law discovery = NOT YET PASS.
 
 STATUS:
 
-IMPLEMENTED.
-NOT YET RUN.
+COMPLETED SINGLE-SEED PAIRED SMOKE + PAIRED50 FOR seed=7.
 
-Do not claim V1.14.1 smoke or paired50 results until terminal output is actually provided.
+Regression tests: 15 passed.
+
+Paired-smoke structural invariants passed:
+- adaptive Rcenter <= 1, observed exactly 1;
+- center Rbank = 1;
+- center Rcenter = 1.
+
+Formal paired50 is complete.
 
 V1.14.1 fixes V1.14 before any stronger claim.
 
@@ -379,40 +385,55 @@ tools/run_gene_mrta_v1141_paired_mac.sh
 
 ---
 
-# 7. What must be run next
+# 7. Completed V1.14.1 paired50 result
 
-First:
+Adaptive run:
 
-git pull
+runs/gene_mrta_v1141_paired_seed7/adaptive/gene_mrta_v1141_recombination_20261003_231301_seed7
 
-Then:
+Center-only run:
 
-bash tools/run_gene_mrta_v1141_paired_mac.sh tests
+runs/gene_mrta_v1141_paired_seed7/center/gene_mrta_v1141_recombination_20261004_013416_seed7
 
-Then:
-
-bash tools/run_gene_mrta_v1141_paired_mac.sh paired-smoke
-
-Only after paired-smoke is inspected and correct:
-
-bash tools/run_gene_mrta_v1141_paired_mac.sh paired50
-
-Adaptive smoke invariant:
-
-Rcenter <= 1
-
-Center-only invariant:
-
-Rbank = 1
-Rcenter = 1
-
-Expected paired output root:
-
-runs/gene_mrta_v1141_paired_seed7/
-
-Expected final comparison:
+Comparison:
 
 runs/gene_mrta_v1141_paired_seed7/comparison_50.json
+
+Adaptive final:
+- mean_time = 0.9797388961714149
+- tail10_time = 0.9273987323265199
+- continuation_preservation = 0.8334576354631884
+- fleet_option_reserve = 0.8757350433050963
+
+Center final:
+- mean_time = 0.9795402913092378
+- tail10_time = 0.9273987323265199
+- continuation_preservation = 0.8345021458732124
+- fleet_option_reserve = 0.8762071604639012
+
+Adaptive minus center:
+- mean_time = +0.0001986048621770431
+- tail10_time = 0
+- continuation_preservation = -0.0010445104100239577
+- fleet_option_reserve = -0.0004721171588049078
+
+Interpretation:
+- adaptive has a tiny mean-time advantage;
+- tail10 is tied;
+- center is better on continuation and reserve;
+- no consistent adaptive advantage is demonstrated;
+- do not scalarize these four axes into one result.
+
+Adaptive final Recombination Bank:
+- Rcenter = 1;
+- mature Pareto size = 1;
+- all four mature specialists = canonical center phenotype c7723fa1e0127975e49e;
+- center phenotype in adaptive arm: generated 884, screen_selected 189, accepted 189, four-capability accepted 183.
+
+This shows V1.14 center dominance was not merely caused by neutral-clone duplication.
+
+Remaining comparison caveat:
+center mode generates four deterministic center children per parent pair, so its nominal 128-child budget can contain repeated Policy children, whereas adaptive can produce multiple distinct children from one pair. A publication-grade next control should equalize unique-child opportunity.
 
 ---
 
@@ -432,13 +453,15 @@ CURRENTLY UNTOUCHED AND PROTECTED.
 
 Do not inspect 99M during V1.14.1 development.
 
-If V1.14.1 paired single-seed evidence is promising:
+Current seed=7 evidence is not sufficient to justify 99M or a larger formula grammar.
 
-1. freeze protocol;
-2. run repeated paired seeds;
-3. use independent 96M development-validation if required;
-4. freeze procedure/candidate;
-5. only then evaluate 99M.
+Next:
+1. fix unique-child control asymmetry;
+2. rerun paired control;
+3. if adaptive remains promising, repeat paired seeds;
+4. then use independent 96M development-validation if required;
+5. freeze procedure/candidate;
+6. only then evaluate 99M.
 
 ---
 
