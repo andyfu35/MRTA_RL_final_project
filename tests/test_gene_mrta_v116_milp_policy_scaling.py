@@ -92,3 +92,9 @@ def test_timeout_bound_is_not_exact_gap():
         ],
         0.02,
     )
+    assert np.isclose(
+        result[
+            "policy_to_milp_incumbent_ratio"
+        ],
+        0.72 / 0.70,
+    )
