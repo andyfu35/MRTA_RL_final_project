@@ -41,7 +41,42 @@ if [[ -z "$V113_CHECKPOINT" ]]; then
 fi
 
 if [[ -z "$V1141_ADAPTIVE_CHECKPOINT" ]]; then
-  V1141_ADAPTIVE_CHECKPOINT="$(ls -1dt runs/gene_mrta_v1141_paired_seed*/adaptive/*/checkpoint.json 2>/dev/null | head -n 1 || true)"
+  V1141_ADAPTIVE_CHECKPOINT="$(python - <<'PY'
+import glob
+import json
+import os
+
+paths = sorted(
+    glob.glob(
+        "runs/gene_mrta_v1141_paired_seed*/adaptive/*/checkpoint.json"
+    ),
+    key=os.path.getmtime,
+    reverse=True,
+)
+for path in paths:
+    try:
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as file:
+            data = json.load(file)
+    except Exception:
+        continue
+    if (
+        data.get("version") == "v1141"
+        and data.get("recombination_mode") == "adaptive"
+        and int(
+            data.get(
+                "next_generation",
+                0,
+            )
+        ) >= 50
+    ):
+        print(path)
+        break
+PY
+)"
 fi
 
 if [[ -z "$V113_CHECKPOINT" || ! -f "$V113_CHECKPOINT" ]]; then
