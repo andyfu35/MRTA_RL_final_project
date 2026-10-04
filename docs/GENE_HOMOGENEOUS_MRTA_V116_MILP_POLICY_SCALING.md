@@ -454,3 +454,113 @@ Do not proceed to 8R/40T exact MILP until this boundary replication is
 interpreted.
 
 99M remains untouched.
+
+
+## Exact-unlimited follow-up
+
+Decision after the 300 s ladder:
+
+Do not treat the 300 s timeout as the end of the exact-reference experiment.
+
+The 300 s ladder answers the practical-online question:
+
+> At what scale does exact MILP stop being operationally useful under a fixed
+> compute budget?
+
+The new unlimited mode answers a different scientific question:
+
+> What is the true global optimum T* for a hard world, even if proving it takes
+> much longer than 300 s?
+
+### Exact solver semantics
+
+`solve_global_time_optimum` now accepts:
+
+```python
+time_limit=None
+```
+
+When it is `None`:
+
+- the SciPy/HiGHS options dictionary contains no `time_limit` key;
+- presolve stays enabled;
+- `mip_rel_gap=0.0` stays unchanged;
+- solver precision is not relaxed;
+- only HiGHS status 0 with a solution is accepted as optimal;
+- any other termination raises an error in unlimited mode;
+- an incumbent is never used as T*.
+
+### Progress during long runs
+
+Long exact runs expose two progress mechanisms:
+
+1. native HiGHS display can be enabled with `--milp-solver-display`;
+2. the benchmark prints an independent line like:
+
+```
+MILP_ALIVE 6R/30T world=1 seed=116050000 elapsed=330.0s
+```
+
+every 30 s by default.
+
+Therefore a silent solver does not look like a frozen process.
+
+### Resume and durability
+
+Every completed world is appended immediately to:
+
+```
+per_world.jsonl
+```
+
+and the file is flushed and fsynced.
+
+The runner supports a fixed `--run-dir` and resume is enabled by default.
+
+On restart:
+
+- already completed finite-budget rows may be skipped;
+- for exact-unlimited runs, a row is skipped only if
+  `status=ok` AND `milp_optimal=true`;
+- a previous timeout/non-optimal row is not considered an exact completed
+  result.
+
+Thus Ctrl+C or a reboot does not discard earlier completed worlds.
+
+### Mac commands
+
+Regression of already tractable exact sizes:
+
+```bash
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-regression
+```
+
+First unlimited hard world:
+
+```bash
+bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+Default:
+
+- case = 6R/30T
+- worlds = 1
+- seed = 116050000
+- fixed run dir =
+  `runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000`
+
+This seed corresponds to the first 6R/30T world in the existing ladder seed
+mapping, so the experiment directly revisits a known 300 s timeout.
+
+After one world proves optimal, more same-scale worlds can be requested without
+changing code:
+
+```bash
+V116_EXACT_WORLDS=3 bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-unlimited
+```
+
+The fixed run directory causes world 1 to be skipped after it is already
+proven, and worlds 2-3 continue.
+
+No 7R/35T or 8R/40T unlimited exact claim should be made before the first
+6R/30T exact result is obtained and interpreted.
