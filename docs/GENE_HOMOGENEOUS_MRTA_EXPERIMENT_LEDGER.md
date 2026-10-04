@@ -1853,3 +1853,109 @@ Every completed experiment or architecture-changing decision must update:
 - the relevant version-specific document
 
 before beginning the next experimental version.
+
+
+## V1.14.3 - Offline Rule / Parent-Context Analysis
+
+STATUS AS OF 2026-10-04:
+
+IMPLEMENTED. NOT YET RUN.
+
+This is the final analysis step before the project moves from mating research to fleet/task scalability testing.
+
+No new Policy or Recombination training occurs.
+
+Input:
+
+completed V1.14.2 formal128 pair_results.jsonl.
+
+Outputs:
+
+- v1143_rule_context_analysis.json
+- v1143_rule_table.csv
+- v1143_parent_context_table.csv
+- v1143_rule_context_table.csv
+
+Questions:
+
+- which non-center rule IDs produce continuation gains;
+- which rules rescue four-capability certification relative to center;
+- which parent capability contexts favor non-center mating;
+- which rule/context combinations are repeatable enough to justify a later context-conditioned selection hypothesis;
+- why some non-center rules collapse to the exact same Policy child as center.
+
+Command:
+
+bash tools/run_gene_mrta_v1143_analysis_mac.sh
+
+Guardrail:
+
+this reuses 95M development evidence and may generate hypotheses only.
+
+After interpretation, freeze the V1.14 research line for now.
+
+Primary document:
+
+docs/GENE_HOMOGENEOUS_MRTA_V1143_RULE_CONTEXT_ANALYSIS.md
+
+## V1.15 - Scalability / Extreme Fleet and Task Stress Test
+
+STATUS AS OF 2026-10-04:
+
+PLANNED. IMPLEMENT AFTER V1.14.3 RESULT IS RECORDED.
+
+User objective:
+
+increase robot count and task count substantially and test the practical limit of the algorithm.
+
+Primary constant-ratio ladder:
+
+- 4R/20T
+- 8R/40T
+- 16R/80T
+- 32R/160T
+- 64R/320T
+- 128R/640T if feasible
+
+Task-dense follow-up:
+
+- 8R/80T
+- 16R/160T
+- 32R/320T
+- 64R/640T if feasible
+
+The first stage is zero-shot with one frozen mature four-capability Policy Gene.
+
+Do not retrain per scale before measuring zero-shot size generalization.
+
+Measure separately:
+
+- world generation;
+- obstacle/A* path preprocessing;
+- path-table memory;
+- Policy allocation latency;
+- Policy decoder steps;
+- peak memory;
+- completion;
+- raw time utility;
+- continuation;
+- reserve;
+- queue depth and assignment coverage.
+
+Map area and obstacle count should scale to preserve spatial density.
+
+The benchmark must distinguish:
+
+computational failure
+vs
+behavioral failure.
+
+If path preprocessing fails first, do not mislabel it as a Policy limit.
+
+No exact MILP score is required at sizes where exact MILP is no longer practical.
+
+Primary document:
+
+docs/GENE_HOMOGENEOUS_MRTA_V115_SCALING_STRESS_PLAN.md
+
+99M remains protected.
