@@ -12,7 +12,7 @@ Current experimental status as of 2026-10-03:
 
 - V1.13 Route-Tail Multi-Task Evolution: completed.
 - V1.14 Self-Evolving Recombination Bank: completed; exposed center-law clone / evidence confounds.
-- V1.14.1 phenotype-canonical, evidence-aware adaptive-vs-center control: paired-smoke + paired50 completed for seed=7; no consistent adaptive advantage over center was demonstrated.
+- V1.14.1 phenotype-canonical, evidence-aware adaptive-vs-center control: paired-smoke + paired50 completed for seed=7; no consistent adaptive advantage over center was demonstrated.\n- V1.14.2 Frozen-Parent Matched-Pair Recombination Assay: implemented, not yet run.
 - 99M remains protected and must not be inspected.
 
 All future architecture changes and completed experimental results must be written back to AI_PROJECT_CONTEXT.md and the experiment ledger before starting the next version.
