@@ -1,7 +1,7 @@
 import numpy as np
 
 from marl2d.gene_mrta_v16t.env import EnvConfig, build_world
-from marl2d.gene_mrta_v16t.global_optimal_core import solve_global_time_optimum
+from marl2d.gene_mrta_v16t.global_optimal_core import _milp_options, solve_global_time_optimum
 from marl2d.gene_mrta_v16t.hungarian_benchmark import rollout_world
 
 
@@ -95,3 +95,26 @@ def test_global_oracle_is_not_worse_than_event_hungarian():
     assert oracle.optimal
     assert oracle.time_optimality is not None
     assert oracle.time_optimality + 1e-8 >= hungarian
+
+
+def test_milp_options_omit_time_limit_when_unlimited():
+    options = _milp_options(
+        time_limit=None,
+        solver_display=True,
+    )
+
+    assert options["disp"] is True
+    assert options["presolve"] is True
+    assert options["mip_rel_gap"] == 0.0
+    assert "time_limit" not in options
+
+
+def test_milp_options_keep_finite_time_limit():
+    options = _milp_options(
+        time_limit=12.5,
+        solver_display=False,
+    )
+
+    assert options["disp"] is False
+    assert options["time_limit"] == 12.5
+    assert options["mip_rel_gap"] == 0.0
