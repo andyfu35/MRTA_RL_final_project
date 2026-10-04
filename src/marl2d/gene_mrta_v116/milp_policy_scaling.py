@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import time
+import threading
 from typing import Any
 
 import numpy as np
@@ -29,6 +30,86 @@ from marl2d.gene_mrta_v115.scaling import (
 
 
 EPS = 1e-12
+
+
+def _parse_optional_float(value: str) -> float | None:
+    text = str(value).strip().lower()
+    if text in {"none", "unlimited", "inf", "infinite"}:
+        return None
+    parsed = float(value)
+    if parsed <= 0.0:
+        raise argparse.ArgumentTypeError(
+            "time limit must be positive or one of: none, unlimited"
+        )
+    return parsed
+
+
+def _row_key(
+    *,
+    case_index: int,
+    world_index: int,
+    seed: int,
+) -> tuple[int, int, int]:
+    return (
+        int(case_index),
+        int(world_index),
+        int(seed),
+    )
+
+
+def _load_latest_rows(
+    jsonl_path: Path,
+) -> dict[tuple[int, int, int], dict[str, Any]]:
+    latest: dict[tuple[int, int, int], dict[str, Any]] = {}
+    if not jsonl_path.exists():
+        return latest
+
+    with jsonl_path.open("r", encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                row = json.loads(text)
+                key = _row_key(
+                    case_index=row["case_index"],
+                    world_index=row["world_index"],
+                    seed=row["seed"],
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Invalid resume JSONL at {jsonl_path}:{line_number}: {exc}"
+                ) from exc
+            latest[key] = row
+    return latest
+
+
+def _is_completed_row(
+    row: dict[str, Any],
+    *,
+    exact_required: bool,
+) -> bool:
+    if row.get("status") != "ok":
+        return False
+    if exact_required:
+        return bool(row.get("milp_optimal"))
+    return True
+
+
+def _milp_heartbeat(
+    stop_event: threading.Event,
+    *,
+    label: str,
+    started_at: float,
+    interval_seconds: float,
+) -> None:
+    interval = max(float(interval_seconds), 1.0)
+    while not stop_event.wait(interval):
+        elapsed = time.perf_counter() - started_at
+        print(
+            f"MILP_ALIVE {label} elapsed={elapsed:.1f}s",
+            flush=True,
+        )
 
 
 def milp_problem_size(
@@ -423,7 +504,9 @@ def _run_world(
     geometry_timeout: float,
     path_timeout: float,
     policy_timeout: float,
-    milp_time_limit: float,
+    milp_time_limit: float | None,
+    milp_solver_display: bool,
+    heartbeat_seconds: float,
 ) -> dict[str, Any]:
     config = scale_config(
         robots,
@@ -581,6 +664,21 @@ def _run_world(
     milp_start = (
         time.perf_counter()
     )
+    heartbeat_stop = threading.Event()
+    heartbeat = threading.Thread(
+        target=_milp_heartbeat,
+        kwargs={
+            "stop_event": heartbeat_stop,
+            "label": (
+                f"{robots}R/{tasks}T "
+                f"world={world_index + 1} seed={seed}"
+            ),
+            "started_at": milp_start,
+            "interval_seconds": heartbeat_seconds,
+        },
+        daemon=True,
+    )
+    heartbeat.start()
     try:
         oracle = (
             solve_global_time_optimum(
@@ -589,9 +687,14 @@ def _run_world(
                 time_limit=(
                     milp_time_limit
                 ),
+                solver_display=(
+                    milp_solver_display
+                ),
             )
         )
     except Exception as exc:
+        heartbeat_stop.set()
+        heartbeat.join(timeout=1.0)
         row.update(
             {
                 "status": "failed",
@@ -616,6 +719,9 @@ def _run_world(
             }
         )
         return row
+    finally:
+        heartbeat_stop.set()
+        heartbeat.join(timeout=1.0)
 
     milp_total_seconds = (
         time.perf_counter()
@@ -741,15 +847,18 @@ def run(
     stamp = datetime.now().strftime(
         "%Y%m%d_%H%M%S"
     )
-    run_dir = (
-        Path(
-            args.output_dir
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+    else:
+        run_dir = (
+            Path(
+                args.output_dir
+            )
+            / (
+                "gene_mrta_v116_milp_policy_"
+                f"{stamp}_seed{args.seed_base}"
+            )
         )
-        / (
-            "gene_mrta_v116_milp_policy_"
-            f"{stamp}_seed{args.seed_base}"
-        )
-    )
     run_dir.mkdir(
         parents=True,
         exist_ok=True,
@@ -758,6 +867,15 @@ def run(
         run_dir
         / "per_world.jsonl"
     )
+
+    existing_by_key = _load_latest_rows(
+        jsonl_path
+    )
+    if existing_by_key:
+        print(
+            f"RESUME_FOUND={len(existing_by_key)} rows from {jsonl_path}",
+            flush=True,
+        )
 
     rows: list[
         dict[str, Any]
@@ -790,7 +908,31 @@ def run(
                 flush=True,
             )
 
-            row = _run_world(
+            key = _row_key(
+                case_index=case_index,
+                world_index=world_index,
+                seed=seed,
+            )
+            previous = existing_by_key.get(key)
+            if (
+                args.resume
+                and previous is not None
+                and _is_completed_row(
+                    previous,
+                    exact_required=(
+                        args.milp_time_limit is None
+                    ),
+                )
+            ):
+                row = previous
+                print(
+                    "RESUME_SKIP completed "
+                    f"{robots}R/{tasks}T "
+                    f"world={world_index + 1} seed={seed}",
+                    flush=True,
+                )
+            else:
+                row = _run_world(
                 case_index=(
                     case_index
                 ),
@@ -813,6 +955,12 @@ def run(
                 milp_time_limit=(
                     args.milp_time_limit
                 ),
+                milp_solver_display=(
+                    args.milp_solver_display
+                ),
+                heartbeat_seconds=(
+                    args.heartbeat_seconds
+                ),
             )
 
             rows.append(
@@ -821,17 +969,22 @@ def run(
             case_rows.append(
                 row
             )
-            with jsonl_path.open(
-                "a",
-                encoding="utf-8",
-            ) as file:
-                file.write(
-                    json.dumps(
-                        row,
-                        ensure_ascii=False,
+            if not (
+                args.resume
+                and previous is row
+            ):
+                with jsonl_path.open(
+                    "a",
+                    encoding="utf-8",
+                ) as file:
+                    file.write(
+                        json.dumps(
+                            row,
+                            ensure_ascii=False,
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
+                existing_by_key[key] = row
 
             print(
                 "RESULT "
@@ -891,6 +1044,12 @@ def run(
         ),
         "milp_time_limit_seconds": (
             args.milp_time_limit
+        ),
+        "milp_exact_unlimited": (
+            args.milp_time_limit is None
+        ),
+        "resume_enabled": bool(
+            args.resume
         ),
         "worlds_per_case": (
             args.worlds_per_case
@@ -990,8 +1149,38 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--milp-time-limit",
-        type=float,
+        type=_parse_optional_float,
         default=60.0,
+        help=(
+            "Seconds per MILP world, or 'none'/'unlimited' "
+            "to run until HiGHS proves optimality."
+        ),
+    )
+    p.add_argument(
+        "--milp-solver-display",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable native HiGHS solver progress output.",
+    )
+    p.add_argument(
+        "--heartbeat-seconds",
+        type=float,
+        default=30.0,
+        help="Elapsed-time heartbeat interval while MILP is solving.",
+    )
+    p.add_argument(
+        "--resume",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip already completed worlds found in per_world.jsonl.",
+    )
+    p.add_argument(
+        "--run-dir",
+        default="",
+        help=(
+            "Optional fixed run directory. Reusing it with --resume "
+            "continues an interrupted benchmark."
+        ),
     )
     p.add_argument(
         "--geometry-timeout",
@@ -1043,6 +1232,10 @@ def main() -> None:
     if args.worlds_per_case <= 0:
         raise ValueError(
             "worlds-per-case must be positive"
+        )
+    if args.heartbeat_seconds <= 0.0:
+        raise ValueError(
+            "heartbeat-seconds must be positive"
         )
     run(args)
 
