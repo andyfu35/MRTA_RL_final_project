@@ -48,6 +48,16 @@ class BenchmarkTimeout(RuntimeError):
     pass
 
 
+class BenchmarkStageError(RuntimeError):
+    def __init__(
+        self,
+        stage: str,
+        message: str,
+    ) -> None:
+        super().__init__(message)
+        self.stage = stage
+
+
 @contextmanager
 def _time_limit(
     seconds: float,
@@ -394,42 +404,54 @@ def generate_world_timed(
     float,
 ]:
     start = time.perf_counter()
-    with _time_limit(
-        geometry_timeout,
-        "geometry generation",
-    ):
-        (
-            robots,
-            batteries,
-            tasks,
-            services,
-            priorities,
-            deadlines,
-            obstacles,
-        ) = _sample_geometry(
-            config,
-            seed,
-        )
+    try:
+        with _time_limit(
+            geometry_timeout,
+            "geometry generation",
+        ):
+            (
+                robots,
+                batteries,
+                tasks,
+                services,
+                priorities,
+                deadlines,
+                obstacles,
+            ) = _sample_geometry(
+                config,
+                seed,
+            )
+    except Exception as exc:
+        raise BenchmarkStageError(
+            "geometry",
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
     geometry_seconds = (
         time.perf_counter()
         - start
     )
 
     start = time.perf_counter()
-    with _time_limit(
-        path_timeout,
-        "path precomputation",
-    ):
-        world = build_world(
-            config,
-            robots,
-            batteries,
-            tasks,
-            services,
-            priorities,
-            deadlines,
-            obstacles,
-        )
+    try:
+        with _time_limit(
+            path_timeout,
+            "path precomputation",
+        ):
+            world = build_world(
+                config,
+                robots,
+                batteries,
+                tasks,
+                services,
+                priorities,
+                deadlines,
+                obstacles,
+            )
+    except Exception as exc:
+        raise BenchmarkStageError(
+            "path",
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
     path_seconds = (
         time.perf_counter()
         - start
@@ -818,12 +840,31 @@ def _world_row(
                 path_timeout
             ),
         )
+    except BenchmarkStageError as exc:
+        row.update(
+            {
+                "status": "failed",
+                "failure_stage": (
+                    exc.stage
+                ),
+                "error": str(
+                    exc
+                ),
+                "rss_peak_mb": (
+                    _rss_mb()
+                ),
+                "rss_before_mb": (
+                    rss_before
+                ),
+            }
+        )
+        return row
     except Exception as exc:
         row.update(
             {
                 "status": "failed",
                 "failure_stage": (
-                    "world_or_path"
+                    "world_unknown"
                 ),
                 "error": (
                     f"{type(exc).__name__}: {exc}"
@@ -1325,6 +1366,56 @@ def run(
         run_dir
         / "scaling_case_summary.csv",
         summaries,
+    )
+    _write_csv(
+        run_dir
+        / "timing_breakdown.csv",
+        [
+            {
+                key: row.get(
+                    key
+                )
+                for key in (
+                    "case",
+                    "world_index",
+                    "seed",
+                    "status",
+                    "failure_stage",
+                    "geometry_seconds",
+                    "path_precompute_seconds",
+                    "policy_seconds",
+                    "robust_metric_seconds",
+                    "total_core_seconds",
+                    "decoder_steps",
+                    "pair_slots_scored",
+                    "policy_seconds_per_decoder_step",
+                    "policy_seconds_per_pair_slot",
+                )
+            }
+            for row in rows
+        ],
+    )
+    _write_csv(
+        run_dir
+        / "memory_breakdown.csv",
+        [
+            {
+                key: row.get(
+                    key
+                )
+                for key in (
+                    "case",
+                    "world_index",
+                    "seed",
+                    "status",
+                    "path_table_entries",
+                    "path_table_mb",
+                    "rss_before_mb",
+                    "rss_peak_mb",
+                )
+            }
+            for row in rows
+        ],
     )
 
     payload = {
