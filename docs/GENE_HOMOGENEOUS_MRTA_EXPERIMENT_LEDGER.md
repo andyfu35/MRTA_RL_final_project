@@ -2190,3 +2190,32 @@ Protocol update:
 - extreme512 tests 512/2560 with one world and 300 s Policy timeout;
 - extreme1024 is deferred unless justified.
 
+
+
+### V1.15B extreme512 result
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_175225_seed115120000
+
+512R/2560T:
+- tests 7 passed before run
+- one world
+- failure_stage=policy
+- Policy timeout 300.0555 s
+- Euclidean table build 0.02927 s
+- table entries 7,864,320
+- table memory 60.0 MB
+- RSS peak 961.14 MB
+- initial pairs 1,310,720
+
+Interpretation:
+the routing preprocessing bottleneck has been removed, so this is the first
+clean Policy-side hard limit under the frozen 300 s compute budget.
+
+Known bracket:
+128R/640T succeeds; 512R/2560T fails.
+
+Next:
+run ladder3 and measure 256R/1280T with three worlds before adding intermediate
+scales.
+
