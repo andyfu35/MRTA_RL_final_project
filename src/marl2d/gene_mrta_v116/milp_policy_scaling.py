@@ -355,6 +355,42 @@ def _case_summary(
         )
     ]
 
+    exact_rows = [
+        row
+        for row in proven
+        if row.get("exact_relative_gap") is not None
+    ]
+    worst_gap_row = (
+        max(
+            exact_rows,
+            key=lambda row: float(
+                row["exact_relative_gap"]
+            ),
+        )
+        if exact_rows
+        else None
+    )
+    slowest_milp_row = (
+        max(
+            valid,
+            key=lambda row: float(
+                row["milp_total_seconds"]
+            ),
+        )
+        if valid
+        else None
+    )
+    slowest_policy_row = (
+        max(
+            valid,
+            key=lambda row: float(
+                row["policy_seconds"]
+            ),
+        )
+        if valid
+        else None
+    )
+
     result: dict[str, Any] = {
         "case": first["case"],
         "robots": first["robots"],
@@ -393,6 +429,22 @@ def _case_summary(
                 "policy_seconds",
             )
         ),
+        "max_policy_seconds": (
+            float(
+                slowest_policy_row[
+                    "policy_seconds"
+                ]
+            )
+            if slowest_policy_row is not None
+            else None
+        ),
+        "slowest_policy_seed": (
+            int(
+                slowest_policy_row["seed"]
+            )
+            if slowest_policy_row is not None
+            else None
+        ),
         "mean_milp_total_seconds": (
             _safe_mean(
                 valid,
@@ -404,6 +456,22 @@ def _case_summary(
                 valid,
                 "milp_total_seconds",
             )
+        ),
+        "max_milp_total_seconds": (
+            float(
+                slowest_milp_row[
+                    "milp_total_seconds"
+                ]
+            )
+            if slowest_milp_row is not None
+            else None
+        ),
+        "slowest_milp_seed": (
+            int(
+                slowest_milp_row["seed"]
+            )
+            if slowest_milp_row is not None
+            else None
         ),
         "mean_milp_solver_seconds": (
             _safe_mean(
@@ -440,6 +508,55 @@ def _case_summary(
                 proven,
                 "exact_absolute_gap",
             )
+        ),
+        "max_exact_relative_gap": (
+            float(
+                worst_gap_row[
+                    "exact_relative_gap"
+                ]
+            )
+            if worst_gap_row is not None
+            else None
+        ),
+        "max_exact_absolute_gap": (
+            float(
+                worst_gap_row[
+                    "exact_absolute_gap"
+                ]
+            )
+            if (
+                worst_gap_row is not None
+                and worst_gap_row.get(
+                    "exact_absolute_gap"
+                )
+                is not None
+            )
+            else None
+        ),
+        "worst_exact_gap_seed": (
+            int(
+                worst_gap_row["seed"]
+            )
+            if worst_gap_row is not None
+            else None
+        ),
+        "worst_exact_gap_policy_score": (
+            float(
+                worst_gap_row[
+                    "policy_time_optimality"
+                ]
+            )
+            if worst_gap_row is not None
+            else None
+        ),
+        "worst_exact_gap_optimum_score": (
+            float(
+                worst_gap_row[
+                    "milp_incumbent_score"
+                ]
+            )
+            if worst_gap_row is not None
+            else None
         ),
         "min_exact_retention": (
             min(
