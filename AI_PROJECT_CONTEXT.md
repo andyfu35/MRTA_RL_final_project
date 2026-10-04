@@ -828,3 +828,34 @@ Next:
 implement/run V1.15B Policy-only scaling with Euclidean/precomputed path tables to test the route-tail decoder beyond 128R/640T.
 
 99M remains untouched.
+
+
+## V1.15B implementation status
+
+V1.15A full-system extreme ladder is complete.
+
+Full-system result:
+- 64R/320T succeeds 3/3;
+- 128R/640T fails 3/3 in A* path preprocessing after 300 s;
+- Policy inference is not reached at 128R/640T.
+
+V1.15B Policy-only scaling is now implemented.
+
+It replaces obstacle-A* path preprocessing with a dense vectorized Euclidean
+distance table while retaining the same frozen 148-parameter route-tail Policy.
+
+Files:
+- src/marl2d/gene_mrta_v115/policy_only.py
+- tests/test_gene_mrta_v115b_policy_only.py
+- tools/run_gene_mrta_v115b_policy_only_mac.sh
+
+Execution:
+1. bash tools/run_gene_mrta_v115b_policy_only_mac.sh tests
+2. bash tools/run_gene_mrta_v115b_policy_only_mac.sh smoke
+3. if valid, bash tools/run_gene_mrta_v115b_policy_only_mac.sh ladder3
+4. only if 512R/2560T remains tractable, consider extreme1 (1024R/5120T).
+
+V1.15B is compute-isolation only; its behavioral scores are not directly
+comparable with obstacle-aware V1.15A.
+
+99M remains untouched.
