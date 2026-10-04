@@ -2388,3 +2388,39 @@ uses dual-bound retention lower bounds for non-proven worlds.
 First smoke:
 2R/10T, 3R/15T, 4R/20T, one world each, 60 s MILP budget.
 
+
+
+### V1.16 smoke and ladder result
+
+Tests:
+5 passed.
+
+Ladder:
+2R/10T through 6R/30T, three worlds per scale, frozen 300 s MILP budget.
+
+2R/10T:
+MILP 3/3 exact, Policy retention 0.9911, Policy 1.38 ms, MILP 0.195 s mean.
+
+3R/15T:
+MILP 3/3 exact, Policy retention 0.9466, Policy 2.73 ms, MILP 7.90 s mean.
+
+4R/20T:
+MILP 3/3 exact, Policy retention 0.9774, Policy 3.39 ms, MILP 20.81 s mean.
+
+5R/25T:
+MILP 3/3 exact, Policy retention 0.9421, Policy 4.70 ms, MILP 41.55 s mean.
+One world required 112.50 s.
+
+6R/30T:
+MILP 0/3 exact; all reached 300 s.
+Policy mean 10.13 ms.
+Mean MILP/Policy ratio 30,883.87x.
+Policy remained approximately 98.78% of the best MILP incumbent on average,
+but this is not an exact-optimality claim.
+
+Conclusion:
+observed MILP proof wall = between 5R/25T and 6R/30T under the frozen 300 s budget.
+
+Next:
+boundary5, five new worlds each at 4R/20T, 5R/25T, 6R/30T.
+
