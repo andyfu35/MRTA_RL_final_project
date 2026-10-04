@@ -1286,3 +1286,174 @@ After the threshold-localization probe, the next architecture study should
 target decoder compute reduction rather than increasing model size.
 
 99M remains untouched.
+
+
+## V1.15B probe388 result and V1.15 closeout
+
+Date: 2026-10-04
+
+Command:
+
+    bash tools/run_gene_mrta_v115b_policy_only_mac.sh probe388
+
+Tests:
+
+    7 passed
+
+Run:
+
+    runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_193511_seed115150000
+
+Case:
+
+- robots = 388
+- tasks = 1940
+- tasks per robot = 5
+- world size = 984.885780
+- initial pair count = 752,720
+- frozen Policy parameters = 148
+
+Result:
+
+FAILED at Policy stage under the frozen 300 s budget.
+
+Observed:
+
+- failure_stage = policy
+- Policy timeout = 300.0241735 s
+- Euclidean table build = 0.023462 s
+- path table entries = 4,516,320
+- path table memory = 34.4568 MB
+- RSS peak = 985.81 MB
+
+The routing table is again negligible relative to Policy time, so this remains
+a clean Policy-compute failure.
+
+### Practical frozen-budget wall
+
+Largest observed successful Policy-only case:
+
+384R / 1920T
+- one world
+- Policy = 296.5072 s
+- completion = 0.394792
+- raw time utility = 0.211622
+- mean queue depth = 1.97396
+
+Next tested case:
+
+388R / 1940T
+- one world
+- Policy timeout at 300.0242 s
+
+Therefore, on this machine and implementation under the frozen 300 s Policy
+budget:
+
+- largest measured success = 384R/1920T;
+- smallest measured failure above it = 388R/1940T.
+
+This is a practical experimental wall, not a mathematically exact scale
+threshold.
+
+The two probes use different random worlds, so world-specific differences in
+decoder steps and feasibility can move the exact runtime boundary slightly.
+Do not claim that every 384R/1920T world will finish under 300 s or that every
+388R/1940T world will time out.
+
+The correct statement is:
+
+The observed 300 s Policy-only compute wall lies very near 384-388 robots at
+five tasks per robot for the current implementation.
+
+### Final V1.15 scaling conclusions
+
+Full obstacle-aware system:
+
+- 64R/320T succeeds 3/3;
+- 128R/640T fails 3/3 before Policy inference because A* path preprocessing
+  exceeds the frozen 300 s path budget.
+
+Policy-only system with Euclidean precomputed paths:
+
+- 64R/320T succeeds;
+- 128R/640T succeeds;
+- 256R/1280T succeeds 3/3 with mean Policy = 81.53 s;
+- 384R/1920T succeeds in 296.51 s;
+- 388R/1940T exceeds the 300 s Policy budget;
+- 512R/2560T also exceeds the 300 s Policy budget.
+
+Behavioral diagnostics remain approximately stable through the largest
+successful scales:
+
+- completion remains near 0.40;
+- raw time utility remains near 0.21;
+- mean queue depth remains near 2.
+
+Therefore the limiting factor observed in V1.15 is computation rather than a
+visible collapse of the learned allocation behavior.
+
+### Complexity conclusion
+
+The current route-tail implementation repeatedly rescans remaining robot-task
+pairs after each accepted task.
+
+With:
+
+- robot count proportional to task count;
+- decoder steps proportional to task count;
+
+the measured work approaches cubic scaling.
+
+The empirical timing exponent measured over 64/128/256 robots was 2.9077, and
+including the 384R point moves the descriptive exponent close to 2.97.
+
+The limiting mechanism is therefore:
+
+near-cubic repeated pair rescoring,
+
+not:
+
+Policy parameter count.
+
+The Policy remains only 148 parameters throughout all scales.
+
+### V1.15 freeze decision
+
+Do not spend additional runs locating the boundary at 385/386/387 robots.
+
+V1.15 has answered the intended question.
+
+Freeze V1.15 with:
+
+- full-system bottleneck = obstacle-aware A* preprocessing;
+- Policy-only bottleneck = near-cubic autoregressive pair rescoring;
+- largest observed Policy-only success under 300 s = 384R/1920T;
+- next tested scale 388R/1940T fails under the same budget.
+
+The next architecture version should target computational complexity reduction
+without increasing Policy parameter count or changing the learned Gene unless
+a separate experiment explicitly requires it.
+
+Recommended next research direction:
+
+V1.16 Efficient Route-Tail Decoder.
+
+Candidate optimization questions:
+
+1. Can static pair features be cached once instead of rebuilt every decoder step?
+2. Can only pairs affected by the selected robot/task be updated incrementally?
+3. Can top-k candidate pruning reduce each step from all R*T pairs to a bounded
+   candidate set without materially changing Policy decisions?
+4. Can robot-wise/task-wise candidate heaps or partial sorting avoid full
+   rescoring?
+5. Can vectorized/GPU pair scoring reduce constant cost without changing
+   semantics?
+6. Can the decoder preserve the exact same 148-parameter Gene while changing
+   only inference scheduling/dataflow?
+
+The first V1.16 experiment should compare optimized decoder output against the
+original decoder on identical small/medium worlds and require exact or
+near-exact action-sequence agreement before claiming a pure systems
+optimization.
+
+99M remains untouched.
