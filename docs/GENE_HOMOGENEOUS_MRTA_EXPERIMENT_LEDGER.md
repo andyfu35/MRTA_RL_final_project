@@ -1859,7 +1859,7 @@ before beginning the next experimental version.
 
 STATUS AS OF 2026-10-04:
 
-IMPLEMENTED. NOT YET RUN.
+COMPLETED. V1.14 SERIES FROZEN FOR NOW.
 
 This is the final analysis step before the project moves from mating research to fleet/task scalability testing.
 
@@ -1959,3 +1959,35 @@ Primary document:
 docs/GENE_HOMOGENEOUS_MRTA_V115_SCALING_STRESS_PLAN.md
 
 99M remains protected.
+
+
+### V1.14.3 completed result
+
+Tests: 3 passed.
+
+Source:
+runs/gene_mrta_v1142_matched_pair/gene_mrta_v1142_matched_pair_20261004_110044_seed7
+
+Counts:
+- 128 source pairs
+- 115 non-center pairs
+- 3 four-cap rescues
+- 0 four-cap losses
+- 8 candidate rule/context groups
+- 6 identical non-center children
+
+Non-center Adaptive - Center:
+- mean +0.00072172, 47/25/43
+- tail +0.00116809, 40/41/34
+- continuation +0.00033111, 62/16/37
+- reserve -0.00007559, 51/18/46
+
+Leading descriptive rule:
+6858fcfc2c9540c2f0fd, n=18, active terms=2,
+continuation +0.0004531036432003304, W/T/L 11/1/6,
+four-cap rescue-minus-loss +1.
+
+Decision:
+V1.14 recombination series is frozen for now. No further 95M formula tuning.
+Proceed to V1.15 scalability stress testing.
+
