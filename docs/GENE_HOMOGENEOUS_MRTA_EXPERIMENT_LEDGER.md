@@ -2219,3 +2219,50 @@ Next:
 run ladder3 and measure 256R/1280T with three worlds before adding intermediate
 scales.
 
+
+
+### V1.15B ladder3 result
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_180029_seed115110000
+
+All 64R/320T, 128R/640T, and 256R/1280T cases completed 3/3 worlds.
+
+Three-world mean Policy time:
+- 64/320: 1.447824 s
+- 128/640: 9.910586 s
+- 256/1280: 81.533248 s
+
+Mean completion:
+- 0.397917
+- 0.406250
+- 0.399219
+
+Mean raw time utility:
+- 0.212987
+- 0.213276
+- 0.212191
+
+Mean queue depth:
+- 1.98958
+- 2.03125
+- 1.99609
+
+Mean pair slots:
+- 2.0925M
+- 16.9868M
+- 134.0823M
+
+Empirical Policy exponent:
+2.9077150801970753.
+
+Conclusion:
+zero-shot behavior remains stable through 256R/1280T while compute approaches
+near-cubic scaling from repeated pair rescoring.
+
+Combined with the prior 512R/2560T 300 s timeout, the current Policy-only
+300 s limit lies between 256R/1280T and 512R/2560T.
+
+Next probe:
+384R/1920T, one world, 300 s timeout.
+
