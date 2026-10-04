@@ -2134,3 +2134,59 @@ comparable with obstacle-aware V1.15A.
 
 99M remains untouched.
 
+
+
+### V1.15B policy-only smoke result
+
+Tests:
+7 passed.
+
+Run:
+runs/gene_mrta_v115b_policy_only/gene_mrta_v115b_policy_only_20261004_141132_seed115100000
+
+Frozen Policy:
+7ee7c18fca2280022ac5
+
+Parameters:
+148
+
+64R/320T:
+- Euclidean table 0.002422 s
+- Policy 1.970497 s
+- pair slots 2,174,016
+- completion 0.41875
+- raw time utility 0.215997
+- balance 0.387412
+- queue mean 2.09375
+- RSS peak 130.97 MB
+
+128R/640T:
+- Euclidean table 0.001655 s
+- Policy 14.836715 s
+- pair slots 16,744,320
+- completion 0.3984375
+- raw time utility 0.209678
+- balance 0.367342
+- queue mean 1.99219
+- RSS peak 209.28 MB
+
+Conclusion:
+128R/640T is computationally tractable for the frozen 148-parameter Policy when
+A* preprocessing is removed. Therefore the V1.15A 128R/640T full-system failure
+is attributable to obstacle-aware path preprocessing, not Policy inference.
+
+64->128:
+- initial pair count x4
+- decoder steps x1.90
+- total pair slots x7.70
+- Policy time x7.53
+- time per pair slot remains approximately constant
+
+The smoke-reported two-point exponent is 2.91254, consistent with near-cubic
+pair-scoring work when R and T scale proportionally and decoder steps scale with T.
+
+Protocol update:
+- ladder3 now tests 64/320, 128/640, 256/1280 with 3 worlds each;
+- extreme512 tests 512/2560 with one world and 300 s Policy timeout;
+- extreme1024 is deferred unless justified.
+
