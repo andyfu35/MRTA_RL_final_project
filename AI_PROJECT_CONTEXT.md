@@ -1070,3 +1070,39 @@ reduce inference complexity while preserving the exact frozen 148-parameter
 Gene and, initially, the original decision semantics.
 
 99M remains untouched.
+
+
+## V1.16 MILP vs Policy scaling
+
+User decision:
+skip decoder optimization for now and directly compare the frozen Gene Policy
+against exact MILP as robot/task count grows.
+
+Primary questions:
+1. exact best-solution gap;
+2. computation time;
+3. scale at which either method becomes impractical.
+
+Frozen Policy:
+7ee7c18fca2280022ac5, 148 parameters.
+
+MILP:
+reuse src/marl2d/gene_mrta_v16t/global_optimal_core.py and the exact T objective.
+
+Fairness:
+same obstacle-aware world and same A* path table for both methods.
+Shared preprocessing is timed separately.
+
+Exact gap is reported only when HiGHS proves optimal.
+MILP timeouts use incumbent/dual-bound diagnostics and are never labelled exact.
+
+New seed namespace:
+116M.
+
+Initial smoke:
+2R/10T, 3R/15T, 4R/20T, one world each.
+
+Primary document:
+docs/GENE_HOMOGENEOUS_MRTA_V116_MILP_POLICY_SCALING.md
+
+99M remains untouched.
