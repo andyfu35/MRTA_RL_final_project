@@ -2094,3 +2094,43 @@ full-system bottleneck = obstacle-aware A* preprocessing.
 Behavioral zero-shot scaling remains stable through 64R/320T on this three-world diagnostic.
 Proceed to V1.15B Policy-only scaling rather than increasing A* timeout.
 
+
+
+### V1.15B Policy-only scaling implementation
+
+V1.15A established the full-system limit:
+
+- 64R/320T succeeds 3/3;
+- 128R/640T fails 3/3 during obstacle-aware A* path preprocessing;
+- Policy inference is never reached at 128R/640T.
+
+V1.15B is implemented to isolate the route-tail Policy decoder.
+
+It replaces obstacle-A* preprocessing with a dense vectorized Euclidean
+robot/task + task/task distance table while keeping:
+
+- the same frozen mature V1.13 Policy Gene;
+- 148 Policy parameters;
+- the same autoregressive route-tail decoder;
+- no scale-specific retraining.
+
+Code:
+src/marl2d/gene_mrta_v115/policy_only.py
+
+Tests:
+tests/test_gene_mrta_v115b_policy_only.py
+
+Launcher:
+tools/run_gene_mrta_v115b_policy_only_mac.sh
+
+Planned Policy-only ladder:
+64R/320T -> 128R/640T -> 256R/1280T -> 512R/2560T.
+
+Optional extreme diagnostic:
+1024R/5120T if the previous scale remains tractable.
+
+V1.15B is a compute-isolation experiment; behavioral scores are not directly
+comparable with obstacle-aware V1.15A.
+
+99M remains untouched.
+
