@@ -25,11 +25,29 @@ class GlobalTimeOptimum:
     time_optimality_upper_bound: float | None = None
 
 
+def _milp_options(
+    *,
+    time_limit: float | None,
+    solver_display: bool,
+) -> dict[str, float | bool]:
+    options: dict[str, float | bool] = {
+        "disp": bool(solver_display),
+        "presolve": True,
+        "mip_rel_gap": 0.0,
+    }
+    if time_limit is not None:
+        if float(time_limit) <= 0.0:
+            raise ValueError("time_limit must be positive or None")
+        options["time_limit"] = float(time_limit)
+    return options
+
+
 def solve_global_time_optimum(
     world: World,
     config: EnvConfig,
     *,
-    time_limit: float = 300.0,
+    time_limit: float | None = 300.0,
+    solver_display: bool = False,
 ) -> GlobalTimeOptimum:
     R, N, H = config.num_robots, config.num_tasks, config.episode_time
 
@@ -172,16 +190,20 @@ def solve_global_time_optimum(
         integrality=np.asarray(integ),
         bounds=Bounds(np.asarray(vlb), np.asarray(vub)),
         constraints=LinearConstraint(A, np.asarray(clb), np.asarray(cub)),
-        options={
-            "disp": False,
-            "presolve": True,
-            "mip_rel_gap": 0.0,
-            "time_limit": float(time_limit),
-        },
+        options=_milp_options(
+            time_limit=time_limit,
+            solver_display=solver_display,
+        ),
     )
     elapsed = perf_counter() - start
 
     optimal = int(res.status) == 0 and res.x is not None
+    if time_limit is None and not optimal:
+        raise RuntimeError(
+            "Unlimited exact MILP terminated without an optimal proof: "
+            f"status={int(res.status)} message={res.message}"
+        )
+
     score = float(-res.fun) if res.fun is not None else None
     routes: list[tuple[int, ...]] = []
     completed = None
