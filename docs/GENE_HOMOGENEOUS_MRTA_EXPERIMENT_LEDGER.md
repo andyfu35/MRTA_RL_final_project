@@ -1902,7 +1902,7 @@ docs/GENE_HOMOGENEOUS_MRTA_V1143_RULE_CONTEXT_ANALYSIS.md
 
 STATUS AS OF 2026-10-04:
 
-PLANNED. IMPLEMENT AFTER V1.14.3 RESULT IS RECORDED.
+V1.15A IMPLEMENTED. TESTS/SMOKE NOT YET RUN.
 
 User objective:
 
@@ -1990,4 +1990,34 @@ four-cap rescue-minus-loss +1.
 Decision:
 V1.14 recombination series is frozen for now. No further 95M formula tuning.
 Proceed to V1.15 scalability stress testing.
+
+
+
+### V1.15A implementation
+
+Full-system zero-shot scaling benchmark implemented.
+
+Code:
+src/marl2d/gene_mrta_v115/scaling.py
+
+Launcher:
+tools/run_gene_mrta_v115_scaling_mac.sh
+
+Tests:
+tests/test_gene_mrta_v115_scaling.py
+
+The benchmark freezes one mature four-capability V1.13 Policy Gene and measures
+the same 148-parameter route-tail Policy without retraining as R/T increase.
+
+Initial smoke:
+4R/20T, 8R/40T, 16R/80T.
+
+Extreme ladder:
+4R/20T -> 8R/40T -> 16R/80T -> 32R/160T -> 64R/320T -> 128R/640T.
+
+Failure stage is recorded separately as geometry/path/policy.
+
+Outputs include:
+scaling_results.csv, scaling_case_summary.csv, timing_breakdown.csv,
+memory_breakdown.csv, scaling_summary.json.
 
