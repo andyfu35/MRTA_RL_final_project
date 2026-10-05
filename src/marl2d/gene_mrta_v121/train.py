@@ -392,8 +392,7 @@ def run(args: argparse.Namespace) -> Path:
 
     run_dir = Path(args.run_dir)
     checkpoint_path = run_dir / "checkpoint.json"
-    world_events_path = run_dir / "world_events.jsonl"
-    round_history_path = run_dir / "round_history.jsonl"
+    world_events_dir = run_dir / "world_events"
     snapshots_dir = run_dir / "bank_snapshots"
 
     if checkpoint_path.exists():
@@ -477,6 +476,14 @@ def run(args: argparse.Namespace) -> Path:
         candidate_assessments: list[GeneAssessment] = []
         parent_records: list[BankRecord | None] = []
 
+        # A round is the atomic training unit. Partial world logs are staged
+        # separately and never become formal evidence until all worlds finish.
+        world_events_dir.mkdir(parents=True, exist_ok=True)
+        round_world_path = world_events_dir / f"round_{round_index:03d}.jsonl"
+        staged_world_path = world_events_dir / f"round_{round_index:03d}.jsonl.tmp"
+        if staged_world_path.exists():
+            staged_world_path.unlink()
+
         for world_index in range(args.worlds_per_round):
             if round_index == 0:
                 base = ScalableRouteTailGene.random(
@@ -516,7 +523,7 @@ def run(args: argparse.Namespace) -> Path:
             candidate_assessments.append(assessment)
             parent_records.append(parent)
             _append_jsonl(
-                world_events_path,
+                staged_world_path,
                 _world_event(
                     round_index=round_index,
                     world_index=world_index,
@@ -574,7 +581,6 @@ def run(args: argparse.Namespace) -> Path:
         )
         history.append(summary)
 
-        _append_jsonl(round_history_path, summary)
         _atomic_json(
             snapshots_dir / f"round_{round_index:03d}.json",
             {
@@ -586,6 +592,10 @@ def run(args: argparse.Namespace) -> Path:
                 ],
             },
         )
+        # Commit the full 1000-world evidence atomically. If the process had
+        # been interrupted earlier, only the .tmp staging file would exist.
+        os.replace(staged_world_path, round_world_path)
+
         _atomic_json(
             checkpoint_path,
             _checkpoint_payload(
