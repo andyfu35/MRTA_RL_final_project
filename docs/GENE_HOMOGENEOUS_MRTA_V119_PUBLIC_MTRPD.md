@@ -25,10 +25,13 @@ families:
 For each family, ten subsets are generated at 30, 40 and 50 total vertices
 (depot included), giving 6 x 10 x 3 = 180 instances.
 
-The original construction uses n = 29, 39, 49 customers plus one depot.
-The number of available repairmen is instance-dependent rather than hard-coded:
+The public set uses 30, 40 and 50 total vertices with 6, 8 and 10
+repairmen, respectively. With one depot this corresponds to 29, 39 and 49
+customer tasks:
 
-    K = max(K_ini, ceil(n / 5))
+    30 vertices -> 6 repairmen
+    40 vertices -> 8 repairmen
+    50 vertices -> 10 repairmen
 
 The route distance limit is:
 
@@ -39,10 +42,10 @@ The paper reports proven optimal solutions for 179 / 180 instances.
 ## Core research question
 
 Can one fixed-size 148-parameter RouteTailDirectGene learn an assignment law
-that works across public MTRPD instances with changing:
+that works across the three public MTRPD scales with changing:
 
-- robot count K;
-- customer/task count;
+- robot count (6 / 8 / 10);
+- customer/task count (29 / 39 / 49);
 - geometry;
 - route-distance constraints;
 
