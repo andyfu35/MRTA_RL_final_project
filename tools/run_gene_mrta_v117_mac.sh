@@ -5,6 +5,7 @@ MODE="${1:-tests}"
 VENV_DIR="${VENV_DIR:-.venv-gene}"
 SMOKE_BANK="${V117_SMOKE_BANK:-runs/gene_mrta_v117_stage_a/oracle_smoke_2r10t.json}"
 FORMAL_BANK="${V117_FORMAL_BANK:-runs/gene_mrta_v117_stage_a/oracle_formal_4r20t.json}"
+FORMAL_RUN_DIR="${V117_FORMAL_RUN_DIR:-runs/gene_mrta_v117_stage_a/formal_4r20t_seed117}"
 
 if [[ ! -d "$VENV_DIR" ]]; then
   python3 -m venv "$VENV_DIR"
@@ -95,6 +96,8 @@ elif [[ "$MODE" == "train-formal" ]]; then
     exit 2
   fi
   FORMAL_GENERATIONS="${V117_GENERATIONS:-50}"
+  echo "V117_FORMAL_RUN_DIR=$FORMAL_RUN_DIR"
+  echo "V117_GENERATIONS=$FORMAL_GENERATIONS"
   python -m marl2d.gene_mrta_v117.stage_a_train \
     --oracle-bank "$FORMAL_BANK" \
     --generations "$FORMAL_GENERATIONS" \
@@ -107,9 +110,34 @@ elif [[ "$MODE" == "train-formal" ]]; then
     --children-per-pair 4 \
     --mating-full-limit 16 \
     --screen-worlds 8 \
-    --seed 117
+    --seed 117 \
+    --run-dir "$FORMAL_RUN_DIR"
+
+elif [[ "$MODE" == "status-formal" ]]; then
+  if [[ -f "$FORMAL_RUN_DIR/checkpoint.json" ]]; then
+    python - "$FORMAL_RUN_DIR/checkpoint.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+data = json.load(open(path, "r", encoding="utf-8"))
+history = data.get("history", [])
+print("V117_FORMAL_STATUS")
+print("run_dir=", path.rsplit("/", 1)[0], sep="")
+print("generation=", data.get("generation"), sep="")
+print("active_genes=", len(data.get("records", [])), sep="")
+if history:
+    row = history[-1]
+    print("max_capabilities=", row.get("max_capabilities"), sep="")
+    print("max_inherited_capabilities=", row.get("max_inherited_capabilities"), sep="")
+    print("best=", json.dumps(row.get("best", {}), ensure_ascii=False), sep="")
+    print("best_fusion_gene=", json.dumps(row.get("best_fusion_gene"), ensure_ascii=False), sep="")
+PY
+  else
+    echo "No formal checkpoint yet: $FORMAL_RUN_DIR/checkpoint.json"
+  fi
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v117_mac.sh [tests|oracle-smoke|train-smoke|smoke|oracle-formal|train-formal]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v117_mac.sh [tests|oracle-smoke|train-smoke|smoke|oracle-formal|train-formal|status-formal]" >&2
   exit 2
 fi
