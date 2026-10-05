@@ -2138,3 +2138,17 @@ Launcher:
 Current data blocker:
 historical public supplement needs to be downloaded/inspected before writing
 the authoritative raw-file importer. Do not invent missing K/OPT/coordinates.
+
+
+### V1.19 public-data recovery note
+
+The historical MTRPD supplement host
+www.computational-logistics.org/orlib/mtrpd no longer resolved on the local
+Mac on 2026-10-05. Direct download produced no raw files.
+
+dataset_tool download now automatically falls back to the Internet Archive
+Wayback CDX API and saves provenance metadata in _WAYBACK_RECOVERY.json.
+
+Do not recreate the 180 published instances by drawing new random TSPLIB
+subsets: their published optima are tied to the exact original
+subset/depot/K/route-limit instances.
