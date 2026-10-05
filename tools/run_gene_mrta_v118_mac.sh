@@ -5,10 +5,10 @@ MODE="${1:-tests}"
 VENV_DIR="${VENV_DIR:-.venv-gene}"
 
 SMOKE_WORLD_BANK="${V118_SMOKE_WORLD_BANK:-runs/gene_mrta_v118/world_smoke_2r6t_fast_v2.json}"
-SMOKE_RUN_DIR="${V118_SMOKE_RUN_DIR:-runs/gene_mrta_v118/smoke_2r6t_fast_v3_4axis_seed118}"
+SMOKE_RUN_DIR="${V118_SMOKE_RUN_DIR:-runs/gene_mrta_v118/smoke_2r6t_fast_v4_3axis_seed118}"
 
 FORMAL_WORLD_BANK="${V118_FORMAL_WORLD_BANK:-runs/gene_mrta_v118/world_formal_4r20t_100_fast_v2.json}"
-FORMAL_RUN_DIR="${V118_FORMAL_RUN_DIR:-runs/gene_mrta_v118/formal_4r20t_100_fast_v3_4axis_seed118}"
+FORMAL_RUN_DIR="${V118_FORMAL_RUN_DIR:-runs/gene_mrta_v118/formal_4r20t_100_fast_v4_3axis_seed118}"
 
 EXACT_SMOKE_BANK="${V118_EXACT_SMOKE_BANK:-runs/gene_mrta_v118/oracle_smoke_2r6t_exact_v1.json}"
 
