@@ -191,3 +191,35 @@ def test_v121_round_summary_tracks_population_mean_improvement():
     diag = summary["parent_child_diagnostic"]
     assert diag["overall_win_tie_loss"]["win"] == 2
     assert diag["overall_win_tie_loss"]["loss"] == 0
+
+
+def test_v121_round_summary_rejects_partial_world_batch():
+    records = [
+        _record("a", 0.6, 0.5),
+        _record("b", 0.7, 0.6),
+    ]
+    assessments = [
+        _assessment(0.6, 0.5),
+        _assessment(0.7, 0.6),
+    ]
+
+    try:
+        build_round_summary(
+            round_index=0,
+            worlds_per_round=3,
+            instance_count=34,
+            axes=("retention_small", "retention_medium"),
+            candidate_records=records,
+            candidate_assessments=assessments,
+            parent_records=[None, None],
+            bank_records={},
+            bank_before=0,
+            dominated_removed=0,
+            epsilon_removed=0,
+            crowding_removed=0,
+            previous_summary=None,
+        )
+    except ValueError as exc:
+        assert "requested number of worlds" in str(exc)
+    else:
+        raise AssertionError("Partial round must not be accepted")
