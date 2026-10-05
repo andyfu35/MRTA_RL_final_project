@@ -1963,3 +1963,39 @@ frontier coverage as a secondary criterion.
 
 The old inherited_capabilities fields remain only for historical provenance and
 Stage-A checkpoint compatibility.
+
+
+## V1.18 feasibility-first architecture
+
+V1.17 remains frozen and reproducible.
+
+V1.18 changes Completion from a Pareto capability into a hard success gate.
+
+Rule:
+
+    all tasks completed on every training world
+    -> Gene may enter the formal Pareto Bank
+
+otherwise the Gene remains only in feasibility bootstrap search.
+
+Feasibility bootstrap ranks only:
+
+    worst completion -> mean completion -> successful-world count
+
+After success, the Pareto axes are:
+
+    Time / PathEfficiency / PriorityService / Deadline / WorkloadBalance
+
+PriorityService is priority-weighted earliness, because ordinary completed
+priority becomes constant when all tasks are mandatory.
+
+V1.18 world banks only accept exact-C*=1 worlds. Candidate infeasible worlds
+are rejected before formal evaluation.
+
+Launcher:
+
+    bash tools/run_gene_mrta_v118_mac.sh tests
+    bash tools/run_gene_mrta_v118_mac.sh oracle-smoke
+    bash tools/run_gene_mrta_v118_mac.sh train-smoke
+    bash tools/run_gene_mrta_v118_mac.sh oracle-formal
+    bash tools/run_gene_mrta_v118_mac.sh train-formal
