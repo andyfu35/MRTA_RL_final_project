@@ -141,3 +141,71 @@ Next implementation step after this schema/axis freeze:
 - mutation + capability-fusion mating;
 - exact-T* development bank;
 - hard-world trace exporter for Stage B.
+
+
+## Global objective specialists
+
+Stage A distinguishes raw metrics from Gene-Bank capability axes.
+
+The two primary exact-ceiling specialists are:
+
+### Global time optimality
+
+For a Gene:
+
+    T_gene = (1/N) * sum_completed(1 - F_j/H)
+
+For the exact time MILP oracle:
+
+    T_star = max feasible T
+
+Capability:
+
+    global_time_optimality = T_gene / T_star
+
+Therefore:
+
+    global_time_optimality = 1
+
+means the Gene has reached the proven global optimum for the time objective on
+that world.
+
+This objective is not makespan. It jointly rewards completing more tasks and
+finishing them earlier, avoiding the "do fewer tasks to reduce total time"
+loophole.
+
+### Global priority optimality
+
+Raw priority satisfaction is:
+
+    P_gene = sum_priority(completed tasks) / sum_priority(all tasks)
+
+A second exact MILP oracle maximizes that same feasible priority objective:
+
+    P_star = max feasible priority satisfaction
+
+Capability:
+
+    global_priority_optimality = P_gene / P_star
+
+Thus the Gene Bank can preserve a time specialist and a priority specialist as
+different valid solutions instead of scalarizing them.
+
+### Revised Stage-A axes
+
+The active Stage-A archives are now:
+
+1. completion
+2. global_time_optimality
+3. path_efficiency
+4. global_priority_optimality
+5. deadline_satisfaction
+6. workload_balance
+
+Raw time_optimality and priority_satisfaction remain recorded diagnostics, but
+their exact-ceiling ratios are the capability scores used for the two global
+objective archives.
+
+The final multi-capability Gene can later be selected/fused with explicit
+retention gates, for example requiring both the global-time and global-priority
+capabilities to remain within a chosen fraction of their specialist ceilings.
