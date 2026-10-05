@@ -5,6 +5,7 @@ from marl2d.gene_mrta_v120.benchmark import (
     EXACT_OPTIMUM_IDS,
     INSTANCE_ZIP,
     PAPER_ONLY_REFERENCES,
+    _parse_instance_text,
     describe_benchmark,
     edge_distance,
     load_benchmark,
@@ -156,3 +157,20 @@ def test_v120_one_gene_handles_variable_robot_and_task_counts():
     assert a.task_count != b.task_count
     assert all(len(route) >= 1 for route in a.routes)
     assert all(len(route) >= 1 for route in b.routes)
+
+
+def test_v120_parser_accepts_standard_tsplib_eof_marker():
+    base_name, edge_type, robot_count, coordinates = _parse_instance_text(
+        "toy_3.txt",
+        "toy EUC_2D 5 3\n"
+        "1 0 0\n"
+        "2 1 0\n"
+        "3 2 0\n"
+        "4 3 0\n"
+        "5 4 0\n"
+        "EOF\n",
+    )
+    assert base_name == "toy"
+    assert edge_type == "EUC_2D"
+    assert robot_count == 3
+    assert coordinates.shape == (5, 2)
