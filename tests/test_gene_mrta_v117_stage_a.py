@@ -3,12 +3,14 @@ import numpy as np
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
 from marl2d.gene_mrta_v117.fusion1 import (
-    PROGRESSIVE_OPERATORS,
     _choose_pairs,
-    _passed_axes,
 )
-from marl2d.gene_mrta_v117.unseen_audit import (
-    _candidate_ids,
+from marl2d.gene_mrta_v117.pareto_bank import (
+    analysis_best_by_axis,
+    dominates,
+    maximin_gene_id,
+    pareto_front_ids,
+    rebuild_pareto_bank,
 )
 from marl2d.gene_mrta_v117.stage_a_train import (
     CLEAN_MATING_OPERATORS,
@@ -268,183 +270,259 @@ def test_record_round_trip_preserves_capability_provenance():
     )
 
 
-def test_fusion1_prioritizes_complementary_capability_union():
-    scores = {
-        axis: 0.95
-        for axis in BASE_AXES
-    }
-
-    time_gene = _record(
-        "time_gene",
-        scores,
-    )
-    time_gene.capabilities = (
-        "global_time_optimality",
-        "global_deadline_optimality",
-    )
-    time_gene.archive_capabilities = (
-        "global_time_optimality",
-        "global_deadline_optimality",
-    )
-
-    priority_gene = _record(
-        "priority_gene",
-        scores,
-    )
-    priority_gene.capabilities = (
-        "global_priority_optimality",
-        "global_path_efficiency",
-    )
-    priority_gene.archive_capabilities = (
-        "global_priority_optimality",
-        "global_path_efficiency",
-    )
-
-    completion_gene = _record(
-        "completion_gene",
-        scores,
-    )
-    completion_gene.capabilities = (
-        "global_completion_optimality",
-        "workload_balance",
-    )
-    completion_gene.archive_capabilities = (
-        "global_completion_optimality",
-        "workload_balance",
-    )
-
-    records = {
-        record.record_id: record
-        for record in (
-            time_gene,
-            priority_gene,
-            completion_gene,
-        )
-    }
-
-    pairs = _choose_pairs(
-        records,
-        pair_count=3,
-        archive_size=3,
-        rng=np.random.default_rng(11701),
-    )
-
-    assert pairs
-    assert any(
-        (
-            "global_time_optimality"
-            in union
-            and "global_priority_optimality"
-            in union
-        )
-        for _a, _b, union in pairs
-    )
-
-
-def test_unseen_audit_candidate_set_keeps_specialists_and_fusions():
-    scores = {
+def test_pareto_dominance_uses_all_capability_axes():
+    a = {
         axis: 0.90
         for axis in BASE_AXES
     }
-    records = {}
+    b = dict(a)
+    a[
+        "global_time_optimality"
+    ] = 0.91
 
-    for index, axis in enumerate(
-        BASE_AXES
-    ):
-        record = _record(
-            f"specialist_{index}",
-            scores,
-        )
-        record.scores = dict(scores)
-        record.scores[axis] = 0.99
-        record.capabilities = (
-            axis,
-        )
-        record.archive_capabilities = (
-            axis,
-        )
-        records[
-            record.record_id
-        ] = record
+    assert dominates(a, b)
+    assert not dominates(b, a)
 
-    fusion = _record(
-        "fusion",
-        {
-            axis: 0.96
-            for axis in BASE_AXES
-        },
+    tradeoff = dict(a)
+    tradeoff[
+        "global_priority_optimality"
+    ] = 0.80
+    assert not dominates(
+        a,
+        tradeoff,
     )
-    fusion.origin = "mating"
-    fusion.inherited_capabilities = (
-        "global_time_optimality",
-        "global_priority_optimality",
-    )
-    fusion.capabilities = (
-        "global_time_optimality",
-        "global_priority_optimality",
-    )
-    records[
-        fusion.record_id
-    ] = fusion
-
-    ids, roles = _candidate_ids(
-        records,
-        archive_size=1,
-        hybrid_count=4,
-    )
-
-    assert "fusion" in ids
-    assert "fusion" in roles["fusion"]
-    assert any(
-        "specialist:global_time_optimality"
-        in role
-        for role in roles.values()
+    assert not dominates(
+        tradeoff,
+        a,
     )
 
 
-def test_progressive_fusion_accepts_partial_inheritance_without_lowering_gate():
-    union = tuple(BASE_AXES[:4])
-    parent_a = {
-        axis: 1.0
-        for axis in BASE_AXES
-    }
-    parent_b = dict(parent_a)
-    ceiling = dict(parent_a)
-
-    child = {
+def test_pareto_front_keeps_conflicting_tradeoffs():
+    base = {
         axis: 0.80
         for axis in BASE_AXES
     }
-    child[union[0]] = 0.97
-    child[union[1]] = 0.96
-    child[union[2]] = 0.94
-    child[union[3]] = 0.99
 
-    inherited = _passed_axes(
-        child,
-        union,
-        parent_a,
-        parent_b,
-        ceiling,
-        threshold=0.95,
-    )
+    time_scores = dict(base)
+    time_scores[
+        "global_time_optimality"
+    ] = 0.99
 
-    assert inherited == tuple(
-        sorted(
-            (
-                union[0],
-                union[1],
-                union[3],
-            )
+    priority_scores = dict(base)
+    priority_scores[
+        "global_priority_optimality"
+    ] = 0.99
+
+    dominated_scores = {
+        axis: 0.70
+        for axis in BASE_AXES
+    }
+
+    records = {
+        "time": _record(
+            "time",
+            time_scores,
+        ),
+        "priority": _record(
+            "priority",
+            priority_scores,
+        ),
+        "dominated": _record(
+            "dominated",
+            dominated_scores,
+        ),
+    }
+
+    front, dominated = (
+        pareto_front_ids(
+            records
         )
     )
 
+    assert set(front) == {
+        "time",
+        "priority",
+    }
+    assert dominated == (
+        "dominated",
+    )
 
-def test_progressive_fusion_uses_parent_preserving_operators():
+
+def test_pareto_rebuild_removes_dominated_gene_without_axis_labels():
+    strong_scores = {
+        axis: 0.90
+        for axis in BASE_AXES
+    }
+    weak_scores = {
+        axis: 0.80
+        for axis in BASE_AXES
+    }
+
+    records = {
+        "strong": _record(
+            "strong",
+            strong_scores,
+        ),
+        "weak": _record(
+            "weak",
+            weak_scores,
+        ),
+    }
+
+    rebuilt = rebuild_pareto_bank(
+        records,
+        max_size=16,
+        epsilon=0.001,
+    )
+
     assert set(
-        PROGRESSIVE_OPERATORS
+        rebuilt.records
     ) == {
-        "sparse_block_graft",
-        "sparse_block_blend",
-        "near_parent_blend",
+        "strong",
+    }
+    assert "weak" in (
+        rebuilt.dominated_ids
+    )
+
+
+def test_pareto_epsilon_cell_collapses_near_duplicate_tradeoff():
+    base = {
+        axis: 0.90
+        for axis in BASE_AXES
+    }
+    nearby = dict(base)
+    nearby[
+        "global_time_optimality"
+    ] = 0.901
+    nearby[
+        "global_priority_optimality"
+    ] = 0.899
+
+    records = {
+        "base": _record(
+            "base",
+            base,
+        ),
+        "nearby": _record(
+            "nearby",
+            nearby,
+        ),
+    }
+
+    rebuilt = rebuild_pareto_bank(
+        records,
+        max_size=16,
+        epsilon=0.01,
+    )
+
+    assert len(
+        rebuilt.records
+    ) == 1
+    assert len(
+        rebuilt.epsilon_duplicate_ids
+    ) == 1
+
+
+def test_pareto_analysis_views_do_not_control_bank_membership():
+    base = {
+        axis: 0.80
+        for axis in BASE_AXES
+    }
+
+    time_scores = dict(base)
+    time_scores[
+        "global_time_optimality"
+    ] = 0.99
+
+    balanced_scores = {
+        axis: 0.90
+        for axis in BASE_AXES
+    }
+
+    records = {
+        "time": _record(
+            "time",
+            time_scores,
+        ),
+        "balanced": _record(
+            "balanced",
+            balanced_scores,
+        ),
+    }
+
+    rebuilt = rebuild_pareto_bank(
+        records,
+        max_size=16,
+        epsilon=0.001,
+    )
+    assert set(
+        rebuilt.records
+    ) == {
+        "time",
+        "balanced",
+    }
+
+    best = analysis_best_by_axis(
+        rebuilt.records
+    )
+    assert best[
+        "global_time_optimality"
+    ] == "time"
+    assert (
+        maximin_gene_id(
+            rebuilt.records
+        )
+        == "balanced"
+    )
+
+
+def test_pareto_mating_pairs_use_capability_space_distance():
+    records = {}
+
+    a_scores = {
+        axis: 0.80
+        for axis in BASE_AXES
+    }
+    a_scores[
+        "global_time_optimality"
+    ] = 0.99
+
+    b_scores = {
+        axis: 0.80
+        for axis in BASE_AXES
+    }
+    b_scores[
+        "global_priority_optimality"
+    ] = 0.99
+
+    c_scores = dict(
+        a_scores
+    )
+    c_scores[
+        "global_time_optimality"
+    ] = 0.98
+
+    for rid, scores in (
+        ("a", a_scores),
+        ("b", b_scores),
+        ("c", c_scores),
+    ):
+        records[rid] = _record(
+            rid,
+            scores,
+        )
+
+    pairs = _choose_pairs(
+        records,
+        pair_count=1,
+        rng=np.random.default_rng(
+            11702
+        ),
+    )
+
+    assert set(
+        pairs[0]
+    ) == {
+        "a",
+        "b",
     }
