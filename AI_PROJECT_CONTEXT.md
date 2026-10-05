@@ -1880,3 +1880,42 @@ Default unseen bank is 64 fresh 4R/20T worlds from seed 117200000.
 
 Hard-world targeted axes are intentionally deferred until the unseen trace
 reveals the repeated failure mechanism.
+
+
+## Fusion-1 v1 -> v2
+
+The first post-Stage-A mating-only run completed 20 rounds but accepted zero
+full-union children.
+
+Totals:
+
+- 5,120 children screened;
+- 640 full-evaluated;
+- 0 full-union inheritance successes;
+- max inherited capability count stayed 4.
+
+The unchanged best fusion Gene retained Completion + Path + Priority + Balance,
+with weak Time and Deadline.
+
+Diagnosis:
+
+The v1 all-or-nothing union gate was too discontinuous for mature multi-axis
+parents. It discarded useful partial inheritance intermediates.
+
+Fusion-1 v2 preserves the 95% per-axis inheritance requirement but evaluates
+each capability independently and keeps children with at least two genuinely
+inherited axes.
+
+V2 parent-preserving crossover:
+
+- sparse_block_graft
+- sparse_block_blend
+- near_parent_blend
+
+No ordinary mutation.
+
+Fresh v2 directory:
+
+runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v2_progressive
+
+Do not begin unseen-map mining until this v2 mating result is reviewed.
