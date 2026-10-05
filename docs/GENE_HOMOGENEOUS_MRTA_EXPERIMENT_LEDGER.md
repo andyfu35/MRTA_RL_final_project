@@ -3351,3 +3351,91 @@ This preserves the SEGB principle:
 
     define how capabilities are measured;
     let the Gene Bank discover which capability combinations survive.
+
+
+## V1.18 feasibility-first MRTA protocol
+
+V1.17 is frozen as a partial-service/resource-constrained experiment.
+
+V1.18 changes the primary MRTA semantics:
+
+    completing every task is a hard validity requirement,
+    not one Pareto capability among several.
+
+The analogy is survival-first robotics: a locomotion policy that falls cannot
+claim useful speed or energy performance; likewise an MRTA allocation that
+leaves tasks unfinished is not a valid solution regardless of its speed,
+path, priority, deadline, or balance values.
+
+### Success gate
+
+For every training/evaluation world:
+
+    completed_tasks == total_tasks
+
+A Gene may enter the formal Pareto Gene Bank only if it satisfies this gate on
+every world in the current training bank.
+
+Before the first successful Gene exists, evolution uses a feasibility
+bootstrap ordered lexicographically by:
+
+1. worst-world completion;
+2. mean completion;
+3. number of fully completed worlds.
+
+Completion is therefore a prerequisite/search signal only. It is not a
+post-success Pareto objective.
+
+### World protocol
+
+V1.18 world banks accept only worlds for which an exact MILP proves:
+
+    C* = 1.0
+
+Candidate worlds that cannot complete every task under the fixed time, battery,
+routing, and service constraints are rejected before training.
+
+The V1.18 4R/20T base configuration increases resource capacity relative to
+V1.17 so full completion is physically possible, while exact filtering remains
+the final acceptance test.
+
+### Post-success capability vector
+
+The formal Pareto capability vector is:
+
+    [
+      global_time_optimality,
+      global_path_efficiency,
+      global_priority_service,
+      global_deadline_optimality,
+      workload_balance
+    ]
+
+Completion is deliberately absent.
+
+Priority is also redefined. Since all tasks must eventually be completed,
+completed priority mass would be constant and therefore meaningless. V1.18
+uses priority-weighted completion earliness:
+
+    sum_j p_j * (1 - finish_j / H) / sum_j p_j
+
+so high-priority tasks receive higher score when completed earlier.
+
+Exact all-complete MILP optima are computed independently for:
+
+- time;
+- path efficiency;
+- priority service;
+- deadline satisfaction.
+
+Workload balance remains Jain fairness after the success gate.
+
+### New implementation
+
+- src/marl2d/gene_mrta_v118/oracle.py
+- src/marl2d/gene_mrta_v118/oracle_bank.py
+- src/marl2d/gene_mrta_v118/capabilities.py
+- src/marl2d/gene_mrta_v118/pareto_bank.py
+- src/marl2d/gene_mrta_v118/train.py
+- tests/test_gene_mrta_v118.py
+- tools/run_gene_mrta_v118_mac.sh
