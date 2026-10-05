@@ -319,3 +319,49 @@ scalarizing those objectives.
 Jain workload fairness remains the only structural axis without a MILP ceiling,
 because the current Jain ratio is nonlinear and should not be replaced by a
 different linear surrogate merely to force a common normalization scheme.
+
+
+## Capability provenance semantics
+
+Before formal training, capability provenance is explicitly separated.
+
+A Gene may be strong on multiple axes for two different reasons:
+
+1. it independently ranks inside multiple specialist archives;
+2. a mating child explicitly passes the 95% dual inheritance gate for the
+   union of parent capabilities.
+
+These must not be conflated.
+
+The trainer now stores:
+
+    archive_capabilities
+    inherited_capabilities
+    capabilities
+
+where:
+
+    capabilities =
+        archive_capabilities U inherited_capabilities
+
+Archive overlap is valid evidence that a Gene performs strongly on several
+objectives, but it is not evidence that mating transmitted those abilities.
+
+A true capability-fusion result requires:
+
+- origin == "mating";
+- inherited_capabilities contains at least two axes;
+- each inherited axis passed both:
+  - retention versus the relevant best parent;
+  - retention versus the current capability ceiling.
+
+The generation log therefore reports:
+
+    max_inherited_capabilities
+    best_fusion_gene
+
+and includes that Gene's parents, mating operator, inherited capability list,
+archive memberships, and scores.
+
+This provenance split replaces the earlier ambiguous interpretation of
+max_capabilities.
