@@ -21,7 +21,8 @@ from marl2d.gene_mrta_v118.capabilities import (
 from marl2d.gene_mrta_v118.oracle import (
     solve_all_complete_optimum,
 )
-from marl2d.gene_mrta_v118.oracle_bank import (
+from marl2d.gene_mrta_v118.world_bank import (
+    construct_feasible_world,
     feasibility_first_config,
 )
 from marl2d.gene_mrta_v118.pareto_bank import (
@@ -91,10 +92,10 @@ def test_v118_axes_exclude_completion_gate():
         not in BASE_AXES
     )
     assert BASE_AXES == (
-        "global_time_optimality",
-        "global_path_efficiency",
-        "global_priority_service",
-        "global_deadline_optimality",
+        "time_earliness",
+        "path_efficiency",
+        "priority_service",
+        "deadline_satisfaction",
         "workload_balance",
     )
 
@@ -293,3 +294,55 @@ def test_v118_pareto_bank_has_no_completion_axis():
     ) == {
         "a",
     }
+
+
+def test_v118_constructive_world_has_explicit_all_task_witness():
+    config = feasibility_first_config(
+        4,
+        20,
+    )
+    built = construct_feasible_world(
+        config,
+        117100000,
+        battery_reserve_fraction=0.05,
+    )
+    assert built is not None
+    world, witness = built
+
+    assigned = sorted(
+        task
+        for route in witness.routes
+        for task in route
+    )
+    assert assigned == list(
+        range(
+            config.num_tasks
+        )
+    )
+    assert max(
+        witness.finish_times
+    ) <= (
+        config.episode_time
+        + 1e-9
+    )
+    assert all(
+        used
+        <= battery + 1e-9
+        for used, battery in zip(
+            witness.travel_energy,
+            world.robot_initial_batteries,
+            strict=True,
+        )
+    )
+
+
+def test_v118_capability_axes_are_raw_zero_to_one_metrics():
+    assert all(
+        "optimality"
+        not in axis
+        for axis in BASE_AXES
+    )
+    assert (
+        "global_completion_optimality"
+        not in BASE_AXES
+    )
