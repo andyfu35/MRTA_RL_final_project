@@ -6,6 +6,9 @@ VENV_DIR="${VENV_DIR:-.venv-gene}"
 SMOKE_BANK="${V117_SMOKE_BANK:-runs/gene_mrta_v117_stage_a/oracle_smoke_2r10t.json}"
 FORMAL_BANK="${V117_FORMAL_BANK:-runs/gene_mrta_v117_stage_a/oracle_formal_4r20t.json}"
 FORMAL_RUN_DIR="${V117_FORMAL_RUN_DIR:-runs/gene_mrta_v117_stage_a/formal_4r20t_seed117}"
+FUSION1_DIR="${V117_FUSION1_DIR:-runs/gene_mrta_v117_fusion1/formal_4r20t_seed117}"
+UNSEEN_BANK="${V117_UNSEEN_BANK:-runs/gene_mrta_v117_unseen/oracle_unseen_4r20t_64.json}"
+UNSEEN_AUDIT_DIR="${V117_UNSEEN_AUDIT_DIR:-runs/gene_mrta_v117_unseen/audit_4r20t_64}"
 
 if [[ ! -d "$VENV_DIR" ]]; then
   python3 -m venv "$VENV_DIR"
@@ -113,6 +116,85 @@ elif [[ "$MODE" == "train-formal" ]]; then
     --seed 117 \
     --run-dir "$FORMAL_RUN_DIR"
 
+elif [[ "$MODE" == "fusion1" ]]; then
+  SOURCE_CHECKPOINT="$FORMAL_RUN_DIR/checkpoint.json"
+  if [[ ! -f "$SOURCE_CHECKPOINT" ]]; then
+    echo "Missing final Stage-A checkpoint: $SOURCE_CHECKPOINT" >&2
+    exit 2
+  fi
+  FUSION1_ROUNDS="${V117_FUSION1_ROUNDS:-20}"
+  echo "V117_FUSION1_DIR=$FUSION1_DIR"
+  echo "V117_FUSION1_ROUNDS=$FUSION1_ROUNDS"
+  python -m marl2d.gene_mrta_v117.fusion1 \
+    --source-checkpoint "$SOURCE_CHECKPOINT" \
+    --output-dir "$FUSION1_DIR" \
+    --rounds "$FUSION1_ROUNDS" \
+    --mating-pairs 64 \
+    --children-per-pair 4 \
+    --screen-worlds 8 \
+    --full-candidates 32 \
+    --archive-size 16 \
+    --hybrid-limit 192 \
+    --threshold 0.95 \
+    --post-mating-sigma 0.0 \
+    --seed 11701
+
+elif [[ "$MODE" == "status-fusion1" ]]; then
+  if [[ -f "$FUSION1_DIR/checkpoint.json" ]]; then
+    python - "$FUSION1_DIR/checkpoint.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+data = json.load(open(path, "r", encoding="utf-8"))
+history = data.get("history", [])
+print("V117_FUSION1_STATUS")
+print("run_dir=", path.rsplit("/", 1)[0], sep="")
+print("round=", data.get("round"), sep="")
+print("active_genes=", len(data.get("records", [])), sep="")
+if history:
+    row = history[-1]
+    print("max_inherited_capabilities=", row.get("max_inherited_capabilities"), sep="")
+    print("accepted_full_union_children=", row.get("accepted_full_union_children"), sep="")
+    print("best=", json.dumps(row.get("best", {}), ensure_ascii=False), sep="")
+    print("best_fusion_gene=", json.dumps(row.get("best_fusion_gene"), ensure_ascii=False), sep="")
+PY
+  else
+    echo "No Fusion-1 checkpoint yet: $FUSION1_DIR/checkpoint.json"
+  fi
+
+elif [[ "$MODE" == "oracle-unseen" ]]; then
+  UNSEEN_WORLDS="${V117_UNSEEN_WORLDS:-64}"
+  UNSEEN_SEED_BASE="${V117_UNSEEN_SEED_BASE:-117200000}"
+  echo "V117_UNSEEN_WORLDS=$UNSEEN_WORLDS"
+  echo "V117_UNSEEN_SEED_BASE=$UNSEEN_SEED_BASE"
+  python -m marl2d.gene_mrta_v117.stage_a_oracle_bank \
+    --robots 4 \
+    --tasks 20 \
+    --world-count "$UNSEEN_WORLDS" \
+    --seed-base "$UNSEEN_SEED_BASE" \
+    --time-limit unlimited \
+    --output "$UNSEEN_BANK"
+
+elif [[ "$MODE" == "audit-unseen" ]]; then
+  if [[ ! -f "$FUSION1_DIR/checkpoint.json" ]]; then
+    echo "Missing Fusion-1 checkpoint: $FUSION1_DIR/checkpoint.json" >&2
+    exit 2
+  fi
+  if [[ ! -f "$UNSEEN_BANK" ]]; then
+    echo "Missing unseen oracle bank: $UNSEEN_BANK" >&2
+    echo "Run oracle-unseen first." >&2
+    exit 2
+  fi
+  HARD_COUNT="${V117_HARD_COUNT:-16}"
+  python -m marl2d.gene_mrta_v117.unseen_audit \
+    --fusion-checkpoint "$FUSION1_DIR/checkpoint.json" \
+    --unseen-bank "$UNSEEN_BANK" \
+    --output-dir "$UNSEEN_AUDIT_DIR" \
+    --archive-size 16 \
+    --hybrid-count 12 \
+    --hard-count "$HARD_COUNT"
+
 elif [[ "$MODE" == "status-formal" ]]; then
   if [[ -f "$FORMAL_RUN_DIR/checkpoint.json" ]]; then
     python - "$FORMAL_RUN_DIR/checkpoint.json" <<'PY'
@@ -138,6 +220,6 @@ PY
   fi
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v117_mac.sh [tests|oracle-smoke|train-smoke|smoke|oracle-formal|train-formal|status-formal]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v117_mac.sh [tests|oracle-smoke|train-smoke|smoke|oracle-formal|train-formal|status-formal|fusion1|status-fusion1|oracle-unseen|audit-unseen]" >&2
   exit 2
 fi
