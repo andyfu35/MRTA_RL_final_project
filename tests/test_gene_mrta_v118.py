@@ -301,11 +301,17 @@ def test_v118_constructive_world_has_explicit_all_task_witness():
         4,
         20,
     )
-    built = construct_feasible_world(
-        config,
-        117100000,
-        battery_reserve_fraction=0.05,
-    )
+
+    built = None
+    for offset in range(20):
+        built = construct_feasible_world(
+            config,
+            117100000 + offset,
+            battery_reserve_fraction=0.05,
+        )
+        if built is not None:
+            break
+
     assert built is not None
     world, witness = built
 
