@@ -26,6 +26,8 @@ class Record:
     scores: dict[str, float]
     capabilities: tuple[str, ...]
     origin: str
+    archive_capabilities: tuple[str, ...] = ()
+    inherited_capabilities: tuple[str, ...] = ()
     generation: int
     parents: tuple[str, ...] = ()
     operator: str | None = None
@@ -36,6 +38,12 @@ class Record:
             "gene": self.gene.to_dict(),
             "scores": self.scores,
             "capabilities": list(self.capabilities),
+            "archive_capabilities": list(
+                self.archive_capabilities
+            ),
+            "inherited_capabilities": list(
+                self.inherited_capabilities
+            ),
             "origin": self.origin,
             "generation": self.generation,
             "parents": list(self.parents),
@@ -194,16 +202,24 @@ def _rebuild_active(
         for rid, record in records.items()
         if (
             record.origin == "mating"
-            and len(record.capabilities) >= 2
+            and len(
+                record.inherited_capabilities
+            ) >= 2
         )
     ]
     hybrid_ids.sort(
         key=lambda rid: (
-            len(records[rid].capabilities),
+            len(
+                records[rid].inherited_capabilities
+            ),
             min(
                 records[rid].scores[axis]
                 / max(best[axis], EPS)
-                for axis in records[rid].capabilities
+                for axis in (
+                    records[
+                        rid
+                    ].inherited_capabilities
+                )
             ),
         ),
         reverse=True,
@@ -217,21 +233,34 @@ def _rebuild_active(
     new_records: dict[str, Record] = {}
     for rid in keep:
         record = records[rid]
-        caps = set(
+        current_archive = set(
             archive_caps.get(
                 rid,
                 set(),
             )
         )
-        for axis in record.capabilities:
+        retained_inherited = {
+            axis
+            for axis in (
+                record.inherited_capabilities
+            )
             if (
                 record.scores[axis]
                 / max(best[axis], EPS)
                 >= certification_threshold
-            ):
-                caps.add(axis)
+            )
+        }
+        record.archive_capabilities = tuple(
+            sorted(current_archive)
+        )
+        record.inherited_capabilities = tuple(
+            sorted(retained_inherited)
+        )
         record.capabilities = tuple(
-            sorted(caps)
+            sorted(
+                current_archive
+                | retained_inherited
+            )
         )
         new_records[rid] = record
 
@@ -798,6 +827,9 @@ def run(args: argparse.Namespace) -> Path:
                     capabilities=(
                         req if passed else ()
                     ),
+                    inherited_capabilities=(
+                        req if passed else ()
+                    ),
                     origin="mating",
                     generation=generation,
                     parents=(a, b),
@@ -825,12 +857,50 @@ def run(args: argparse.Namespace) -> Path:
             ),
             default=0,
         )
+        max_inherited_caps = max(
+            (
+                len(
+                    record.inherited_capabilities
+                )
+                for record in records.values()
+            ),
+            default=0,
+        )
         most_capable = max(
             records.values(),
             key=lambda record: (
                 len(record.capabilities),
                 _quality(record, best),
             ),
+        )
+        fusion_records = [
+            record
+            for record in records.values()
+            if (
+                record.origin == "mating"
+                and len(
+                    record.inherited_capabilities
+                ) >= 2
+            )
+        ]
+        best_fusion = (
+            max(
+                fusion_records,
+                key=lambda record: (
+                    len(
+                        record.inherited_capabilities
+                    ),
+                    min(
+                        record.scores[axis]
+                        / max(best[axis], EPS)
+                        for axis in (
+                            record.inherited_capabilities
+                        )
+                    ),
+                ),
+            )
+            if fusion_records
+            else None
         )
         time_id = (
             archives[
@@ -855,6 +925,9 @@ def run(args: argparse.Namespace) -> Path:
             "generation": generation,
             "active_genes": len(records),
             "max_capabilities": max_caps,
+            "max_inherited_capabilities": (
+                max_inherited_caps
+            ),
             "time_priority_same_specialist": (
                 time_id == priority_id
             ),
@@ -871,6 +944,12 @@ def run(args: argparse.Namespace) -> Path:
                 "capabilities": list(
                     most_capable.capabilities
                 ),
+                "archive_capabilities": list(
+                    most_capable.archive_capabilities
+                ),
+                "inherited_capabilities": list(
+                    most_capable.inherited_capabilities
+                ),
                 "scores": (
                     most_capable.scores
                 ),
@@ -878,6 +957,30 @@ def run(args: argparse.Namespace) -> Path:
                     most_capable.parents
                 ),
             },
+            "best_fusion_gene": (
+                {
+                    "record_id": (
+                        best_fusion.record_id
+                    ),
+                    "operator": (
+                        best_fusion.operator
+                    ),
+                    "parents": list(
+                        best_fusion.parents
+                    ),
+                    "archive_capabilities": list(
+                        best_fusion.archive_capabilities
+                    ),
+                    "inherited_capabilities": list(
+                        best_fusion.inherited_capabilities
+                    ),
+                    "scores": (
+                        best_fusion.scores
+                    ),
+                }
+                if best_fusion is not None
+                else None
+            ),
             "best": best,
             "specialists": {
                 axis: (
@@ -900,7 +1003,7 @@ def run(args: argparse.Namespace) -> Path:
 
         checkpoint = {
             "version": (
-                "v117_stage_a_checkpoint_v3_all_exact_base_axes"
+                "v117_stage_a_checkpoint_v4_capability_provenance"
             ),
             "generation": generation,
             "axes": list(BASE_AXES),
