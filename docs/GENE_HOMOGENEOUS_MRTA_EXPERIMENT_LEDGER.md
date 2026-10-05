@@ -3178,3 +3178,63 @@ The hard-world audit exports:
 
 Stage-B targeted capability definitions are deliberately not pre-registered.
 They must be justified by the unseen hard-world traces.
+
+
+## V1.17 Fusion-1 v1 result and correction
+
+Fusion-1 v1 completed 20 mating rounds from the frozen Stage-A bank.
+
+Per round:
+
+- 64 parent pairs;
+- 256 children screened;
+- 32 children full-evaluated.
+
+Across all 20 rounds:
+
+- 5,120 children screened;
+- 640 children full-evaluated;
+- accepted_full_union_children = 0 in every round;
+- max_inherited_capabilities remained 4;
+- Stage-A specialist ceilings did not improve;
+- the best retained fusion Gene remained the pre-existing
+  Completion + Path + Priority + Balance hybrid.
+
+This is interpreted as a gating/search-path failure, not evidence that
+capability fusion is impossible.
+
+The v1 gate required a child to retain the ENTIRE union of both parents at
+>=95% of both the strongest relevant parent and the current specialist ceiling.
+For mature parents whose union often contains 5-6 capabilities, this creates a
+cliff: a child retaining 4 strong capabilities but missing one axis receives no
+inherited capability credit and cannot become an intermediate parent.
+
+Fusion-1 v2 therefore keeps the same 95% scientific inheritance standard but
+changes fusion to progressive inheritance.
+
+For each axis independently, a child inherits the axis only if:
+
+    child / strongest_parent >= 0.95
+    child / current_axis_best >= 0.95
+
+A child with at least two passed axes is retained as a valid fusion
+intermediate. Later rounds may mate that intermediate again to accumulate more
+capabilities.
+
+Fusion-1 v2 also replaces disruptive 50/50 crossover with parent-preserving
+operators:
+
+- sparse_block_graft
+- sparse_block_blend
+- near_parent_blend
+
+Functional hidden-neuron blocks are transferred one or two at a time, and
+reciprocal A<-B / B<-A children are generated.
+
+No ordinary mutation is enabled in Fusion-1 v2.
+
+The v2 run uses a fresh directory:
+
+    runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v2_progressive
+
+The unseen-map stage should not start until Fusion-1 v2 is inspected.
