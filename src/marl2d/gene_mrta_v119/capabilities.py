@@ -30,7 +30,7 @@ class InstanceAssessment:
     total_latency: float
     optimum_total_latency: float
     optimum_retention: float
-    optimality_gap: float
+    optimality_gap: float | None
     reference_violation: bool
 
     def to_dict(
@@ -218,9 +218,7 @@ def evaluate_gene(
             )
         else:
             retention = 0.0
-            gap = float(
-                "inf"
-            )
+            gap = None
 
         violation = bool(
             rollout.success
@@ -263,8 +261,12 @@ def evaluate_gene(
                 optimum_retention=float(
                     retention
                 ),
-                optimality_gap=float(
-                    gap
+                optimality_gap=(
+                    None
+                    if gap is None
+                    else float(
+                        gap
+                    )
                 ),
                 reference_violation=(
                     violation
