@@ -175,10 +175,16 @@ def _assessment_from_dict(
                     "optimum_retention"
                 ]
             ),
-            optimality_gap=float(
-                row[
+            optimality_gap=(
+                None
+                if row[
                     "optimality_gap"
-                ]
+                ] is None
+                else float(
+                    row[
+                        "optimality_gap"
+                    ]
+                )
             ),
             reference_violation=bool(
                 row[
@@ -449,6 +455,8 @@ def _checkpoint_payload(
     *,
     generation: int,
     manifest: str,
+    manifest_sha256: str,
+    instance_ids: tuple[str, ...],
     axes: tuple[
         str,
         ...,
@@ -492,6 +500,10 @@ def _checkpoint_payload(
             generation
         ),
         "manifest": manifest,
+        "manifest_sha256": manifest_sha256,
+        "instance_ids": list(
+            instance_ids
+        ),
         "split": "evolution",
         "axes": list(
             axes
@@ -531,11 +543,15 @@ def _checkpoint_payload(
 def run(
     args: argparse.Namespace,
 ) -> Path:
+    manifest_path = Path(
+        args.manifest
+    )
+    manifest_sha256 = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
     all_instances = (
         load_manifest(
-            Path(
-                args.manifest
-            )
+            manifest_path
         )
     )
     instances = select_split(
@@ -545,6 +561,10 @@ def run(
     )
     axes = capability_axes(
         instances
+    )
+    instance_ids = tuple(
+        item.instance_id
+        for item in instances
     )
 
     run_dir = Path(
@@ -582,6 +602,22 @@ def run(
         ) != axes:
             raise ValueError(
                 "MTRPD capability axes changed since checkpoint"
+            )
+        if (
+            data.get(
+                "manifest_sha256"
+            )
+            != manifest_sha256
+            or tuple(
+                data.get(
+                    "instance_ids",
+                    []
+                )
+            )
+            != instance_ids
+        ):
+            raise ValueError(
+                "MTRPD manifest or evolution instance set changed since checkpoint"
             )
 
         records = {
@@ -1192,6 +1228,12 @@ def run(
                 ),
                 manifest=str(
                     args.manifest
+                ),
+                manifest_sha256=(
+                    manifest_sha256
+                ),
+                instance_ids=(
+                    instance_ids
                 ),
                 axes=axes,
                 rng=rng,
