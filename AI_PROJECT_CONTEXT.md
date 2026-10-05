@@ -1615,3 +1615,35 @@ Implemented:
 - exact V1.17 priority MILP oracle;
 - normalized global-time and global-priority capability scoring;
 - unit tests for the priority oracle and 1.0 optimality semantics.
+
+
+## V1.17 Stage-A trainer now implemented
+
+The new clean retraining line can now execute end to end.
+
+Files:
+
+- src/marl2d/gene_mrta_v117/stage_a_oracle_bank.py
+- src/marl2d/gene_mrta_v117/stage_a_train.py
+- tests/test_gene_mrta_v117_stage_a.py
+
+Important constraints:
+
+- Stage A starts from random 148-parameter Route-Tail Genes;
+- no previous Policy parameters are loaded;
+- no V1.13 robustness labels are imported;
+- Time and Priority each have their own exact MILP capability ceiling;
+- conflicting specialists are intentionally preserved in separate archives.
+
+Smoke command:
+
+    bash tools/run_gene_mrta_v117_mac.sh smoke
+
+The smoke builds 2 exact 2R/10T dual-oracle worlds and runs 5 generations with
+a small random population to validate specialist separation and mating.
+
+Formal launcher modes also exist but should not be started until smoke output is
+reviewed:
+
+    bash tools/run_gene_mrta_v117_mac.sh oracle-formal
+    bash tools/run_gene_mrta_v117_mac.sh train-formal
