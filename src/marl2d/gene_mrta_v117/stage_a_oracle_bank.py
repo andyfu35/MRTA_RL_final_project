@@ -9,7 +9,10 @@ from typing import Any
 from marl2d.gene_mrta_v16t.env import EnvConfig, generate_world
 from marl2d.gene_mrta_v16t.global_optimal_core import solve_global_time_optimum
 from marl2d.gene_mrta_v115.scaling import scale_config
-from marl2d.gene_mrta_v117.oracle import solve_global_priority_optimum
+from marl2d.gene_mrta_v117.oracle import (
+    solve_global_completion_optimum,
+    solve_global_priority_optimum,
+)
 
 
 BANK_VERSION = "v117_stage_a_oracle_bank_v1"
@@ -45,6 +48,24 @@ def build_stage_a_oracle_bank(
         )
         world = generate_world(config, seed)
 
+        completion_oracle = (
+            solve_global_completion_optimum(
+                world,
+                config,
+                time_limit=time_limit,
+                solver_display=solver_display,
+            )
+        )
+        if (
+            not completion_oracle.optimal
+            or completion_oracle.completion is None
+        ):
+            raise RuntimeError(
+                f"Completion oracle failed exact proof for seed={seed}: "
+                f"status={completion_oracle.status} "
+                f"message={completion_oracle.message}"
+            )
+
         time_oracle = solve_global_time_optimum(
             world,
             config,
@@ -76,6 +97,9 @@ def build_stage_a_oracle_bank(
         row = {
             "world_index": world_index,
             "seed": seed,
+            "completion_optimum": float(
+                completion_oracle.completion
+            ),
             "time_optimum": float(
                 time_oracle.time_optimality
             ),
@@ -87,6 +111,9 @@ def build_stage_a_oracle_bank(
             ),
             "priority_completed_tasks": int(
                 priority_oracle.completed_tasks or 0
+            ),
+            "completion_oracle_seconds": float(
+                completion_oracle.solve_seconds
             ),
             "time_oracle_seconds": float(
                 time_oracle.solve_seconds
@@ -138,6 +165,7 @@ def load_stage_a_oracle_bank(
     list,
     list[float],
     list[float],
+    list[float],
 ]:
     data = json.loads(
         path.read_text(
@@ -160,6 +188,10 @@ def load_stage_a_oracle_bank(
         )
         for row in rows
     ]
+    completion_optima = [
+        float(row["completion_optimum"])
+        for row in rows
+    ]
     time_optima = [
         float(row["time_optimum"])
         for row in rows
@@ -171,6 +203,7 @@ def load_stage_a_oracle_bank(
     return (
         config,
         worlds,
+        completion_optima,
         time_optima,
         priority_optima,
     )
