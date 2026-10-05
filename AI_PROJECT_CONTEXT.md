@@ -2036,3 +2036,25 @@ New files/defaults:
     runs/gene_mrta_v118/formal_4r20t_100_fast_v2_seed118
 
 Formal seed base defaults to 117100000 to reuse the V1.17 geometry seed family.
+
+
+## V1.18 four-axis update
+
+Workload balance is no longer a Pareto capability.
+
+Current semantics:
+
+    Completion = hard success gate
+    Pareto = [Time, Path, PriorityService, Deadline]
+
+Reason: with mandatory full completion, time earliness naturally rewards
+parallel execution; a separate balance objective could incorrectly penalize a
+valid asymmetric assignment when one robot is naturally closer/better placed.
+
+The previous 5-axis V1.18 run is frozen as calibration only.
+
+Reuse:
+    runs/gene_mrta_v118/world_formal_4r20t_100_fast_v2.json
+
+Fresh 4-axis run:
+    runs/gene_mrta_v118/formal_4r20t_100_fast_v3_4axis_seed118
