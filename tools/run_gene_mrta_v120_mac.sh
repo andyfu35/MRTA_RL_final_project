@@ -69,32 +69,45 @@ elif [[ "$MODE" == "train-formal" ]]; then
   V120_CHILDREN="${V120_CHILDREN:-32}"
   V120_CANDIDATE_K="${V120_CANDIDATE_K:-32}"
 
-  EXTRA=()
-  if [[ -n "${V120_MAX_VERTICES:-}" ]]; then
-    EXTRA+=(--max-vertices "$V120_MAX_VERTICES")
-  fi
-
   echo "V120_RUN_DIR=$RUN_DIR"
   echo "V120_GENERATIONS=$V120_GENERATIONS"
   echo "V120_POPULATION=$V120_POPULATION"
   echo "V120_CHILDREN=$V120_CHILDREN"
   echo "V120_CANDIDATE_K=$V120_CANDIDATE_K"
 
-  python -m marl2d.gene_mrta_v120.train \
-    --instance-zip "$INSTANCE_ZIP" \
-    --certificate-zip "$CERTIFICATE_ZIP" \
-    --run-dir "$RUN_DIR" \
-    --split evolution \
-    --candidate-k "$V120_CANDIDATE_K" \
-    --generations "$V120_GENERATIONS" \
-    --population "$V120_POPULATION" \
-    --bootstrap-size 32 \
-    --mutation-children "$V120_CHILDREN" \
-    --bank-max-size 64 \
-    --pareto-epsilon 0.0025 \
-    --progress-every 4 \
-    --seed 120 \
-    "${EXTRA[@]}"
+  if [[ -n "${V120_MAX_VERTICES:-}" ]]; then
+    echo "V120_MAX_VERTICES=$V120_MAX_VERTICES"
+    python -m marl2d.gene_mrta_v120.train \
+      --instance-zip "$INSTANCE_ZIP" \
+      --certificate-zip "$CERTIFICATE_ZIP" \
+      --run-dir "$RUN_DIR" \
+      --split evolution \
+      --candidate-k "$V120_CANDIDATE_K" \
+      --generations "$V120_GENERATIONS" \
+      --population "$V120_POPULATION" \
+      --bootstrap-size 32 \
+      --mutation-children "$V120_CHILDREN" \
+      --bank-max-size 64 \
+      --pareto-epsilon 0.0025 \
+      --progress-every 4 \
+      --seed 120 \
+      --max-vertices "$V120_MAX_VERTICES"
+  else
+    python -m marl2d.gene_mrta_v120.train \
+      --instance-zip "$INSTANCE_ZIP" \
+      --certificate-zip "$CERTIFICATE_ZIP" \
+      --run-dir "$RUN_DIR" \
+      --split evolution \
+      --candidate-k "$V120_CANDIDATE_K" \
+      --generations "$V120_GENERATIONS" \
+      --population "$V120_POPULATION" \
+      --bootstrap-size 32 \
+      --mutation-children "$V120_CHILDREN" \
+      --bank-max-size 64 \
+      --pareto-epsilon 0.0025 \
+      --progress-every 4 \
+      --seed 120
+  fi
 
 elif [[ "$MODE" == "evaluate-validation" ]]; then
   if [[ ! -f "$CHECKPOINT" ]]; then
