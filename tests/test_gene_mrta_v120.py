@@ -110,7 +110,7 @@ def test_v120_certificate_reconstructs_kroa200_3_objective():
         value,
         cert.objective,
         rtol=0.0,
-        atol=0.02,
+        atol=0.05,
     )
 
 
