@@ -22,11 +22,11 @@ EPS = 1e-12
 
 # V1.18 capabilities are raw [0, 1] task-quality measurements.
 # Completion is intentionally not an axis: it is a hard success gate.
+# Deadline remains environment metadata only and is not a Pareto capability.
 BASE_AXES = (
     "time_earliness",
     "path_efficiency",
     "priority_service",
-    "deadline_satisfaction",
 )
 
 
@@ -190,13 +190,6 @@ def evaluate_gene(
                         rollout.plan,
                         world,
                         config,
-                    )
-                ),
-                "deadline_satisfaction": float(
-                    np.clip(
-                        evaluation.deadline_satisfaction,
-                        0.0,
-                        1.0,
                     )
                 ),
             }
