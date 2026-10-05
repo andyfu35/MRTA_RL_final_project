@@ -1835,3 +1835,48 @@ Formal reliability:
 
 Formal training remains random-from-scratch. No V1.13/V1.10 Policy parameters
 are loaded.
+
+
+## V1.17 post-Stage-A sequence
+
+The 50-generation Stage-A formal run is complete.
+
+Final best axis scores:
+
+C=0.9440577652
+T=0.9848937196
+E=0.9338499170
+P=0.9422368717
+D=0.9214409722
+Balance=0.9084818733
+
+The run discovered a transient 5-inherited-capability Gene at generation 2,
+but later stable hybrids remained at four inherited capabilities. Time and
+Priority specialists remained distinct.
+
+The next sequence is:
+
+    Fusion-1
+    -> unseen exact worlds
+    -> hard-world mining
+    -> evidence-driven hard-world targeted training
+    -> Fusion-2 final mating
+
+Implemented:
+
+- src/marl2d/gene_mrta_v117/fusion1.py
+- src/marl2d/gene_mrta_v117/unseen_audit.py
+
+Fusion-1 is mating-only. It does not restart ordinary Stage-A mutation.
+
+New launcher modes:
+
+    fusion1
+    status-fusion1
+    oracle-unseen
+    audit-unseen
+
+Default unseen bank is 64 fresh 4R/20T worlds from seed 117200000.
+
+Hard-world targeted axes are intentionally deferred until the unseen trace
+reveals the repeated failure mechanism.
