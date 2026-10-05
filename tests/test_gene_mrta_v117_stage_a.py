@@ -285,8 +285,11 @@ def test_pareto_dominance_uses_all_capability_axes():
 
     tradeoff = dict(a)
     tradeoff[
+        "global_time_optimality"
+    ] = 0.89
+    tradeoff[
         "global_priority_optimality"
-    ] = 0.80
+    ] = 0.95
     assert not dominates(
         a,
         tradeoff,
