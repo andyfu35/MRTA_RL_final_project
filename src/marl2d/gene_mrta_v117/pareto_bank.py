@@ -92,29 +92,6 @@ def pareto_front_ids(
     )
 
 
-def _epsilon_key(
-    scores: Mapping[str, float],
-    *,
-    epsilon: float,
-) -> tuple[int, ...]:
-    if epsilon <= 0.0:
-        raise ValueError(
-            "epsilon must be positive"
-        )
-    vector = score_vector(
-        scores
-    )
-    return tuple(
-        int(
-            np.floor(
-                value / epsilon
-                + 1e-12
-            )
-        )
-        for value in vector
-    )
-
-
 def epsilon_deduplicate_ids(
     records: Mapping[str, Record],
     ids: Sequence[str],
@@ -130,30 +107,45 @@ def epsilon_deduplicate_ids(
             (),
         )
 
-    cell_owner: dict[
-        tuple[int, ...],
-        str,
-    ] = {}
+    kept: list[str] = []
     removed: list[str] = []
 
     for rid in ids:
-        key = _epsilon_key(
-            records[rid].scores,
-            epsilon=epsilon,
+        vector = score_vector(
+            records[rid].scores
         )
-        if key not in cell_owner:
-            cell_owner[key] = rid
-            continue
+        is_near_duplicate = False
 
-        # Same epsilon-cell means the capability vectors are treated as
-        # practically equivalent for storage. Keep the existing owner to
-        # avoid introducing any extra scalar preference between axes.
-        removed.append(rid)
+        for owner_id in kept:
+            owner_vector = score_vector(
+                records[
+                    owner_id
+                ].scores
+            )
+            # Boundary-independent epsilon box:
+            # two capability vectors are storage-equivalent when every
+            # capability differs by at most epsilon. This avoids grid-boundary
+            # artifacts such as 0.900 vs 0.899 landing in different cells.
+            if bool(
+                np.all(
+                    np.abs(
+                        vector
+                        - owner_vector
+                    )
+                    <= epsilon
+                    + 1e-12
+                )
+            ):
+                is_near_duplicate = True
+                break
+
+        if is_near_duplicate:
+            removed.append(rid)
+        else:
+            kept.append(rid)
 
     return (
-        tuple(
-            cell_owner.values()
-        ),
+        tuple(kept),
         tuple(
             sorted(removed)
         ),
