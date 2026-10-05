@@ -2087,3 +2087,54 @@ Reuse:
 
 Fresh three-axis run:
     runs/gene_mrta_v118/formal_4r20t_100_fast_v4_3axis_seed118
+
+
+## V1.19 Public MTRPD benchmark
+
+New primary public-benchmark line.
+
+Goal:
+one shared 148-param Gene must handle variable K and task count and be scored
+against independently published exact optima.
+
+Benchmark structure:
+- 180 original MTRPD instances;
+- 6 TSPLIB families x 10 replicates x {30,40,50} total vertices;
+- 29/39/49 customer tasks plus depot;
+- K varies by instance (original construction uses max(K_ini, ceil(n/5)));
+- route limit L=2*d_max;
+- 179/180 published proven optimal solutions.
+
+Score:
+    OPT / Gene total latency
+Failure/incomplete:
+    0
+
+V1.19 native evaluator reserves return-to-depot feasibility at every append.
+
+One model across all sizes; no scale-specific models.
+
+Default split:
+    evolution 72
+    validation 54
+    protected test 54
+
+Formal Gene Bank axes:
+    opt_retention_v30
+    opt_retention_v40
+    opt_retention_v50
+
+Every mutation child and its parent are evaluated on identical evolution
+instances. paired_events.jsonl records parent->child benchmark deltas and
+instance W/T/L.
+
+Current phase is mutation-only. Do not enable mating until the mutation-only
+bank converges. After convergence, start a separate mating/fusion phase to test
+whether scale specialists can combine into one globally strong Gene.
+
+Launcher:
+    tools/run_gene_mrta_v119_mac.sh
+
+Current data blocker:
+historical public supplement needs to be downloaded/inspected before writing
+the authoritative raw-file importer. Do not invent missing K/OPT/coordinates.
