@@ -697,3 +697,96 @@ the maximum observed exact gap.
 
 The phrase "worst case" must be qualified as "worst observed among the tested
 seeds"; this is not a proof of the theoretical worst possible MRTA instance.
+
+
+## Completed 10-seed 6R/30T exact-unlimited study
+
+Run:
+
+```
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+```
+
+Seeds:
+
+```
+116050000 .. 116050009
+```
+
+All 10 MILP runs ended with proven global optimum.
+
+### Quality summary
+
+```
+mean exact retention       = 0.9694540924627978
+mean exact relative gap    = 0.030545907537202176
+mean exact absolute gap    = 0.006215299617823469
+minimum exact retention    = 0.9152010318146683
+maximum exact relative gap = 0.08479896818533172
+maximum exact absolute gap = 0.017600480877557306
+worst-gap seed             = 116050009
+```
+
+Worst observed seed:
+
+```
+seed        = 116050009
+T_policy    = 0.18995488511570233
+T*          = 0.20755536599325963
+retention   = 0.9152010318146683
+relative gap= 0.08479896818533172
+```
+
+Thus the worst observed Policy error across the 10 tested 6R/30T worlds is
+approximately 8.48%, corresponding to a minimum observed retention of 91.52%.
+
+### Runtime summary
+
+```
+mean Policy time   = 0.007979583600172192 s
+median Policy time = 0.00851533350032696 s
+max Policy time    = 0.011506959002872463 s
+
+mean MILP time     = 453.48357761249974 s
+median MILP time   = 231.51708522899935 s
+max MILP time      = 1734.6120088330026 s
+slowest MILP seed  = 116050002
+```
+
+Maximum exact proof time:
+
+```
+1734.612 s = 28.910 minutes
+```
+
+Mean per-world MILP/Policy method-time ratio:
+
+```
+47884.56x
+```
+
+Five of the ten worlds exceed the previous 300 s practical exact-proof budget.
+
+### Main conclusion
+
+At fixed 6R/30T, MILP runtime varies by roughly three orders of magnitude
+across worlds even though the variable/constraint counts are unchanged.
+
+The frozen 148-parameter Gene remains millisecond-scale and achieves:
+
+- mean exact retention about 96.95%;
+- minimum observed retention 91.52%;
+- maximum observed gap 8.48%;
+- maximum Policy time below 12 ms.
+
+The 8.48% number is the maximum observed exact gap over these 10 seeds, not a
+mathematical worst-case guarantee.
+
+### Objective nuance
+
+At seed 116050005, the Policy completes 13 tasks and the globally T-optimal
+MILP solution completes 12, but the Policy still has a lower T score.
+
+This is expected because the oracle objective is time utility, not raw
+completion count. More completed tasks do not necessarily imply a larger T if
+they finish sufficiently late.
