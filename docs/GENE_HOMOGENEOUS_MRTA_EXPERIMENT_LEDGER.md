@@ -2950,3 +2950,78 @@ A fake MILP ceiling is not introduced for Jain fairness.
 
 A third smoke with the full exact-axis bank is required before starting formal
 Stage-A training.
+
+
+## V1.17 Stage-A smoke #3
+
+Run:
+
+runs/gene_mrta_v117_stage_a/gene_mrta_v117_stage_a_20261005_091017_seed117
+
+Tests:
+
+11 passed.
+
+Exact oracle ceilings on both 2R/10T smoke worlds now include all five linear
+task objectives:
+
+seed 117000000:
+- C* = 0.4
+- T* = 0.2242209550768175
+- E* = 0.33060942664538956
+- P* = 0.45197901256124035
+- D* = 0.4
+
+seed 117000001:
+- C* = 0.4
+- T* = 0.19496278602896533
+- E* = 0.3537811670895189
+- P* = 0.5098102611285834
+- D* = 0.4
+
+Observed Stage-A behavior:
+
+- global_completion_optimality = 1.0;
+- global_deadline_optimality = 1.0;
+- best global_path_efficiency improves to 0.9906102433109147;
+- best global_priority_optimality improves from 0.9100312097338881 to
+  0.9723705458253016;
+- best global_time_optimality remains 0.9905165213414664 in this random run;
+- Time and Priority specialists remain different in every generation.
+
+Important correction to smoke #2 interpretation:
+
+The previous checkpoint/log field named "capabilities" mixed two different
+provenance concepts:
+
+1. current specialist archive membership;
+2. capabilities explicitly inherited by a mating child after the 95% dual
+   inheritance gate.
+
+Therefore origin=mating plus capabilities>1 is not, by itself, sufficient proof
+of mating-based capability inheritance. The prior statement that smoke #2
+"proved true five-capability fusion" is reclassified as suggestive but not yet
+formally proven.
+
+The trainer is now corrected to track separately:
+
+- archive_capabilities;
+- inherited_capabilities;
+- capabilities = union used for active Gene behavior.
+
+Hybrid retention is based only on inherited_capabilities, not generic archive
+overlap.
+
+Generation logs now additionally report:
+
+- max_inherited_capabilities;
+- best_fusion_gene;
+- inherited_capabilities and archive_capabilities separately.
+
+Two new tests ensure:
+
+- archive membership is not mislabeled as mating inheritance;
+- a mating Gene with no inherited capabilities is not retained merely as a
+  fusion candidate.
+
+One additional smoke is required before formal Stage-A freeze.
