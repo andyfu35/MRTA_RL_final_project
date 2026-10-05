@@ -1919,3 +1919,47 @@ Fresh v2 directory:
 runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v2_progressive
 
 Do not begin unseen-map mining until this v2 mating result is reviewed.
+
+
+## V1.17 post-Stage-A Gene Bank = Pareto Archive
+
+Architectural correction after Fusion-1 v1:
+
+The Gene Bank should not be told which capability combinations matter.
+
+Post-Stage-A retention is now based only on the six-dimensional capability
+vector:
+
+    [C/C*, T/T*, E/E*, P/P*, D/D*, Balance]
+
+Admission rule:
+
+- nondominated Gene -> retain;
+- Gene dominated by an existing Bank member -> reject;
+- new Gene dominates old Bank members -> retain new Gene and remove dominated
+  members.
+
+No Time+Priority labels, minimum inherited-capability count, or 95% union gate
+controls Bank membership.
+
+Bank growth control:
+
+- epsilon capability cells, default 0.005;
+- crowding-distance trim, default max 256.
+
+These are diversity/storage mechanisms, not scalar rewards.
+
+Fusion-1 v3 uses the final Stage-A checkpoint as source, rebuilds the Pareto
+front, mates capability-space-distant parents, promotes the screen Pareto front
+to full evaluation, and submits every fully evaluated child to the Pareto Bank.
+
+Fresh run directory:
+
+    runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v3_pareto
+
+Unseen evaluation now uses the Pareto Bank itself. Hard worlds are selected
+where even the best maximin Bank member has a weak capability, with Bank
+frontier coverage as a secondary criterion.
+
+The old inherited_capabilities fields remain only for historical provenance and
+Stage-A checkpoint compatibility.
