@@ -2152,3 +2152,56 @@ Wayback CDX API and saves provenance metadata in _WAYBACK_RECOVERY.json.
 Do not recreate the 180 published instances by drawing new random TSPLIB
 subsets: their published optima are tied to the exact original
 subset/depot/K/route-limit instances.
+
+
+## V1.20 Public MinMax-mTSP primary
+
+V1.19 MTRPD is not used formally because the exact historical public raw data
+could not be recovered. V1.20 pivots to a currently accessible benchmark and
+mirrors its raw files into the repo.
+
+Source:
+pengfeihe-angers/mils
+He, Hao, Xia, Computers & Operations Research 185:107255 (2026),
+DOI 10.1016/j.cor.2025.107255.
+
+Mirrored files:
+    benchmarks/minmax_mtsp_mils/instances.zip
+    benchmarks/minmax_mtsp_mils/Certification.zip
+    benchmarks/minmax_mtsp_mils/SOURCE_README.md
+    benchmarks/minmax_mtsp_mils/PROVENANCE.md
+
+Verified structure:
+- 77 instances;
+- 51..5915 vertices;
+- m in {3,5,10,20,30};
+- set S = 41;
+- set L = 36;
+- 72 certificates;
+- 22 known exact-optimum instances;
+- other references are BKS.
+
+Five reference values without certificate are sourced from paper Table A.1:
+    mtsp51_3=159.57
+    mtsp51_5=118.13
+    mtsp51_10=112.07
+    mtsp150_30=5246.49
+    gtsp150_30=1554.64
+
+Distance validation against certificates:
+    mtsp100_3 public objective 8509.16
+    reconstructed EUC raw = 8509.162483...
+    kroa200_3 public objective 10691
+    reconstructed EUC raw = 10691.0260...
+    att532_3 public objective 9926
+    reconstructed ATT = 9926
+
+One shared 148-param Gene is used across variable robot/task counts.
+V1.20 uses cKDTree nearest-candidate decoding for large instances while
+preserving the 148-scalar parameter layout and normalizing decoder step by the
+full task count.
+
+Primary phase is mutation-only. Every child and parent run the identical
+evolution instance set and paired_events.jsonl records reference-retention
+deltas. Set L is protected and must not affect training. Mating/fusion starts
+only after mutation-only convergence.
