@@ -22,7 +22,7 @@ EPS = 1e-12
 # Stage A contains only objectives/requirements that are known before any
 # hard-world analysis. Stage B is intentionally not defined here.
 BASE_AXES = (
-    "completion",
+    "global_completion_optimality",
     "global_time_optimality",
     "path_efficiency",
     "global_priority_optimality",
@@ -53,9 +53,14 @@ def _retention(
 def base_scores_for_evaluation(
     evaluation: Evaluation,
     *,
+    completion_optimum: float,
     time_optimum: float,
     priority_optimum: float,
 ) -> dict[str, float]:
+    completion_retention = _retention(
+        evaluation.completion,
+        completion_optimum,
+    )
     time_retention = _retention(
         evaluation.time_optimality,
         time_optimum,
@@ -65,13 +70,24 @@ def base_scores_for_evaluation(
         priority_optimum,
     )
 
+    raw_fairness = (
+        evaluation.balance
+        / evaluation.completion
+        if evaluation.completion > EPS
+        else 0.0
+    )
+    normalized_balance = float(
+        np.clip(
+            completion_retention
+            * raw_fairness,
+            0.0,
+            1.0,
+        )
+    )
+
     return {
-        "completion": float(
-            np.clip(
-                evaluation.completion,
-                0.0,
-                1.0,
-            )
+        "global_completion_optimality": (
+            completion_retention
         ),
         "global_time_optimality": (
             time_retention
@@ -93,12 +109,8 @@ def base_scores_for_evaluation(
                 1.0,
             )
         ),
-        "workload_balance": float(
-            np.clip(
-                evaluation.balance,
-                0.0,
-                1.0,
-            )
+        "workload_balance": (
+            normalized_balance
         ),
     }
 
@@ -106,11 +118,13 @@ def base_scores_for_evaluation(
 def aggregate_base_scores(
     evaluations: Sequence[Evaluation],
     *,
+    completion_optima: Sequence[float],
     time_optima: Sequence[float],
     priority_optima: Sequence[float],
 ) -> dict[str, float]:
     if (
-        len(evaluations) != len(time_optima)
+        len(evaluations) != len(completion_optima)
+        or len(evaluations) != len(time_optima)
         or len(evaluations) != len(priority_optima)
     ):
         raise ValueError(
@@ -124,11 +138,20 @@ def aggregate_base_scores(
     rows = [
         base_scores_for_evaluation(
             evaluation,
+            completion_optimum=float(
+                completion_star
+            ),
             time_optimum=float(time_star),
             priority_optimum=float(priority_star),
         )
-        for evaluation, time_star, priority_star in zip(
+        for (
+            evaluation,
+            completion_star,
+            time_star,
+            priority_star,
+        ) in zip(
             evaluations,
+            completion_optima,
             time_optima,
             priority_optima,
             strict=True,
@@ -152,6 +175,7 @@ def evaluate_gene_base_axes(
     worlds: Sequence[World],
     config: EnvConfig,
     *,
+    completion_optima: Sequence[float],
     time_optima: Sequence[float],
     priority_optima: Sequence[float],
 ) -> dict[str, float]:
@@ -165,6 +189,7 @@ def evaluate_gene_base_axes(
     ]
     return aggregate_base_scores(
         evaluations,
+        completion_optima=completion_optima,
         time_optima=time_optima,
         priority_optima=priority_optima,
     )
