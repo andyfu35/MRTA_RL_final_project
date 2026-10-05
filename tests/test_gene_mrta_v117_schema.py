@@ -95,14 +95,15 @@ def test_stage_a_axes_cover_known_objectives_without_battery_loophole():
 
     scores = base_scores_for_evaluation(
         evaluation,
+        completion_optimum=0.8,
         time_optimum=0.25,
         priority_optimum=0.875,
     )
 
     assert tuple(scores) == BASE_AXES
     assert np.isclose(
-        scores["completion"],
-        0.8,
+        scores["global_completion_optimality"],
+        1.0,
     )
     assert np.isclose(
         scores["global_time_optimality"],
@@ -122,7 +123,7 @@ def test_stage_a_axes_cover_known_objectives_without_battery_loophole():
     )
     assert np.isclose(
         scores["workload_balance"],
-        0.75,
+        0.9375,
     )
     assert "battery_remaining" not in scores
     assert "energy_consumed" not in scores
@@ -156,10 +157,15 @@ def test_global_capability_one_means_axis_optimum():
 
     scores = base_scores_for_evaluation(
         evaluation,
+        completion_optimum=1.0,
         time_optimum=0.3,
         priority_optimum=0.9,
     )
 
+    assert np.isclose(
+        scores["global_completion_optimality"],
+        1.0,
+    )
     assert np.isclose(
         scores["global_time_optimality"],
         1.0,
