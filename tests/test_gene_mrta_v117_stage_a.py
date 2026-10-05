@@ -3,6 +3,7 @@ import numpy as np
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
 from marl2d.gene_mrta_v117.stage_a_train import (
+    CLEAN_MATING_OPERATORS,
     Record,
     _quality,
     _rebuild_active,
@@ -110,3 +111,16 @@ def test_parent_quality_uses_weakest_declared_capability():
         _quality(record, best),
         0.8,
     )
+
+
+def test_clean_stage_a_mating_uses_no_ancestor_delta_operators():
+    assert set(
+        CLEAN_MATING_OPERATORS
+    ) == {
+        "parameter_blend",
+        "block_pick",
+        "block_blend",
+    }
+    assert "ancestor_delta" not in CLEAN_MATING_OPERATORS
+    assert "ties_delta" not in CLEAN_MATING_OPERATORS
+    assert "dare_delta" not in CLEAN_MATING_OPERATORS
