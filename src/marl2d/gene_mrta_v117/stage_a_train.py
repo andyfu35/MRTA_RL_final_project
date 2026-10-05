@@ -26,9 +26,9 @@ class Record:
     scores: dict[str, float]
     capabilities: tuple[str, ...]
     origin: str
+    generation: int
     archive_capabilities: tuple[str, ...] = ()
     inherited_capabilities: tuple[str, ...] = ()
-    generation: int
     parents: tuple[str, ...] = ()
     operator: str | None = None
 
