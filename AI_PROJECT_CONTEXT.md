@@ -1390,3 +1390,87 @@ Command:
 
 Do not call the resulting maximum a theoretical upper bound. It is the maximum
 observed exact gap over the tested seed set.
+
+
+## V1.16 6R/30T 10-seed exact-unlimited result
+
+Status:
+
+COMPLETED.
+
+Run:
+
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+
+Seeds:
+
+116050000 through 116050009.
+
+Tests before run:
+
+10 passed.
+
+All 10 worlds reached proven global optimality.
+
+Aggregate:
+
+- exact proof rate = 10/10 = 100%;
+- mean exact retention = 0.9694540924627978;
+- mean exact relative gap = 0.030545907537202176;
+- mean exact absolute gap = 0.006215299617823469;
+- minimum exact retention = 0.9152010318146683;
+- maximum observed exact relative gap = 0.08479896818533172;
+- maximum observed exact absolute gap = 0.017600480877557306;
+- worst exact-gap seed = 116050009.
+
+Worst observed quality world:
+
+seed 116050009:
+- T_policy = 0.18995488511570233;
+- T* = 0.20755536599325963;
+- exact retention = 0.9152010318146683;
+- relative gap = 0.08479896818533172;
+- Policy completed tasks = 11;
+- MILP completed tasks = 13.
+
+Runtime aggregate:
+
+- mean Policy = 0.007979583600172192 s;
+- median Policy = 0.00851533350032696 s;
+- max Policy = 0.011506959002872463 s;
+- mean MILP total = 453.48357761249974 s;
+- median MILP total = 231.51708522899935 s;
+- max MILP total = 1734.6120088330026 s;
+- slowest MILP seed = 116050002;
+- mean MILP / Policy ratio = 47884.560790352734x.
+
+The slowest exact proof is about 28.91 minutes.
+
+Five of ten exact MILP worlds require more than the original 300 s practical
+budget, while the Policy remains below 12 ms for every tested seed.
+
+Distribution summary:
+
+- 10/10 retention >= 90%;
+- 9/10 retention >= 95%;
+- 5/10 retention >= 98%;
+- 2/10 retention >= 99%;
+- 9/10 exact relative gap <= 5%.
+
+Important interpretation:
+
+At fixed 6R/30T, MILP hardness varies extremely across worlds.
+Observed exact proof time ranges from about 2.48 s to 1734.61 s despite identical
+R/T dimensions and the same formulation size.
+
+The frozen 148-parameter Policy remains consistently millisecond-scale and has
+mean exact retention about 96.95%, with worst observed retention 91.52% over
+these 10 seeds.
+
+The maximum observed 8.48% gap is empirical over these seeds, not a theoretical
+worst-case bound over all possible worlds.
+
+A notable objective effect occurs at seed 116050005: Policy completes 13 tasks
+while the exact T-optimal MILP completes 12, yet Policy T is lower. This is
+consistent with the benchmark objective optimizing completion time utility T,
+not raw task count.
