@@ -2205,3 +2205,44 @@ Primary phase is mutation-only. Every child and parent run the identical
 evolution instance set and paired_events.jsonl records reference-retention
 deltas. Set L is protected and must not affect training. Mating/fusion starts
 only after mutation-only convergence.
+
+
+## V1.21 PRIMARY SEGB scheduler
+
+Correct formal training semantics are now fixed as:
+
+    worlds_per_round = 1000
+    fixed_evolution_instances = 34
+    rounds = 50
+
+Each logical world is one candidate 148-parameter Gene. Every Gene in every
+round must run the exact same 34 evolution benchmark instances.
+
+Round 0:
+    1000 random Genes -> all 34 fixed instances each -> external capability
+    axes -> Gene Bank.
+
+Round 1..49:
+    freeze previous Bank;
+    sample 1000 parents from that frozen Bank with equal-axis total-score^2
+    probability;
+    inherit + mutate to form 1000 children;
+    each child runs all 34 fixed instances;
+    only after all 1000 worlds finish may the Bank be rebuilt.
+
+Bank admission:
+    completion hard gate + external Pareto axes retention_small /
+    retention_medium.
+Parent-child delta:
+    diagnostic only, never the admission gate.
+
+Primary learning curve:
+    Round -> population mean capability axes over all 1000 worlds.
+Also retain median/min/max/std, per-round mean deltas, Bank specialists, global
+best, and parent-child diagnostics.
+
+Formal rollout count:
+    1000 * 34 * 50 = 1,700,000.
+
+The previous V1.20 32-child trainer is retained only as a conventional
+small-population baseline and must not be called the primary SEGB experiment.
