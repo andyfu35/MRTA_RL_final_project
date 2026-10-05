@@ -7,6 +7,7 @@ from marl2d.gene_mrta_v117.stage_a_train import (
     Record,
     _quality,
     _rebuild_active,
+    _record_from_dict,
 )
 
 
@@ -206,3 +207,54 @@ def test_non_inherited_mating_gene_is_not_kept_as_fusion():
     )
 
     assert "weak" not in active
+
+
+def test_record_round_trip_preserves_capability_provenance():
+    scores = {
+        axis: 0.97
+        for axis in BASE_AXES
+    }
+    record = _record(
+        "roundtrip",
+        scores,
+    )
+    record.origin = "mating"
+    record.archive_capabilities = (
+        "global_time_optimality",
+    )
+    record.inherited_capabilities = (
+        "global_priority_optimality",
+        "global_time_optimality",
+    )
+    record.capabilities = (
+        "global_priority_optimality",
+        "global_time_optimality",
+    )
+    record.parents = (
+        "parent_a",
+        "parent_b",
+    )
+    record.operator = "block_pick"
+
+    restored = _record_from_dict(
+        record.to_dict()
+    )
+
+    assert restored.record_id == record.record_id
+    assert restored.origin == "mating"
+    assert restored.archive_capabilities == (
+        "global_time_optimality",
+    )
+    assert restored.inherited_capabilities == (
+        "global_priority_optimality",
+        "global_time_optimality",
+    )
+    assert restored.parents == (
+        "parent_a",
+        "parent_b",
+    )
+    assert restored.operator == "block_pick"
+    assert np.allclose(
+        restored.gene.vector_data,
+        record.gene.vector_data,
+    )
