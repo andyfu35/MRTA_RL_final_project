@@ -3571,3 +3571,48 @@ New formal run directory:
     runs/gene_mrta_v118/formal_4r20t_100_fast_v3_4axis_seed118
 
 The existing constructive 100-world bank is reused unchanged.
+
+
+## V1.18-fast three-axis Primary revision
+
+Deadline satisfaction is removed from formal Pareto survival.
+
+Primary V1.18 semantics are now:
+
+    hard gate:
+        completion == 1 on every training world
+
+    Pareto axes:
+        time_earliness
+        path_efficiency
+        priority_service
+
+Rationale:
+
+- Time rewards early completion and useful parallel execution.
+- Path rewards spatially efficient assignment / shorter obstacle-aware travel.
+- Priority rewards serving higher-priority tasks earlier.
+- Deadline is not required by the current Primary MRTA problem and therefore
+  should not create an additional synthetic trade-off axis.
+
+Task deadlines remain present in the environment/world data for compatibility
+with the existing 12D observation architecture and for future deadline-specific
+MRTA variants, but deadline satisfaction does not affect:
+
+- Pareto dominance;
+- epsilon deduplication;
+- crowding;
+- maximin;
+- parent survival;
+- Gene Bank membership.
+
+The prior 4-axis run is frozen as calibration evidence and is not resumed under
+the three-axis semantics.
+
+Existing 100-world constructive bank is reused unchanged:
+
+    runs/gene_mrta_v118/world_formal_4r20t_100_fast_v2.json
+
+Fresh three-axis formal run:
+
+    runs/gene_mrta_v118/formal_4r20t_100_fast_v4_3axis_seed118
