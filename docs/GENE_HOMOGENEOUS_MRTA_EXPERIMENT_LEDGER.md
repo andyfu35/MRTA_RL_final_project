@@ -3535,3 +3535,39 @@ Launcher:
     bash tools/run_gene_mrta_v118_mac.sh train-formal
 
 The old exact formal-bank file is not reused by the fast protocol.
+
+
+## V1.18-fast four-axis Pareto revision
+
+Workload balance was removed from formal Pareto survival.
+
+Rationale: in the current homogeneous MRTA problem, all tasks must first be
+completed, and task completion earliness already rewards useful parallelism.
+A deliberately uneven allocation may be optimal when robots have asymmetric
+travel distances to tasks. Therefore Jain workload fairness is not treated as
+a required capability unless a future problem statement explicitly requires
+fairness.
+
+Formal validity and capabilities are now:
+
+    hard gate:
+        completion == 1 on every training world
+
+    Pareto axes:
+        time_earliness
+        path_efficiency
+        priority_service
+        deadline_satisfaction
+
+The underlying evaluator may still compute workload/balance diagnostics, but
+they do not affect Pareto dominance, epsilon deduplication, crowding, maximin,
+parent survival, or Gene Bank membership.
+
+The previous five-axis Gen0 run is retained as calibration evidence and is not
+resumed under the new semantics.
+
+New formal run directory:
+
+    runs/gene_mrta_v118/formal_4r20t_100_fast_v3_4axis_seed118
+
+The existing constructive 100-world bank is reused unchanged.
