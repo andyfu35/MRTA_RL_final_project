@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,86 @@ from marl2d.gene_mrta_v117.oracle import (
 
 
 BANK_VERSION = "v117_stage_a_oracle_bank_v3_all_exact_base_axes"
+
+
+def _write_bank_payload(
+    path: Path,
+    payload: dict[str, Any],
+) -> None:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    temp = path.with_suffix(
+        path.suffix + ".tmp"
+    )
+    with temp.open(
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(
+            payload,
+            handle,
+            indent=2,
+            ensure_ascii=False,
+        )
+        handle.flush()
+        os.fsync(
+            handle.fileno()
+        )
+    temp.replace(path)
+
+
+def _load_resume_rows(
+    path: Path,
+    *,
+    robots: int,
+    tasks: int,
+    seed_base: int,
+) -> dict[int, dict[str, Any]]:
+    if not path.exists():
+        return {}
+
+    data = json.loads(
+        path.read_text(
+            encoding="utf-8",
+        )
+    )
+    if data.get("version") != BANK_VERSION:
+        raise ValueError(
+            "Existing oracle bank has incompatible version"
+        )
+    if (
+        int(data.get("robots", -1)) != robots
+        or int(data.get("tasks", -1)) != tasks
+        or int(data.get("seed_base", -1)) != seed_base
+    ):
+        raise ValueError(
+            "Existing oracle bank does not match requested formal protocol"
+        )
+
+    required = {
+        "completion_optimum",
+        "time_optimum",
+        "path_efficiency_optimum",
+        "priority_optimum",
+        "deadline_optimum",
+    }
+    rows: dict[
+        int,
+        dict[str, Any],
+    ] = {}
+    for row in data.get(
+        "rows",
+        [],
+    ):
+        if required.issubset(
+            row
+        ):
+            rows[
+                int(row["seed"])
+            ] = row
+    return rows
 
 
 def build_stage_a_oracle_bank(
@@ -40,9 +121,26 @@ def build_stage_a_oracle_bank(
         preserve_spatial_density=True,
     )
 
-    rows: list[dict[str, Any]] = []
+    resume_rows = _load_resume_rows(
+        output_path,
+        robots=robots,
+        tasks=tasks,
+        seed_base=seed_base,
+    )
+    rows_by_seed: dict[
+        int,
+        dict[str, Any],
+    ] = dict(resume_rows)
+
     for world_index in range(world_count):
         seed = int(seed_base + world_index)
+        if seed in rows_by_seed:
+            print(
+                f"V117_ORACLE_RESUME world={world_index + 1}/{world_count} "
+                f"seed={seed} status=skip_completed",
+                flush=True,
+            )
+            continue
         print(
             f"V117_ORACLE world={world_index + 1}/{world_count} "
             f"seed={seed} case={robots}R/{tasks}T",
@@ -168,11 +266,53 @@ def build_stage_a_oracle_bank(
                 priority_oracle.solve_seconds
             ),
         }
-        rows.append(row)
+        rows_by_seed[seed] = row
+        ordered_rows = [
+            rows_by_seed[
+                seed_base + index
+            ]
+            for index in range(
+                world_count
+            )
+            if (
+                seed_base + index
+                in rows_by_seed
+            )
+        ]
+        progress_payload = {
+            "version": BANK_VERSION,
+            "robots": int(robots),
+            "tasks": int(tasks),
+            "world_count": int(world_count),
+            "seed_base": int(seed_base),
+            "config": asdict(config),
+            "rows": ordered_rows,
+        }
+        _write_bank_payload(
+            output_path,
+            progress_payload,
+        )
         print(
             "V117_ORACLE_RESULT "
             + json.dumps(row),
             flush=True,
+        )
+
+    rows = [
+        rows_by_seed[
+            seed_base + index
+        ]
+        for index in range(
+            world_count
+        )
+        if (
+            seed_base + index
+            in rows_by_seed
+        )
+    ]
+    if len(rows) != world_count:
+        raise RuntimeError(
+            "Oracle bank incomplete after build"
         )
 
     payload = {
@@ -185,17 +325,9 @@ def build_stage_a_oracle_bank(
         "rows": rows,
     }
 
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-    output_path.write_text(
-        json.dumps(
-            payload,
-            indent=2,
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
+    _write_bank_payload(
+        output_path,
+        payload,
     )
     print(
         f"V117_ORACLE_BANK={output_path}",
