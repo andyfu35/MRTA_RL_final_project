@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 
+from marl2d.gene_mrta_v110.recombination import hidden_block_indices
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
 from marl2d.gene_mrta_v117.stage_a_oracle_bank import load_stage_a_oracle_bank
@@ -17,7 +18,6 @@ from marl2d.gene_mrta_v117.stage_a_train import (
     Record,
     _archives,
     _best,
-    _clean_offspring_family,
     _evaluate,
     _gene_id,
     _record_from_dict,
@@ -27,7 +27,254 @@ from marl2d.gene_mrta_v117.stage_a_train import (
 )
 
 
-FUSION1_VERSION = "v117_fusion1_checkpoint_v1"
+FUSION1_VERSION = "v117_fusion1_checkpoint_v2_progressive"
+
+
+PROGRESSIVE_OPERATORS = (
+    "sparse_block_graft",
+    "sparse_block_blend",
+    "near_parent_blend",
+)
+
+
+def _progressive_offspring_family(
+    parent_a: RouteTailDirectGene,
+    parent_b: RouteTailDirectGene,
+    rng: np.random.Generator,
+    *,
+    children: int,
+    mutation_sigma: float,
+    mutation_rate: float,
+) -> list[tuple[RouteTailDirectGene, str]]:
+    if children <= 0:
+        raise ValueError(
+            "children must be positive"
+        )
+    if (
+        parent_a.hidden_dim
+        != parent_b.hidden_dim
+    ):
+        raise ValueError(
+            "Parent hidden dimensions must match"
+        )
+
+    blocks, globals_ = hidden_block_indices(
+        parent_a.hidden_dim
+    )
+    result: list[
+        tuple[
+            RouteTailDirectGene,
+            str,
+        ]
+    ] = []
+
+    for child_index in range(
+        children
+    ):
+        recipient_is_a = (
+            child_index % 2 == 0
+        )
+        recipient = (
+            parent_a
+            if recipient_is_a
+            else parent_b
+        )
+        donor = (
+            parent_b
+            if recipient_is_a
+            else parent_a
+        )
+        direction = (
+            "A<-B"
+            if recipient_is_a
+            else "B<-A"
+        )
+
+        operator = PROGRESSIVE_OPERATORS[
+            child_index
+            % len(
+                PROGRESSIVE_OPERATORS
+            )
+        ]
+
+        recipient_vec = (
+            recipient.vector_data
+        )
+        donor_vec = donor.vector_data
+        child = recipient_vec.copy()
+
+        if operator in {
+            "sparse_block_graft",
+            "sparse_block_blend",
+        }:
+            graft_count = (
+                1
+                if rng.random() < 0.75
+                else 2
+            )
+            chosen = rng.choice(
+                len(blocks),
+                size=min(
+                    graft_count,
+                    len(blocks),
+                ),
+                replace=False,
+            )
+            for block_index in chosen:
+                ids = blocks[
+                    int(block_index)
+                ]
+                if (
+                    operator
+                    == "sparse_block_graft"
+                ):
+                    child[ids] = (
+                        donor_vec[ids]
+                    )
+                else:
+                    donor_weight = float(
+                        rng.uniform(
+                            0.15,
+                            0.40,
+                        )
+                    )
+                    child[ids] = (
+                        (
+                            1.0
+                            - donor_weight
+                        )
+                        * recipient_vec[ids]
+                        + donor_weight
+                        * donor_vec[ids]
+                    )
+
+            if rng.random() < 0.20:
+                if (
+                    operator
+                    == "sparse_block_graft"
+                ):
+                    child[globals_] = (
+                        donor_vec[
+                            globals_
+                        ]
+                    )
+                else:
+                    donor_weight = float(
+                        rng.uniform(
+                            0.10,
+                            0.30,
+                        )
+                    )
+                    child[globals_] = (
+                        (
+                            1.0
+                            - donor_weight
+                        )
+                        * recipient_vec[
+                            globals_
+                        ]
+                        + donor_weight
+                        * donor_vec[
+                            globals_
+                        ]
+                    )
+
+        elif (
+            operator
+            == "near_parent_blend"
+        ):
+            donor_weight = float(
+                rng.uniform(
+                    0.05,
+                    0.20,
+                )
+            )
+            child = (
+                (
+                    1.0
+                    - donor_weight
+                )
+                * recipient_vec
+                + donor_weight
+                * donor_vec
+            )
+
+        else:
+            raise AssertionError(
+                operator
+            )
+
+        gene = RouteTailDirectGene(
+            np.asarray(
+                child,
+                dtype=np.float64,
+            ),
+            hidden_dim=(
+                recipient.hidden_dim
+            ),
+        )
+        if mutation_sigma > 0.0:
+            gene = RouteTailDirectGene.from_v18(
+                gene.mutated(
+                    rng,
+                    sigma=(
+                        mutation_sigma
+                    ),
+                    mutation_rate=(
+                        mutation_rate
+                    ),
+                )
+            )
+
+        result.append(
+            (
+                gene,
+                (
+                    f"{operator}:"
+                    f"{direction}"
+                ),
+            )
+        )
+
+    return result
+
+
+def _passed_axes(
+    child_score: dict[str, float],
+    union: tuple[str, ...],
+    parent_a: dict[str, float],
+    parent_b: dict[str, float],
+    ceiling: dict[str, float] | None,
+    *,
+    threshold: float,
+) -> tuple[str, ...]:
+    passed: list[str] = []
+    for axis in union:
+        parent_floor = max(
+            parent_a[axis],
+            parent_b[axis],
+            EPS,
+        )
+        if (
+            child_score[axis]
+            / parent_floor
+            < threshold
+        ):
+            continue
+        if ceiling is not None:
+            if (
+                child_score[axis]
+                / max(
+                    ceiling[axis],
+                    EPS,
+                )
+                < threshold
+            ):
+                continue
+        passed.append(axis)
+    return tuple(
+        sorted(passed)
+    )
 
 
 def _atomic_write(
@@ -461,10 +708,9 @@ def run(args: argparse.Namespace) -> Path:
         ] = []
 
         for a, b, union in pairs:
-            family = _clean_offspring_family(
+            family = _progressive_offspring_family(
                 records[a].gene,
                 records[b].gene,
-                zero_anchor,
                 rng,
                 children=(
                     args.children_per_pair
@@ -534,7 +780,20 @@ def run(args: argparse.Namespace) -> Path:
             ),
             key=lambda idx: (
                 len(
-                    child_unions[idx]
+                    _passed_axes(
+                        child_screen[idx],
+                        child_unions[idx],
+                        parent_screen[
+                            child_pairs[idx][0]
+                        ],
+                        parent_screen[
+                            child_pairs[idx][1]
+                        ],
+                        None,
+                        threshold=(
+                            args.screen_threshold
+                        ),
+                    )
                 ),
                 _inheritance_ratio(
                     child_screen[idx],
@@ -572,7 +831,9 @@ def run(args: argparse.Namespace) -> Path:
         )
 
         accepted = 0
+        full_union_accepted = 0
         accepted_sizes: list[int] = []
+        accepted_time_priority = 0
         for local_idx, (
             gene,
             score,
@@ -593,34 +854,20 @@ def run(args: argparse.Namespace) -> Path:
                 source_idx
             ]
 
-            passed = bool(
-                union
+            inherited = _passed_axes(
+                score,
+                union,
+                records[a].scores,
+                records[b].scores,
+                best_before,
+                threshold=(
+                    args.threshold
+                ),
             )
-            for axis in union:
-                parent_floor = max(
-                    records[a].scores[
-                        axis
-                    ],
-                    records[b].scores[
-                        axis
-                    ],
-                )
-                if (
-                    score[axis]
-                    / max(
-                        parent_floor,
-                        EPS,
-                    )
-                    < args.threshold
-                    or score[axis]
-                    / max(
-                        best_before[axis],
-                        EPS,
-                    )
-                    < args.threshold
-                ):
-                    passed = False
-                    break
+            passed = (
+                len(inherited)
+                >= args.min_inherited
+            )
 
             rid = _gene_id(
                 gene
@@ -633,12 +880,12 @@ def run(args: argparse.Namespace) -> Path:
                 gene=gene,
                 scores=score,
                 capabilities=(
-                    union
+                    inherited
                     if passed
                     else ()
                 ),
                 inherited_capabilities=(
-                    union
+                    inherited
                     if passed
                     else ()
                 ),
@@ -657,8 +904,20 @@ def run(args: argparse.Namespace) -> Path:
             if passed:
                 accepted += 1
                 accepted_sizes.append(
-                    len(union)
+                    len(inherited)
                 )
+                if (
+                    len(inherited)
+                    == len(union)
+                ):
+                    full_union_accepted += 1
+                if (
+                    "global_time_optimality"
+                    in inherited
+                    and "global_priority_optimality"
+                    in inherited
+                ):
+                    accepted_time_priority += 1
 
         records, archives = _rebuild_active(
             records,
@@ -703,11 +962,17 @@ def run(args: argparse.Namespace) -> Path:
             "children_full_evaluated": (
                 len(full_genes)
             ),
-            "accepted_full_union_children": (
+            "accepted_progressive_children": (
                 accepted
             ),
-            "accepted_union_sizes": (
+            "accepted_full_union_children": (
+                full_union_accepted
+            ),
+            "accepted_inherited_sizes": (
                 accepted_sizes
+            ),
+            "accepted_time_priority_children": (
+                accepted_time_priority
             ),
             "max_inherited_capabilities": (
                 max_inherited
@@ -850,6 +1115,16 @@ def parser() -> argparse.ArgumentParser:
         "--threshold",
         type=float,
         default=0.95,
+    )
+    p.add_argument(
+        "--screen-threshold",
+        type=float,
+        default=0.90,
+    )
+    p.add_argument(
+        "--min-inherited",
+        type=int,
+        default=2,
     )
     p.add_argument(
         "--post-mating-sigma",
