@@ -14,7 +14,8 @@ pip install -r requirements_gene_mrta_v1.txt
 export PYTHONPATH="$PWD/src"
 
 pytest -q \
-  tests/test_gene_mrta_v117_schema.py
+  tests/test_gene_mrta_v117_schema.py \
+  tests/test_gene_mrta_v117_oracle.py
 
 if [[ "$MODE" == "tests" ]]; then
   exit 0
