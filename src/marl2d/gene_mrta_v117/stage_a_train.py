@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,171 @@ class Record:
             "parents": list(self.parents),
             "operator": self.operator,
         }
+
+
+CHECKPOINT_VERSION = (
+    "v117_stage_a_checkpoint_v5_resumable"
+)
+
+
+def _record_from_dict(
+    data: dict[str, Any],
+) -> Record:
+    gene_data = data["gene"]
+    gene = RouteTailDirectGene(
+        np.asarray(
+            gene_data["parameters"],
+            dtype=np.float64,
+        ),
+        hidden_dim=int(
+            gene_data["hidden_dim"]
+        ),
+    )
+    return Record(
+        record_id=str(
+            data["record_id"]
+        ),
+        gene=gene,
+        scores={
+            str(k): float(v)
+            for k, v in data[
+                "scores"
+            ].items()
+        },
+        capabilities=tuple(
+            str(value)
+            for value in data.get(
+                "capabilities",
+                [],
+            )
+        ),
+        origin=str(
+            data["origin"]
+        ),
+        generation=int(
+            data["generation"]
+        ),
+        archive_capabilities=tuple(
+            str(value)
+            for value in data.get(
+                "archive_capabilities",
+                [],
+            )
+        ),
+        inherited_capabilities=tuple(
+            str(value)
+            for value in data.get(
+                "inherited_capabilities",
+                [],
+            )
+        ),
+        parents=tuple(
+            str(value)
+            for value in data.get(
+                "parents",
+                [],
+            )
+        ),
+        operator=(
+            None
+            if data.get(
+                "operator"
+            ) is None
+            else str(
+                data["operator"]
+            )
+        ),
+    )
+
+
+def _write_checkpoint(
+    path: Path,
+    payload: dict[str, Any],
+) -> None:
+    temp = path.with_suffix(
+        path.suffix + ".tmp"
+    )
+    with temp.open(
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(
+            payload,
+            handle,
+            indent=2,
+            ensure_ascii=False,
+        )
+        handle.flush()
+        os.fsync(
+            handle.fileno()
+        )
+    temp.replace(path)
+
+
+def _training_signature(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    return {
+        "oracle_bank": str(
+            Path(
+                args.oracle_bank
+            )
+        ),
+        "population": int(
+            args.population
+        ),
+        "archive_size": int(
+            args.archive_size
+        ),
+        "hybrid_limit": int(
+            args.hybrid_limit
+        ),
+        "normal_children": int(
+            args.normal_children
+        ),
+        "normal_full_per_axis": int(
+            args.normal_full_per_axis
+        ),
+        "mating_pairs": int(
+            args.mating_pairs
+        ),
+        "children_per_pair": int(
+            args.children_per_pair
+        ),
+        "mating_full_limit": int(
+            args.mating_full_limit
+        ),
+        "screen_worlds": int(
+            args.screen_worlds
+        ),
+        "initial_scale": float(
+            args.initial_scale
+        ),
+        "mutation_sigma": float(
+            args.mutation_sigma
+        ),
+        "mutation_rate": float(
+            args.mutation_rate
+        ),
+        "post_mating_sigma": float(
+            args.post_mating_sigma
+        ),
+        "post_mating_rate": float(
+            args.post_mating_rate
+        ),
+        "mating_power": float(
+            args.mating_power
+        ),
+        "uniform_fraction": float(
+            args.uniform_fraction
+        ),
+        "certification_threshold": float(
+            args.certification_threshold
+        ),
+        "seed": int(
+            args.seed
+        ),
+    }
 
 
 def _gene_id(gene: RouteTailDirectGene) -> str:
@@ -433,69 +599,175 @@ def run(args: argparse.Namespace) -> Path:
         Path(args.oracle_bank)
     )
 
-    rng = np.random.default_rng(
-        args.seed
-    )
-    run_dir = (
-        Path(args.output_dir)
-        / (
-            "gene_mrta_v117_stage_a_"
-            + datetime.now().strftime(
-                "%Y%m%d_%H%M%S"
+    if args.run_dir is not None:
+        run_dir = Path(
+            args.run_dir
+        )
+    else:
+        run_dir = (
+            Path(args.output_dir)
+            / (
+                "gene_mrta_v117_stage_a_"
+                + datetime.now().strftime(
+                    "%Y%m%d_%H%M%S"
+                )
+                + f"_seed{args.seed}"
             )
-            + f"_seed{args.seed}"
-        )
-    )
-    run_dir.mkdir(
-        parents=True,
-        exist_ok=False,
-    )
-
-    initial_genes = [
-        RouteTailDirectGene.random(
-            rng,
-            hidden_dim=8,
-            scale=args.initial_scale,
-        )
-        for _ in range(
-            args.population
-        )
-    ]
-    initial_scores = _evaluate(
-        initial_genes,
-        worlds,
-        config,
-        completion_optima,
-        time_optima,
-        path_efficiency_optima,
-        priority_optima,
-        deadline_optima,
-    )
-
-    records: dict[str, Record] = {}
-    for gene, scores in zip(
-        initial_genes,
-        initial_scores,
-        strict=True,
-    ):
-        rid = _gene_id(gene)
-        records[rid] = Record(
-            record_id=rid,
-            gene=gene,
-            scores=scores,
-            capabilities=(),
-            origin="random_initial",
-            generation=-1,
         )
 
-    records, archives = _rebuild_active(
-        records,
-        archive_size=args.archive_size,
-        hybrid_limit=args.hybrid_limit,
-        certification_threshold=(
-            args.certification_threshold
-        ),
+    checkpoint_path = (
+        run_dir
+        / "checkpoint.json"
     )
+    signature = _training_signature(
+        args
+    )
+
+    if checkpoint_path.exists():
+        if not args.resume:
+            raise FileExistsError(
+                "Checkpoint exists and resume is disabled: "
+                f"{checkpoint_path}"
+            )
+        checkpoint = json.loads(
+            checkpoint_path.read_text(
+                encoding="utf-8",
+            )
+        )
+        if (
+            checkpoint.get(
+                "version"
+            )
+            != CHECKPOINT_VERSION
+        ):
+            raise ValueError(
+                "Checkpoint version is not resumable by this trainer"
+            )
+        if (
+            checkpoint.get(
+                "axes"
+            )
+            != list(BASE_AXES)
+        ):
+            raise ValueError(
+                "Checkpoint capability axes do not match"
+            )
+        if (
+            checkpoint.get(
+                "training_signature"
+            )
+            != signature
+        ):
+            raise ValueError(
+                "Checkpoint training configuration does not match"
+            )
+
+        rng = np.random.default_rng()
+        rng.bit_generator.state = (
+            checkpoint[
+                "rng_state"
+            ]
+        )
+        records = {
+            str(row["record_id"]):
+                _record_from_dict(row)
+            for row in checkpoint[
+                "records"
+            ]
+        }
+        history = list(
+            checkpoint.get(
+                "history",
+                [],
+            )
+        )
+        start_generation = (
+            int(
+                checkpoint[
+                    "generation"
+                ]
+            )
+            + 1
+        )
+        archives = _archives(
+            records,
+            args.archive_size,
+        )
+        print(
+            "V117_STAGE_A_RESUME "
+            + json.dumps(
+                {
+                    "run_dir": str(
+                        run_dir
+                    ),
+                    "next_generation": (
+                        start_generation
+                    ),
+                    "target_generations": (
+                        args.generations
+                    ),
+                    "active_genes": len(
+                        records
+                    ),
+                }
+            ),
+            flush=True,
+        )
+    else:
+        run_dir.mkdir(
+            parents=True,
+            exist_ok=False,
+        )
+        rng = np.random.default_rng(
+            args.seed
+        )
+        initial_genes = [
+            RouteTailDirectGene.random(
+                rng,
+                hidden_dim=8,
+                scale=args.initial_scale,
+            )
+            for _ in range(
+                args.population
+            )
+        ]
+        initial_scores = _evaluate(
+            initial_genes,
+            worlds,
+            config,
+            completion_optima,
+            time_optima,
+            path_efficiency_optima,
+            priority_optima,
+            deadline_optima,
+        )
+
+        records = {}
+        for gene, scores in zip(
+            initial_genes,
+            initial_scores,
+            strict=True,
+        ):
+            rid = _gene_id(gene)
+            records[rid] = Record(
+                record_id=rid,
+                gene=gene,
+                scores=scores,
+                capabilities=(),
+                origin="random_initial",
+                generation=-1,
+            )
+
+        records, archives = _rebuild_active(
+            records,
+            archive_size=args.archive_size,
+            hybrid_limit=args.hybrid_limit,
+            certification_threshold=(
+                args.certification_threshold
+            ),
+        )
+        history = []
+        start_generation = 0
 
     zero_anchor = RouteTailDirectGene(
         np.zeros(
@@ -507,10 +779,9 @@ def run(args: argparse.Namespace) -> Path:
         hidden_dim=8,
     )
 
-    history: list[dict[str, Any]] = []
-
     for generation in range(
-        args.generations
+        start_generation,
+        args.generations,
     ):
         best = _best(records)
         active_ids = list(records)
@@ -1003,12 +1274,18 @@ def run(args: argparse.Namespace) -> Path:
 
         checkpoint = {
             "version": (
-                "v117_stage_a_checkpoint_v4_capability_provenance"
+                CHECKPOINT_VERSION
             ),
             "generation": generation,
             "axes": list(BASE_AXES),
             "oracle_bank": str(
                 args.oracle_bank
+            ),
+            "training_signature": (
+                signature
+            ),
+            "rng_state": (
+                rng.bit_generator.state
             ),
             "records": [
                 record.to_dict()
@@ -1016,16 +1293,9 @@ def run(args: argparse.Namespace) -> Path:
             ],
             "history": history,
         }
-        (
-            run_dir
-            / "checkpoint.json"
-        ).write_text(
-            json.dumps(
-                checkpoint,
-                indent=2,
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+        _write_checkpoint(
+            checkpoint_path,
+            checkpoint,
         )
 
     print(
@@ -1139,6 +1409,15 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--output-dir",
         default="runs/gene_mrta_v117_stage_a",
+    )
+    p.add_argument(
+        "--run-dir",
+        default=None,
+    )
+    p.add_argument(
+        "--resume",
+        action=argparse.BooleanOptionalAction,
+        default=True,
     )
     return p
 
