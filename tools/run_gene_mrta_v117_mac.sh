@@ -6,7 +6,7 @@ VENV_DIR="${VENV_DIR:-.venv-gene}"
 SMOKE_BANK="${V117_SMOKE_BANK:-runs/gene_mrta_v117_stage_a/oracle_smoke_2r10t.json}"
 FORMAL_BANK="${V117_FORMAL_BANK:-runs/gene_mrta_v117_stage_a/oracle_formal_4r20t.json}"
 FORMAL_RUN_DIR="${V117_FORMAL_RUN_DIR:-runs/gene_mrta_v117_stage_a/formal_4r20t_seed117}"
-FUSION1_DIR="${V117_FUSION1_DIR:-runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v2_progressive}"
+FUSION1_DIR="${V117_FUSION1_DIR:-runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v3_pareto}"
 UNSEEN_BANK="${V117_UNSEEN_BANK:-runs/gene_mrta_v117_unseen/oracle_unseen_4r20t_64.json}"
 UNSEEN_AUDIT_DIR="${V117_UNSEEN_AUDIT_DIR:-runs/gene_mrta_v117_unseen/audit_4r20t_64}"
 
@@ -131,15 +131,11 @@ elif [[ "$MODE" == "fusion1" ]]; then
     --rounds "$FUSION1_ROUNDS" \
     --mating-pairs 64 \
     --children-per-pair 4 \
-    --screen-worlds 8 \
-    --full-candidates 32 \
-    --archive-size 16 \
-    --hybrid-limit 192 \
-    --threshold 0.95 \
-    --screen-threshold 0.90 \
-    --min-inherited 2 \
-    --post-mating-sigma 0.0 \
-    --seed 11701
+    --screen-worlds 12 \
+    --full-candidates 64 \
+    --pareto-max-size 256 \
+    --pareto-epsilon 0.005 \
+    --seed 11702
 
 elif [[ "$MODE" == "status-fusion1" ]]; then
   if [[ -f "$FUSION1_DIR/checkpoint.json" ]]; then
@@ -156,12 +152,12 @@ print("round=", data.get("round"), sep="")
 print("active_genes=", len(data.get("records", [])), sep="")
 if history:
     row = history[-1]
-    print("max_inherited_capabilities=", row.get("max_inherited_capabilities"), sep="")
-    print("accepted_progressive_children=", row.get("accepted_progressive_children"), sep="")
-    print("accepted_full_union_children=", row.get("accepted_full_union_children"), sep="")
-    print("accepted_time_priority_children=", row.get("accepted_time_priority_children"), sep="")
-    print("best=", json.dumps(row.get("best", {}), ensure_ascii=False), sep="")
-    print("best_fusion_gene=", json.dumps(row.get("best_fusion_gene"), ensure_ascii=False), sep="")
+    print("pareto_size=", row.get("pareto_size"), sep="")
+    print("pareto_inserted_children=", row.get("pareto_inserted_children"), sep="")
+    print("old_pareto_removed=", row.get("old_pareto_removed"), sep="")
+    print("best_scores=", json.dumps(row.get("best_scores", {}), ensure_ascii=False), sep="")
+    print("analysis_best_by_axis=", json.dumps(row.get("analysis_best_by_axis", {}), ensure_ascii=False), sep="")
+    print("maximin_gene=", json.dumps(row.get("maximin_gene"), ensure_ascii=False), sep="")
 PY
   else
     echo "No Fusion-1 checkpoint yet: $FUSION1_DIR/checkpoint.json"
@@ -195,8 +191,7 @@ elif [[ "$MODE" == "audit-unseen" ]]; then
     --fusion-checkpoint "$FUSION1_DIR/checkpoint.json" \
     --unseen-bank "$UNSEEN_BANK" \
     --output-dir "$UNSEEN_AUDIT_DIR" \
-    --archive-size 16 \
-    --hybrid-count 12 \
+    --pareto-candidates 256 \
     --hard-count "$HARD_COUNT"
 
 elif [[ "$MODE" == "status-formal" ]]; then
