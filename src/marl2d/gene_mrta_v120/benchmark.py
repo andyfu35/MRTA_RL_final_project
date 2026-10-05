@@ -140,7 +140,17 @@ def _parse_instance_text(filename: str, text: str) -> tuple[str, str, int, np.nd
     robot_count = _parse_robot_count(filename)
 
     rows: list[tuple[int, float, float]] = []
-    for line in lines[1:]:
+    saw_eof = False
+    for index, line in enumerate(lines[1:], start=1):
+        if line.upper() == "EOF":
+            saw_eof = True
+            trailing = lines[index + 1 :]
+            if trailing:
+                raise ValueError(
+                    f"Unexpected content after EOF in {filename}: {trailing[0]!r}"
+                )
+            break
+
         parts = line.split()
         if len(parts) != 3:
             raise ValueError(f"Malformed coordinate row in {filename}: {line!r}")
