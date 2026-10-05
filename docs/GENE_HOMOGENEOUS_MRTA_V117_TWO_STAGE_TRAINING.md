@@ -209,3 +209,65 @@ objective archives.
 The final multi-capability Gene can later be selected/fused with explicit
 retention gates, for example requiring both the global-time and global-priority
 capabilities to remain within a chosen fraction of their specialist ceilings.
+
+
+## Stage-A trainer implementation
+
+Stage A is now executable.
+
+The training line starts from a fully random 148-parameter Route-Tail
+population. No V1.13, V1.10, or other previous Policy parameters are loaded.
+
+Implemented training mechanics:
+
+- six independent Stage-A specialist archives;
+- random initial population;
+- normal mutation children;
+- parent sampling proportional to weakest retained capability quality squared;
+- 5% uniform exploration by default;
+- complementary-capability mating;
+- stronger mating parent pressure using q^10 by default;
+- screen-world evaluation before full evaluation;
+- per-axis top normal candidates promoted to full evaluation;
+- mating candidates ranked by retained parent capabilities;
+- 95% parent-retention plus current-capability-ceiling gate for inherited
+  multi-capability labels;
+- active bank retains specialist archives plus certified mating hybrids;
+- checkpoint is written after every generation.
+
+Stage-A exact oracle bank contains, for every training world:
+
+- T_star: proven global Time-Utility optimum;
+- P_star: proven global Priority-Satisfaction optimum.
+
+Smoke protocol:
+
+    bash tools/run_gene_mrta_v117_mac.sh smoke
+
+This runs:
+
+1. all V1.17 unit tests;
+2. 2R/10T x 2 dual-oracle worlds;
+3. a 5-generation random Stage-A evolution.
+
+The smoke is only for wiring and capability-separation validation. It is not a
+scientific result.
+
+After smoke validation, the initial formal protocol is:
+
+    bash tools/run_gene_mrta_v117_mac.sh oracle-formal
+    bash tools/run_gene_mrta_v117_mac.sh train-formal
+
+Formal defaults currently use:
+
+- 4R/20T;
+- 32 exact dual-oracle worlds;
+- random population 256;
+- 50 generations;
+- 16 Genes per specialist archive;
+- 128 normal mutation children/generation;
+- 32 mating pairs x 4 children;
+- screen batch 8 worlds;
+- certification threshold 0.95.
+
+These defaults remain adjustable after the smoke results are inspected.
