@@ -58,7 +58,9 @@ def _evaluate(
     config,
     completion_optima: list[float],
     time_optima: list[float],
+    path_efficiency_optima: list[float],
     priority_optima: list[float],
+    deadline_optima: list[float],
 ) -> list[dict[str, float]]:
     return [
         evaluate_gene_base_axes(
@@ -69,7 +71,13 @@ def _evaluate(
                 completion_optima
             ),
             time_optima=time_optima,
+            path_efficiency_optima=(
+                path_efficiency_optima
+            ),
             priority_optima=priority_optima,
+            deadline_optima=(
+                deadline_optima
+            ),
         )
         for gene in genes
     ]
@@ -389,7 +397,9 @@ def run(args: argparse.Namespace) -> Path:
         worlds,
         completion_optima,
         time_optima,
+        path_efficiency_optima,
         priority_optima,
+        deadline_optima,
     ) = load_stage_a_oracle_bank(
         Path(args.oracle_bank)
     )
@@ -428,7 +438,9 @@ def run(args: argparse.Namespace) -> Path:
         config,
         completion_optima,
         time_optima,
+        path_efficiency_optima,
         priority_optima,
+        deadline_optima,
     )
 
     records: dict[str, Record] = {}
@@ -491,8 +503,16 @@ def run(args: argparse.Namespace) -> Path:
             time_optima,
             screen_idx,
         )
+        screen_path = _subset(
+            path_efficiency_optima,
+            screen_idx,
+        )
         screen_priority = _subset(
             priority_optima,
+            screen_idx,
+        )
+        screen_deadline = _subset(
+            deadline_optima,
             screen_idx,
         )
 
@@ -533,7 +553,9 @@ def run(args: argparse.Namespace) -> Path:
             config,
             screen_completion,
             screen_time,
+            screen_path,
             screen_priority,
+            screen_deadline,
         )
         normal_full_idx = _top_per_axis(
             normal_screen,
@@ -549,7 +571,9 @@ def run(args: argparse.Namespace) -> Path:
             config,
             completion_optima,
             time_optima,
+            path_efficiency_optima,
             priority_optima,
+            deadline_optima,
         )
 
         mating_genes: list[
@@ -653,7 +677,9 @@ def run(args: argparse.Namespace) -> Path:
             config,
             screen_completion,
             screen_time,
+            screen_path,
             screen_priority,
+            screen_deadline,
         ) if mating_genes else []
 
         parent_ids = sorted(
@@ -672,7 +698,9 @@ def run(args: argparse.Namespace) -> Path:
             config,
             screen_completion,
             screen_time,
+            screen_path,
             screen_priority,
+            screen_deadline,
         ) if parent_ids else []
         parent_screen = {
             rid: score
@@ -702,7 +730,9 @@ def run(args: argparse.Namespace) -> Path:
             config,
             completion_optima,
             time_optima,
+            path_efficiency_optima,
             priority_optima,
+            deadline_optima,
         ) if mating_full_genes else []
 
         pre_best = _best(records)
@@ -870,7 +900,7 @@ def run(args: argparse.Namespace) -> Path:
 
         checkpoint = {
             "version": (
-                "v117_stage_a_checkpoint_v2_completion_ceiling"
+                "v117_stage_a_checkpoint_v3_all_exact_base_axes"
             ),
             "generation": generation,
             "axes": list(BASE_AXES),
