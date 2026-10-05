@@ -24,8 +24,8 @@ from marl2d.gene_mrta_v118.capabilities import (
     GeneAssessment,
     evaluate_gene,
 )
-from marl2d.gene_mrta_v118.oracle_bank import (
-    load_oracle_bank,
+from marl2d.gene_mrta_v118.world_bank import (
+    load_world_bank,
 )
 from marl2d.gene_mrta_v118.pareto_bank import (
     analysis_best_by_axis,
@@ -35,7 +35,7 @@ from marl2d.gene_mrta_v118.pareto_bank import (
 
 
 CHECKPOINT_VERSION = (
-    "v118_feasibility_first_train_v1"
+    "v118_feasibility_first_raw_pareto_train_v2"
 )
 
 
@@ -140,27 +140,11 @@ def _evaluate_one(
     gene: RouteTailDirectGene,
     worlds,
     config,
-    time_optima,
-    path_optima,
-    priority_optima,
-    deadline_optima,
 ) -> GeneAssessment:
     return evaluate_gene(
         gene,
         worlds,
         config,
-        time_optima=(
-            time_optima
-        ),
-        path_efficiency_optima=(
-            path_optima
-        ),
-        priority_service_optima=(
-            priority_optima
-        ),
-        deadline_optima=(
-            deadline_optima
-        ),
     )
 
 
@@ -170,10 +154,6 @@ def _evaluate_many(
     ],
     worlds,
     config,
-    time_optima,
-    path_optima,
-    priority_optima,
-    deadline_optima,
 ) -> list[
     GeneAssessment
 ]:
@@ -182,10 +162,6 @@ def _evaluate_many(
             gene,
             worlds,
             config,
-            time_optima,
-            path_optima,
-            priority_optima,
-            deadline_optima,
         )
         for gene in genes
     ]
@@ -434,13 +410,9 @@ def run(
     (
         config,
         worlds,
-        time_optima,
-        path_optima,
-        priority_optima,
-        deadline_optima,
-    ) = load_oracle_bank(
+    ) = load_world_bank(
         Path(
-            args.oracle_bank
+            args.world_bank
         )
     )
 
@@ -540,10 +512,6 @@ def run(
             genes,
             worlds,
             config,
-            time_optima,
-            path_optima,
-            priority_optima,
-            deadline_optima,
         )
 
         bootstrap_records = {}
@@ -740,10 +708,6 @@ def run(
             children,
             worlds,
             config,
-            time_optima,
-            path_optima,
-            priority_optima,
-            deadline_optima,
         )
 
         merged_bootstrap = dict(
@@ -908,8 +872,11 @@ def run(
                 CHECKPOINT_VERSION
             ),
             "generation": generation,
-            "oracle_bank": str(
-                args.oracle_bank
+            "world_bank": str(
+                args.world_bank
+            ),
+            "capability_semantics": (
+                "raw_0_1_no_exact_normalization"
             ),
             "axes": list(
                 BASE_AXES
@@ -951,7 +918,9 @@ def run(
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser()
     p.add_argument(
+        "--world-bank",
         "--oracle-bank",
+        dest="world_bank",
         required=True,
     )
     p.add_argument(
