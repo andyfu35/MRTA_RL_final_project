@@ -20,11 +20,13 @@ from marl2d.gene_mrta_v113.route_tail import (
 
 EPS = 1e-12
 
+# V1.18 capabilities are raw [0, 1] task-quality measurements.
+# Completion is intentionally not an axis: it is a hard success gate.
 BASE_AXES = (
-    "global_time_optimality",
-    "global_path_efficiency",
-    "global_priority_service",
-    "global_deadline_optimality",
+    "time_earliness",
+    "path_efficiency",
+    "priority_service",
+    "deadline_satisfaction",
     "workload_balance",
 )
 
@@ -37,25 +39,6 @@ class GeneAssessment:
     success_worlds: int
     world_count: int
     scores: dict[str, float]
-
-
-def _retention(
-    value: float,
-    optimum: float,
-) -> float:
-    if optimum <= EPS:
-        return (
-            1.0
-            if value <= EPS
-            else 0.0
-        )
-    return float(
-        np.clip(
-            value / optimum,
-            0.0,
-            1.0,
-        )
-    )
 
 
 def priority_service_score(
@@ -72,6 +55,7 @@ def priority_service_score(
         EPS,
     )
     weighted_earliness = 0.0
+
     for step in (
         plan.selection_sequence
     ):
@@ -98,9 +82,14 @@ def priority_service_score(
             priority
             * earliness
         )
+
     return float(
-        weighted_earliness
-        / total_priority
+        np.clip(
+            weighted_earliness
+            / total_priority,
+            0.0,
+            1.0,
+        )
     )
 
 
@@ -108,23 +97,7 @@ def evaluate_gene(
     gene: RouteTailDirectGene,
     worlds: Sequence[World],
     config: EnvConfig,
-    *,
-    time_optima: Sequence[float],
-    path_efficiency_optima: Sequence[float],
-    priority_service_optima: Sequence[float],
-    deadline_optima: Sequence[float],
 ) -> GeneAssessment:
-    lengths = {
-        len(worlds),
-        len(time_optima),
-        len(path_efficiency_optima),
-        len(priority_service_optima),
-        len(deadline_optima),
-    }
-    if len(lengths) != 1:
-        raise ValueError(
-            "worlds and oracle references must have equal lengths"
-        )
     if not worlds:
         raise ValueError(
             "At least one world is required"
@@ -188,20 +161,10 @@ def evaluate_gene(
     rows: list[
         dict[str, float]
     ] = []
-    for (
-        rollout,
-        world,
-        time_star,
-        path_star,
-        priority_star,
-        deadline_star,
-    ) in zip(
+
+    for rollout, world in zip(
         rollouts,
         worlds,
-        time_optima,
-        path_efficiency_optima,
-        priority_service_optima,
-        deadline_optima,
         strict=True,
     ):
         evaluation = (
@@ -214,42 +177,35 @@ def evaluate_gene(
                 EPS,
             )
         )
+
         rows.append(
             {
-                "global_time_optimality": (
-                    _retention(
+                "time_earliness": float(
+                    np.clip(
                         evaluation.time_optimality,
-                        float(
-                            time_star
-                        ),
+                        0.0,
+                        1.0,
                     )
                 ),
-                "global_path_efficiency": (
-                    _retention(
+                "path_efficiency": float(
+                    np.clip(
                         evaluation.efficiency,
-                        float(
-                            path_star
-                        ),
+                        0.0,
+                        1.0,
                     )
                 ),
-                "global_priority_service": (
-                    _retention(
-                        priority_service_score(
-                            rollout.plan,
-                            world,
-                            config,
-                        ),
-                        float(
-                            priority_star
-                        ),
+                "priority_service": (
+                    priority_service_score(
+                        rollout.plan,
+                        world,
+                        config,
                     )
                 ),
-                "global_deadline_optimality": (
-                    _retention(
+                "deadline_satisfaction": float(
+                    np.clip(
                         evaluation.deadline_satisfaction,
-                        float(
-                            deadline_star
-                        ),
+                        0.0,
+                        1.0,
                     )
                 ),
                 "workload_balance": float(
