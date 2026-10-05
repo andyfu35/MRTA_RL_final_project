@@ -1999,3 +1999,40 @@ Launcher:
     bash tools/run_gene_mrta_v118_mac.sh train-smoke
     bash tools/run_gene_mrta_v118_mac.sh oracle-formal
     bash tools/run_gene_mrta_v118_mac.sh train-formal
+
+
+## V1.18-fast: no per-seed exact MILP in formal training
+
+The 4R/20T all-complete exact solver was too slow for 100-world formal use.
+
+New formal path:
+
+1. Generate geometry from deterministic seed.
+2. Construct an explicit balanced all-task witness route.
+3. Raise only the per-world robot batteries as needed within the fixed battery
+   capacity.
+4. Reject the seed cheaply if the witness violates horizon/capacity.
+5. Store the 20/20 witness in the world bank.
+6. Train with raw [0,1] capabilities.
+
+An explicit valid all-task route proves C*=1, so no completion MILP is needed.
+
+Formal capability axes are now:
+
+    time_earliness
+    path_efficiency
+    priority_service
+    deadline_satisfaction
+    workload_balance
+
+They are raw measurements, not exact-optimum ratios.
+
+Exact MILP is retained only for smoke/subset validation.
+
+New files/defaults:
+
+    src/marl2d/gene_mrta_v118/world_bank.py
+    runs/gene_mrta_v118/world_formal_4r20t_100_fast_v2.json
+    runs/gene_mrta_v118/formal_4r20t_100_fast_v2_seed118
+
+Formal seed base defaults to 117100000 to reuse the V1.17 geometry seed family.
