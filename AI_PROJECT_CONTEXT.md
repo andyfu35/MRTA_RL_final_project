@@ -1647,3 +1647,40 @@ reviewed:
 
     bash tools/run_gene_mrta_v117_mac.sh oracle-formal
     bash tools/run_gene_mrta_v117_mac.sh train-formal
+
+
+## V1.17 Stage-A smoke #1 findings
+
+The first executable smoke passed 7 tests and completed 2 exact 2R/10T
+dual-oracle worlds plus 5 generations of random Stage-A evolution.
+
+Key positive result:
+
+Time and Priority specialists separated immediately and remained different.
+Priority capability improved from about 0.9100 to 0.9674 while the best Time
+specialist remained at about 0.9905.
+
+The smoke also exposed two pre-formal design issues.
+
+First, raw completion stayed at 0.4 while both exact Time and Priority oracles
+completed 4/10 tasks. Raw completion therefore conflates Policy quality with
+world feasibility. V1.17 now adds an exact completion ceiling C* and uses:
+
+    global_completion_optimality = C_gene / C_star
+
+Workload balance now uses completion retention times Jain fairness rather than
+raw completion times Jain fairness.
+
+Second, random-from-scratch Stage A has no shared trained ancestor, so
+ancestor_delta, TIES-delta, and DARE-delta mating are not semantically valid.
+Stage-A mating is now restricted to anchor-free:
+
+- parameter_blend
+- block_pick
+- block_blend
+
+Generation logs now report the most-capable Gene's origin, operator, parents,
+capabilities, and scores, so actual mating-based fusion can be distinguished
+from simple multi-archive membership.
+
+Run smoke again after pulling before formal training.
