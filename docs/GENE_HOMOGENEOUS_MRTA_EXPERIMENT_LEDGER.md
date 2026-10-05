@@ -3439,3 +3439,99 @@ Workload balance remains Jain fairness after the success gate.
 - src/marl2d/gene_mrta_v118/train.py
 - tests/test_gene_mrta_v118.py
 - tools/run_gene_mrta_v118_mac.sh
+
+
+## V1.18-fast constructive feasibility protocol
+
+The exact all-complete MILP implementation is retained for validation, but it
+is no longer required for every formal training world.
+
+Reason: a 4R/20T exact all-complete objective solve can take tens of minutes
+for a single seed, making a 100-world development bank impractical.
+
+### Constructive feasibility proof
+
+A formal world is now accepted only when the generator constructs and stores an
+explicit 20/20 witness route.
+
+The witness:
+
+- assigns every task exactly once;
+- respects the episode horizon;
+- respects travel-energy limits;
+- stores the routes, finish times, travel energy, and resulting robot batteries.
+
+Because completion is upper-bounded by 1 and an explicit feasible 20/20 route
+exists, the witness itself proves:
+
+    C* = 1
+
+No completion MILP is needed.
+
+Candidate geometries for which the deterministic witness constructor cannot
+produce a valid route are rejected cheaply and the generator advances to the
+next seed.
+
+The formal seed family starts at 117100000 so the first worlds share the same
+4R/20T geometry seed family as V1.17, while V1.18 still uses different service,
+deadline, horizon, and battery semantics.
+
+### Raw Pareto capabilities
+
+Formal V1.18-fast training uses raw [0,1] capabilities:
+
+    [
+      time_earliness,
+      path_efficiency,
+      priority_service,
+      deadline_satisfaction,
+      workload_balance
+    ]
+
+Completion remains a hard feasibility gate and is not a Pareto axis.
+
+These are not called global-optimality ratios. Exact per-world normalization is
+removed from the training loop.
+
+This is a deliberate protocol change. Per-world oracle normalization can alter
+the relative weighting of worlds after aggregation, so V1.18-fast does not
+claim numerical equivalence to the earlier exact-normalized protocol.
+
+The rationale is that each retained capability already has an interpretable
+[0,1] scale, while the SEGB Pareto mechanism requires consistent capability
+measurements rather than an exact combinatorial optimum for every training
+world.
+
+### Exact validation
+
+The exact all-complete solver remains in:
+
+    src/marl2d/gene_mrta_v118/oracle.py
+    src/marl2d/gene_mrta_v118/oracle_bank.py
+
+and is used only for:
+
+- small smoke correctness tests;
+- a limited validation subset for publication diagnostics;
+- optional comparison between raw/reference performance and exact optima.
+
+It is not part of 100-world formal-bank construction.
+
+### Fast implementation
+
+    src/marl2d/gene_mrta_v118/world_bank.py
+
+Default formal bank:
+
+    100 worlds
+    4 robots
+    20 tasks
+    seed family 117100000+
+    constructive 20/20 witness
+
+Launcher:
+
+    bash tools/run_gene_mrta_v118_mac.sh world-formal
+    bash tools/run_gene_mrta_v118_mac.sh train-formal
+
+The old exact formal-bank file is not reused by the fast protocol.
