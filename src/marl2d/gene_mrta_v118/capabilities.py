@@ -27,7 +27,6 @@ BASE_AXES = (
     "path_efficiency",
     "priority_service",
     "deadline_satisfaction",
-    "workload_balance",
 )
 
 
@@ -170,14 +169,6 @@ def evaluate_gene(
         evaluation = (
             rollout.evaluation
         )
-        raw_fairness = float(
-            evaluation.balance
-            / max(
-                evaluation.completion,
-                EPS,
-            )
-        )
-
         rows.append(
             {
                 "time_earliness": float(
@@ -204,13 +195,6 @@ def evaluate_gene(
                 "deadline_satisfaction": float(
                     np.clip(
                         evaluation.deadline_satisfaction,
-                        0.0,
-                        1.0,
-                    )
-                ),
-                "workload_balance": float(
-                    np.clip(
-                        raw_fairness,
                         0.0,
                         1.0,
                     )
