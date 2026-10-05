@@ -2695,3 +2695,50 @@ Primary plotting metrics:
 - MILP/Policy runtime ratio;
 - mean/median/max MILP time;
 - mean/min retention and max observed exact gap.
+
+
+## V1.17 structured two-stage retraining
+
+Status:
+
+IMPLEMENTATION STARTED.
+
+Research structure:
+
+Stage A:
+train a clean 148-parameter Route-Tail model from complete known task semantics
+using six independent base capability archives.
+
+Axes:
+
+- completion;
+- time_retention;
+- path_efficiency;
+- priority_satisfaction;
+- deadline_satisfaction;
+- workload_balance.
+
+Stage B:
+after Stage A is frozen, identify hard worlds and add only robustness axes
+supported by repeated failure mechanisms.
+
+No old V1.13 capability labels are imported into this new line.
+
+Static Task data is frozen as:
+
+    {task_id, position, service_time, priority, deadline}
+
+Static Robot data is frozen as:
+
+    {robot_id, start_position, initial_battery}
+
+A* paths, competition, future reachability, opportunity cost, residual battery,
+and route-tail state remain derived observations.
+
+This explicitly separates:
+
+- task/world data;
+- Policy observation;
+- external capability evaluation.
+
+The first code layer and tests are now present under gene_mrta_v117.
