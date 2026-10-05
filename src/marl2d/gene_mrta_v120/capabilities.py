@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Sequence
+from decimal import Decimal
 from typing import Any
 
 import numpy as np
@@ -80,6 +81,30 @@ class GeneAssessment:
         }
 
 
+def _published_rounding_tolerance(reference_value: float) -> float:
+    """
+    Half of one unit in the last published decimal place.
+
+    Public MILS references are printed at finite precision. For example,
+    2299.16 represents an underlying objective that rounds to that value, so
+    any reconstructed value in [2299.155, 2299.165) is indistinguishable at
+    the published precision.
+    """
+    decimal_value = Decimal(str(float(reference_value)))
+    decimal_places = max(0, -decimal_value.as_tuple().exponent)
+    return float(Decimal("0.5") * (Decimal(10) ** (-decimal_places)))
+
+
+def _reference_comparison_tolerance(
+    reference_value: float,
+    numerical_relative_tolerance: float,
+) -> float:
+    return max(
+        _published_rounding_tolerance(reference_value),
+        float(numerical_relative_tolerance) * max(1.0, abs(reference_value)),
+    )
+
+
 def capability_axes(
     instances: Sequence[MinMaxMTSPInstance],
 ) -> tuple[str, ...]:
@@ -110,32 +135,49 @@ def evaluate_gene(
         )
         if rollout.success:
             objective = float(rollout.objective)
-            retention = float(instance.reference_value / objective)
-            gap = float(
-                (objective - instance.reference_value)
-                / instance.reference_value
+            comparison_tolerance = _reference_comparison_tolerance(
+                instance.reference_value,
+                exact_tolerance,
             )
+            delta = objective - instance.reference_value
+
+            if (
+                instance.is_exact_optimum
+                and delta < -comparison_tolerance
+            ):
+                raise RuntimeError(
+                    f"{instance.instance_id}: Gene objective {objective} is "
+                    f"better than published exact optimum "
+                    f"{instance.reference_value} by more than the published "
+                    f"precision tolerance {comparison_tolerance}; distance "
+                    "convention or benchmark parsing is inconsistent"
+                )
+
+            beat_bks = bool(
+                instance.reference_kind == "best_known"
+                and delta < -comparison_tolerance
+            )
+
+            if (
+                delta < 0.0
+                and not beat_bks
+            ):
+                # The Gene and reference are indistinguishable at the
+                # published precision. Do not let rounding create artificial
+                # >1 retention or a negative optimality gap.
+                retention = 1.0
+                gap = 0.0
+            else:
+                retention = float(instance.reference_value / objective)
+                gap = float(
+                    delta
+                    / instance.reference_value
+                )
         else:
             objective = None
             retention = 0.0
             gap = None
-
-        if (
-            instance.is_exact_optimum
-            and rollout.success
-            and retention > 1.0 + exact_tolerance
-        ):
-            raise RuntimeError(
-                f"{instance.instance_id}: Gene objective {objective} is "
-                f"better than published exact optimum {instance.reference_value}; "
-                "distance convention or benchmark parsing is inconsistent"
-            )
-
-        beat_bks = bool(
-            instance.reference_kind == "best_known"
-            and rollout.success
-            and retention > 1.0 + exact_tolerance
-        )
+            beat_bks = False
 
         rows.append(
             InstanceAssessment(
@@ -181,7 +223,10 @@ def evaluate_gene(
             and row.reference_kind == "exact_optimum"
             and row.objective is not None
             and abs(row.objective - row.reference_value)
-            <= exact_tolerance * max(1.0, row.reference_value)
+            <= _reference_comparison_tolerance(
+                row.reference_value,
+                exact_tolerance,
+            )
         )
         for row in rows
     )
