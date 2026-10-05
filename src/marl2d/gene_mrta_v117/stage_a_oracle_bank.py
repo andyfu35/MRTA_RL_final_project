@@ -11,11 +11,13 @@ from marl2d.gene_mrta_v16t.global_optimal_core import solve_global_time_optimum
 from marl2d.gene_mrta_v115.scaling import scale_config
 from marl2d.gene_mrta_v117.oracle import (
     solve_global_completion_optimum,
+    solve_global_deadline_optimum,
+    solve_global_path_efficiency_optimum,
     solve_global_priority_optimum,
 )
 
 
-BANK_VERSION = "v117_stage_a_oracle_bank_v2_completion_ceiling"
+BANK_VERSION = "v117_stage_a_oracle_bank_v3_all_exact_base_axes"
 
 
 def build_stage_a_oracle_bank(
@@ -66,6 +68,23 @@ def build_stage_a_oracle_bank(
                 f"message={completion_oracle.message}"
             )
 
+        path_oracle = (
+            solve_global_path_efficiency_optimum(
+                world,
+                config,
+                time_limit=time_limit,
+                solver_display=solver_display,
+            )
+        )
+        if (
+            not path_oracle.optimal
+            or path_oracle.path_efficiency is None
+        ):
+            raise RuntimeError(
+                f"Path-efficiency oracle failed exact proof for seed={seed}: "
+                f"status={path_oracle.status} message={path_oracle.message}"
+            )
+
         time_oracle = solve_global_time_optimum(
             world,
             config,
@@ -76,6 +95,21 @@ def build_stage_a_oracle_bank(
             raise RuntimeError(
                 f"Time oracle failed exact proof for seed={seed}: "
                 f"status={time_oracle.status} message={time_oracle.message}"
+            )
+
+        deadline_oracle = solve_global_deadline_optimum(
+            world,
+            config,
+            time_limit=time_limit,
+            solver_display=solver_display,
+        )
+        if (
+            not deadline_oracle.optimal
+            or deadline_oracle.deadline_satisfaction is None
+        ):
+            raise RuntimeError(
+                f"Deadline oracle failed exact proof for seed={seed}: "
+                f"status={deadline_oracle.status} message={deadline_oracle.message}"
             )
 
         priority_oracle = solve_global_priority_optimum(
@@ -103,8 +137,14 @@ def build_stage_a_oracle_bank(
             "time_optimum": float(
                 time_oracle.time_optimality
             ),
+            "path_efficiency_optimum": float(
+                path_oracle.path_efficiency
+            ),
             "priority_optimum": float(
                 priority_oracle.priority_satisfaction
+            ),
+            "deadline_optimum": float(
+                deadline_oracle.deadline_satisfaction
             ),
             "time_completed_tasks": int(
                 time_oracle.completed_tasks or 0
@@ -117,6 +157,12 @@ def build_stage_a_oracle_bank(
             ),
             "time_oracle_seconds": float(
                 time_oracle.solve_seconds
+            ),
+            "path_oracle_seconds": float(
+                path_oracle.solve_seconds
+            ),
+            "deadline_oracle_seconds": float(
+                deadline_oracle.solve_seconds
             ),
             "priority_oracle_seconds": float(
                 priority_oracle.solve_seconds
@@ -166,6 +212,8 @@ def load_stage_a_oracle_bank(
     list[float],
     list[float],
     list[float],
+    list[float],
+    list[float],
 ]:
     data = json.loads(
         path.read_text(
@@ -196,8 +244,16 @@ def load_stage_a_oracle_bank(
         float(row["time_optimum"])
         for row in rows
     ]
+    path_efficiency_optima = [
+        float(row["path_efficiency_optimum"])
+        for row in rows
+    ]
     priority_optima = [
         float(row["priority_optimum"])
+        for row in rows
+    ]
+    deadline_optima = [
+        float(row["deadline_optimum"])
         for row in rows
     ]
     return (
@@ -205,7 +261,9 @@ def load_stage_a_oracle_bank(
         worlds,
         completion_optima,
         time_optima,
+        path_efficiency_optima,
         priority_optima,
+        deadline_optima,
     )
 
 
