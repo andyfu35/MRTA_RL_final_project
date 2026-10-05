@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from time import perf_counter
 
@@ -488,4 +488,57 @@ def solve_global_priority_optimum(
             if raw_nodes is not None
             else None
         ),
+    )
+
+
+@dataclass(frozen=True)
+class GlobalCompletionOptimum:
+    optimal: bool
+    status: int
+    message: str
+    completion: float | None
+    completed_tasks: int | None
+    solve_seconds: float
+    mip_gap: float | None
+    routes: tuple[tuple[int, ...], ...]
+    mip_node_count: int | None = None
+
+
+def solve_global_completion_optimum(
+    world: World,
+    config: EnvConfig,
+    *,
+    time_limit: float | None = 300.0,
+    solver_display: bool = False,
+) -> GlobalCompletionOptimum:
+    """
+    Exact maximum feasible completion fraction.
+
+    This reuses the exact priority MILP with uniform task priorities.
+    Because every selected task then has identical objective weight,
+    priority_satisfaction is exactly completed_tasks / N.
+    """
+    uniform_world = replace(
+        world,
+        task_priorities=np.ones(
+            config.num_tasks,
+            dtype=np.float64,
+        ),
+    )
+    result = solve_global_priority_optimum(
+        uniform_world,
+        config,
+        time_limit=time_limit,
+        solver_display=solver_display,
+    )
+    return GlobalCompletionOptimum(
+        optimal=result.optimal,
+        status=result.status,
+        message=result.message,
+        completion=result.priority_satisfaction,
+        completed_tasks=result.completed_tasks,
+        solve_seconds=result.solve_seconds,
+        mip_gap=result.mip_gap,
+        routes=result.routes,
+        mip_node_count=result.mip_node_count,
     )
