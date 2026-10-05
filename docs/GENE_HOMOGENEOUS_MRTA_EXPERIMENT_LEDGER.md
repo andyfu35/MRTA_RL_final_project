@@ -2769,3 +2769,36 @@ The remaining base archives are completion, path efficiency, deadline
 satisfaction, and workload balance.
 
 This preserves conflicts instead of hiding them inside a weighted scalar sum.
+
+
+## V1.17 Stage-A executable protocol
+
+The clean Stage-A evolutionary trainer is implemented.
+
+Random initialization:
+
+148 parameters, hidden_dim=8, Route-Tail decoder, no prior checkpoint.
+
+Specialists:
+
+- completion;
+- global_time_optimality;
+- path_efficiency;
+- global_priority_optimality;
+- deadline_satisfaction;
+- workload_balance.
+
+Evolution:
+
+- normal mutation uses weakest-capability q^2 parent pressure;
+- mating uses complementary capability parents and q^10 pressure;
+- 5% uniform exploration is retained;
+- candidate screening precedes full-world evaluation;
+- capability inheritance requires 95% retention versus relevant parent
+  capability and 95% versus the current capability ceiling.
+
+Smoke:
+
+    bash tools/run_gene_mrta_v117_mac.sh smoke
+
+Formal training is intentionally deferred until smoke behavior is inspected.
