@@ -278,3 +278,25 @@ Formal training becomes eligible after the canonical public manifest is built:
 Status:
 
     bash tools/run_gene_mrta_v119_mac.sh status
+
+
+## Historical supplement recovery
+
+On 2026-10-05 the original supplement hostname did not resolve on the local
+Mac (URLError: [Errno 8] nodename nor servname provided) and the raw
+directory remained empty.
+
+The downloader now follows a provenance-preserving fallback:
+
+1. try the original public supplement URL;
+2. if the live host is unavailable, query the Internet Archive Wayback CDX
+   index for the exact historical URL prefix;
+3. download archived responses using the id_ raw-response modifier;
+4. preserve the recovered raw files under benchmarks/mtrpd_public/raw;
+5. write _WAYBACK_RECOVERY.json recording the source root, CDX query and
+   recovered file list;
+6. inspect raw formats before implementing the canonical converter.
+
+Formal V1.19 must not regenerate the random subsets from TSPLIB, because the
+published optimum belongs to the exact historical random subset/depot/K
+combination. A newly randomized instance would invalidate OPT/Cost scoring.
