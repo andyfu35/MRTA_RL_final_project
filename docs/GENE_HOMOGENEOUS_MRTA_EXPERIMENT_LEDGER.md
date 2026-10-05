@@ -2802,3 +2802,66 @@ Smoke:
     bash tools/run_gene_mrta_v117_mac.sh smoke
 
 Formal training is intentionally deferred until smoke behavior is inspected.
+
+
+## V1.17 Stage-A smoke #1
+
+Run:
+
+runs/gene_mrta_v117_stage_a/gene_mrta_v117_stage_a_20261005_085638_seed117
+
+Tests:
+
+7 passed.
+
+Oracle smoke:
+
+2R/10T, seeds 117000000 and 117000001.
+
+Exact time / priority ceilings:
+
+- seed 117000000:
+  - T* = 0.2242209550768175
+  - P* = 0.45197901256124035
+  - both exact objectives complete 4 tasks
+- seed 117000001:
+  - T* = 0.19496278602896533
+  - P* = 0.5098102611285834
+  - both exact objectives complete 4 tasks
+
+Stage-A observations over 5 generations:
+
+- global-time specialist and global-priority specialist were different Gene IDs
+  in every logged generation;
+- best global_time_optimality = 0.9905165213414664 from generation 0;
+- best global_priority_optimality improved from 0.9100312097338881 to
+  0.9673984386344753;
+- path_efficiency improved from 0.33681726591232225 to 0.33990888335670366;
+- max archive-membership capability count increased from 4 to 5.
+
+Important interpretation:
+
+The smoke validates objective-specialist separation and the basic evolutionary
+wiring. However, max_capabilities alone does not prove mating-based fusion,
+because a normal Gene may simultaneously rank inside several specialist
+archives.
+
+Two design issues were identified before formal training:
+
+1. raw completion = 0.4 cannot distinguish a weak Gene from a world whose exact
+   maximum feasible completion is only 4/10;
+2. old ancestor-delta / TIES / DARE recombination assumes a shared trained
+   ancestor and is not justified for a random-from-scratch V1.17 population.
+
+Corrections implemented after smoke #1:
+
+- add exact C* completion oracle;
+- replace completion axis with global_completion_optimality = C/C*;
+- normalize workload balance using completion retention times Jain fairness;
+- restrict Stage-A clean mating to parameter_blend, block_pick, and block_blend;
+- add explicit most-capable Gene origin/operator/parents to generation logs;
+- add time_priority_same_specialist diagnostic;
+- bump oracle-bank/checkpoint semantics;
+- remove repeated pytest execution inside smoke recursion.
+
+A second smoke is required before formal training.
