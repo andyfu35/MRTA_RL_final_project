@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import math
 from time import perf_counter
 
@@ -10,6 +10,19 @@ from scipy.sparse import coo_matrix
 
 from marl2d.gene_mrta_v16t.env import EnvConfig, World
 from marl2d.gene_mrta_v16t.global_optimal_core import _milp_options
+
+
+@dataclass(frozen=True)
+class _LinearRouteOptimum:
+    optimal: bool
+    status: int
+    message: str
+    score: float | None
+    completed_tasks: int | None
+    solve_seconds: float
+    mip_gap: float | None
+    routes: tuple[tuple[int, ...], ...]
+    mip_node_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -25,18 +38,89 @@ class GlobalPriorityOptimum:
     mip_node_count: int | None = None
 
 
-def solve_global_priority_optimum(
+@dataclass(frozen=True)
+class GlobalCompletionOptimum:
+    optimal: bool
+    status: int
+    message: str
+    completion: float | None
+    completed_tasks: int | None
+    solve_seconds: float
+    mip_gap: float | None
+    routes: tuple[tuple[int, ...], ...]
+    mip_node_count: int | None = None
+
+
+@dataclass(frozen=True)
+class GlobalDeadlineOptimum:
+    optimal: bool
+    status: int
+    message: str
+    deadline_satisfaction: float | None
+    completed_tasks: int | None
+    solve_seconds: float
+    mip_gap: float | None
+    routes: tuple[tuple[int, ...], ...]
+    mip_node_count: int | None = None
+
+
+@dataclass(frozen=True)
+class GlobalPathEfficiencyOptimum:
+    optimal: bool
+    status: int
+    message: str
+    path_efficiency: float | None
+    completed_tasks: int | None
+    solve_seconds: float
+    mip_gap: float | None
+    routes: tuple[tuple[int, ...], ...]
+    mip_node_count: int | None = None
+
+
+def _path_reward(
+    distance: float,
+    config: EnvConfig,
+) -> float:
+    return float(
+        1.0
+        - np.clip(
+            distance
+            / max(config.diagonal, 1e-12),
+            0.0,
+            1.0,
+        )
+    )
+
+
+def _solve_linear_route_objective(
     world: World,
     config: EnvConfig,
     *,
-    time_limit: float | None = 300.0,
-    solver_display: bool = False,
-) -> GlobalPriorityOptimum:
+    objective: str,
+    time_limit: float | None,
+    solver_display: bool,
+) -> _LinearRouteOptimum:
+    if objective not in {
+        "completion",
+        "priority",
+        "deadline",
+        "path_efficiency",
+    }:
+        raise ValueError(
+            f"Unsupported route objective: {objective}"
+        )
+
     R = config.num_robots
     N = config.num_tasks
     H = config.episode_time
-    total_priority = float(
-        np.sum(world.task_priorities)
+
+    total_priority = max(
+        float(
+            np.sum(
+                world.task_priorities
+            )
+        ),
+        1e-12,
     )
 
     c: list[float] = []
@@ -59,7 +143,9 @@ def solve_global_priority_optimum(
         c.append(float(obj))
         vlb.append(float(lo))
         vub.append(float(hi))
-        integ.append(1 if integer else 0)
+        integ.append(
+            1 if integer else 0
+        )
         return k
 
     def con(
@@ -75,10 +161,23 @@ def solve_global_priority_optimum(
         clb.append(float(lo))
         cub.append(float(hi))
 
-    xs = np.empty((R, N), dtype=int)
-    xa = np.full((R, N, N), -1, dtype=int)
-    y = np.empty((R, N), dtype=int)
-    t = np.empty((R, N), dtype=int)
+    xs = np.empty(
+        (R, N),
+        dtype=int,
+    )
+    xa = np.full(
+        (R, N, N),
+        -1,
+        dtype=int,
+    )
+    y = np.empty(
+        (R, N),
+        dtype=int,
+    )
+    t = np.empty(
+        (R, N),
+        dtype=int,
+    )
 
     for r in range(R):
         battery = float(
@@ -100,8 +199,25 @@ def solve_global_priority_optimum(
                     <= battery + 1e-12
                 )
             )
+            arc_obj = 0.0
+            if (
+                objective == "path_efficiency"
+                and math.isfinite(d)
+            ):
+                arc_obj = (
+                    -_path_reward(
+                        d,
+                        config,
+                    )
+                    / N
+                )
             xs[r, j] = var(
-                hi=1.0 if feasible else 0.0,
+                obj=arc_obj,
+                hi=(
+                    1.0
+                    if feasible
+                    else 0.0
+                ),
                 integer=True,
             )
 
@@ -110,7 +226,10 @@ def solve_global_priority_optimum(
                 if i == j:
                     continue
                 d = float(
-                    world.path_to_tasks[R + i, j]
+                    world.path_to_tasks[
+                        R + i,
+                        j,
+                    ]
                 )
                 feasible = (
                     math.isfinite(d)
@@ -124,24 +243,47 @@ def solve_global_priority_optimum(
                         <= battery + 1e-12
                     )
                 )
+                arc_obj = 0.0
+                if (
+                    objective
+                    == "path_efficiency"
+                    and math.isfinite(d)
+                ):
+                    arc_obj = (
+                        -_path_reward(
+                            d,
+                            config,
+                        )
+                        / N
+                    )
                 xa[r, i, j] = var(
-                    hi=1.0 if feasible else 0.0,
+                    obj=arc_obj,
+                    hi=(
+                        1.0
+                        if feasible
+                        else 0.0
+                    ),
                     integer=True,
                 )
 
-    priority_scale = max(
-        total_priority,
-        1e-12,
-    )
     for r in range(R):
         for j in range(N):
-            y[r, j] = var(
-                obj=(
+            y_obj = 0.0
+            if objective in {
+                "completion",
+                "deadline",
+            }:
+                y_obj = -1.0 / N
+            elif objective == "priority":
+                y_obj = (
                     -float(
                         world.task_priorities[j]
                     )
-                    / priority_scale
-                ),
+                    / total_priority
+                )
+
+            y[r, j] = var(
+                obj=y_obj,
                 hi=1.0,
                 integer=True,
             )
@@ -167,7 +309,9 @@ def solve_global_priority_optimum(
             for i in range(N):
                 if i != j:
                     z[
-                        int(xa[r, i, j])
+                        int(
+                            xa[r, i, j]
+                        )
                     ] = -1.0
             con(
                 z,
@@ -183,7 +327,9 @@ def solve_global_priority_optimum(
             for j in range(N):
                 if i != j:
                     z[
-                        int(xa[r, i, j])
+                        int(
+                            xa[r, i, j]
+                        )
                     ] = 1.0
             con(
                 z,
@@ -201,10 +347,17 @@ def solve_global_priority_optimum(
 
     for r in range(R):
         for j in range(N):
+            latest = (
+                float(
+                    world.task_deadlines[j]
+                )
+                if objective == "deadline"
+                else H
+            )
             con(
                 {
                     int(t[r, j]): 1.0,
-                    int(y[r, j]): -H,
+                    int(y[r, j]): -latest,
                 },
                 hi=0.0,
             )
@@ -221,7 +374,8 @@ def solve_global_priority_optimum(
     )
     big_m = (
         H
-        + max_path / config.robot_speed
+        + max_path
+        / config.robot_speed
         + float(
             np.max(
                 world.task_service_times
@@ -233,13 +387,19 @@ def solve_global_priority_optimum(
     for r in range(R):
         for j in range(N):
             d = float(
-                world.path_to_tasks[r, j]
+                world.path_to_tasks[
+                    r,
+                    j,
+                ]
             )
             if math.isfinite(d):
                 duration = (
-                    d / config.robot_speed
+                    d
+                    / config.robot_speed
                     + float(
-                        world.task_service_times[j]
+                        world.task_service_times[
+                            j
+                        ]
                     )
                 )
                 con(
@@ -263,25 +423,36 @@ def solve_global_priority_optimum(
                 )
                 if math.isfinite(d):
                     duration = (
-                        d / config.robot_speed
+                        d
+                        / config.robot_speed
                         + float(
-                            world.task_service_times[j]
+                            world.task_service_times[
+                                j
+                            ]
                         )
                     )
                     con(
                         {
                             int(t[r, j]): 1.0,
                             int(t[r, i]): -1.0,
-                            int(xa[r, i, j]): -big_m,
+                            int(
+                                xa[r, i, j]
+                            ): -big_m,
                         },
                         lo=duration - big_m,
                     )
 
     for r in range(R):
-        z: dict[int, float] = {}
+        z: dict[
+            int,
+            float,
+        ] = {}
         for j in range(N):
             d = float(
-                world.path_to_tasks[r, j]
+                world.path_to_tasks[
+                    r,
+                    j,
+                ]
             )
             if math.isfinite(d):
                 z[
@@ -290,6 +461,7 @@ def solve_global_priority_optimum(
                     d
                     * config.energy_per_distance
                 )
+
         for i in range(N):
             for j in range(N):
                 if i == j:
@@ -302,15 +474,20 @@ def solve_global_priority_optimum(
                 )
                 if math.isfinite(d):
                     z[
-                        int(xa[r, i, j])
+                        int(
+                            xa[r, i, j]
+                        )
                     ] = (
                         d
                         * config.energy_per_distance
                     )
+
         con(
             z,
             hi=float(
-                world.robot_initial_batteries[r]
+                world.robot_initial_batteries[
+                    r
+                ]
             ),
         )
 
@@ -329,7 +506,9 @@ def solve_global_priority_optimum(
     started = perf_counter()
     res = milp(
         c=np.asarray(c),
-        integrality=np.asarray(integ),
+        integrality=np.asarray(
+            integ
+        ),
         bounds=Bounds(
             np.asarray(vlb),
             np.asarray(vub),
@@ -341,7 +520,9 @@ def solve_global_priority_optimum(
         ),
         options=_milp_options(
             time_limit=time_limit,
-            solver_display=solver_display,
+            solver_display=(
+                solver_display
+            ),
         ),
     )
     elapsed = (
@@ -358,8 +539,10 @@ def solve_global_priority_optimum(
         and not optimal
     ):
         raise RuntimeError(
-            "Unlimited priority MILP terminated "
-            "without an optimal proof: "
+            "Unlimited exact MILP "
+            f"for objective={objective} "
+            "terminated without an "
+            "optimal proof: "
             f"status={int(res.status)} "
             f"message={res.message}"
         )
@@ -369,10 +552,10 @@ def solve_global_priority_optimum(
         if res.fun is not None
         else None
     )
+    completed = None
     routes: list[
         tuple[int, ...]
     ] = []
-    completed = None
 
     if res.x is not None:
         sol = np.asarray(
@@ -389,6 +572,7 @@ def solve_global_priority_optimum(
                 )
             )
         )
+
         for r in range(R):
             first = [
                 j
@@ -400,6 +584,7 @@ def solve_global_priority_optimum(
             if not first:
                 routes.append(())
                 continue
+
             route = [
                 first[0]
             ]
@@ -421,7 +606,8 @@ def solve_global_priority_optimum(
                     break
                 if nxt[0] in route:
                     raise RuntimeError(
-                        "cycle in priority MILP route"
+                        "cycle in exact "
+                        f"{objective} route"
                     )
                 route.append(
                     nxt[0]
@@ -439,21 +625,58 @@ def solve_global_priority_optimum(
         optimal
         and score is not None
     ):
-        selected_priority = 0.0
-        for route in routes:
-            for j in route:
-                selected_priority += float(
+        rebuilt = 0.0
+        if objective == "priority":
+            selected = sum(
+                float(
                     world.task_priorities[j]
                 )
-        rebuilt = (
-            selected_priority
-            / priority_scale
-        )
+                for route in routes
+                for j in route
+            )
+            rebuilt = (
+                selected
+                / total_priority
+            )
+
+        elif objective in {
+            "completion",
+            "deadline",
+        }:
+            rebuilt = (
+                sum(
+                    len(route)
+                    for route in routes
+                )
+                / N
+            )
+
+        elif objective == "path_efficiency":
+            total = 0.0
+            for r, route in enumerate(
+                routes
+            ):
+                node = r
+                for j in route:
+                    d = float(
+                        world.path_to_tasks[
+                            node,
+                            j,
+                        ]
+                    )
+                    total += _path_reward(
+                        d,
+                        config,
+                    )
+                    node = R + j
+            rebuilt = total / N
+
         if abs(
             rebuilt - score
         ) > 1e-6:
             raise RuntimeError(
-                "priority objective mismatch: "
+                f"{objective} objective "
+                "mismatch: "
                 f"solver={score}, "
                 f"rebuilt={rebuilt}"
             )
@@ -464,11 +687,11 @@ def solve_global_priority_optimum(
         None,
     )
 
-    return GlobalPriorityOptimum(
+    return _LinearRouteOptimum(
         optimal=optimal,
         status=int(res.status),
         message=str(res.message),
-        priority_satisfaction=score,
+        score=score,
         completed_tasks=completed,
         solve_seconds=float(
             elapsed
@@ -491,17 +714,31 @@ def solve_global_priority_optimum(
     )
 
 
-@dataclass(frozen=True)
-class GlobalCompletionOptimum:
-    optimal: bool
-    status: int
-    message: str
-    completion: float | None
-    completed_tasks: int | None
-    solve_seconds: float
-    mip_gap: float | None
-    routes: tuple[tuple[int, ...], ...]
-    mip_node_count: int | None = None
+def solve_global_priority_optimum(
+    world: World,
+    config: EnvConfig,
+    *,
+    time_limit: float | None = 300.0,
+    solver_display: bool = False,
+) -> GlobalPriorityOptimum:
+    result = _solve_linear_route_objective(
+        world,
+        config,
+        objective="priority",
+        time_limit=time_limit,
+        solver_display=solver_display,
+    )
+    return GlobalPriorityOptimum(
+        optimal=result.optimal,
+        status=result.status,
+        message=result.message,
+        priority_satisfaction=result.score,
+        completed_tasks=result.completed_tasks,
+        solve_seconds=result.solve_seconds,
+        mip_gap=result.mip_gap,
+        routes=result.routes,
+        mip_node_count=result.mip_node_count,
+    )
 
 
 def solve_global_completion_optimum(
@@ -511,23 +748,10 @@ def solve_global_completion_optimum(
     time_limit: float | None = 300.0,
     solver_display: bool = False,
 ) -> GlobalCompletionOptimum:
-    """
-    Exact maximum feasible completion fraction.
-
-    This reuses the exact priority MILP with uniform task priorities.
-    Because every selected task then has identical objective weight,
-    priority_satisfaction is exactly completed_tasks / N.
-    """
-    uniform_world = replace(
+    result = _solve_linear_route_objective(
         world,
-        task_priorities=np.ones(
-            config.num_tasks,
-            dtype=np.float64,
-        ),
-    )
-    result = solve_global_priority_optimum(
-        uniform_world,
         config,
+        objective="completion",
         time_limit=time_limit,
         solver_display=solver_display,
     )
@@ -535,7 +759,61 @@ def solve_global_completion_optimum(
         optimal=result.optimal,
         status=result.status,
         message=result.message,
-        completion=result.priority_satisfaction,
+        completion=result.score,
+        completed_tasks=result.completed_tasks,
+        solve_seconds=result.solve_seconds,
+        mip_gap=result.mip_gap,
+        routes=result.routes,
+        mip_node_count=result.mip_node_count,
+    )
+
+
+def solve_global_deadline_optimum(
+    world: World,
+    config: EnvConfig,
+    *,
+    time_limit: float | None = 300.0,
+    solver_display: bool = False,
+) -> GlobalDeadlineOptimum:
+    result = _solve_linear_route_objective(
+        world,
+        config,
+        objective="deadline",
+        time_limit=time_limit,
+        solver_display=solver_display,
+    )
+    return GlobalDeadlineOptimum(
+        optimal=result.optimal,
+        status=result.status,
+        message=result.message,
+        deadline_satisfaction=result.score,
+        completed_tasks=result.completed_tasks,
+        solve_seconds=result.solve_seconds,
+        mip_gap=result.mip_gap,
+        routes=result.routes,
+        mip_node_count=result.mip_node_count,
+    )
+
+
+def solve_global_path_efficiency_optimum(
+    world: World,
+    config: EnvConfig,
+    *,
+    time_limit: float | None = 300.0,
+    solver_display: bool = False,
+) -> GlobalPathEfficiencyOptimum:
+    result = _solve_linear_route_objective(
+        world,
+        config,
+        objective="path_efficiency",
+        time_limit=time_limit,
+        solver_display=solver_display,
+    )
+    return GlobalPathEfficiencyOptimum(
+        optimal=result.optimal,
+        status=result.status,
+        message=result.message,
+        path_efficiency=result.score,
         completed_tasks=result.completed_tasks,
         solve_seconds=result.solve_seconds,
         mip_gap=result.mip_gap,
