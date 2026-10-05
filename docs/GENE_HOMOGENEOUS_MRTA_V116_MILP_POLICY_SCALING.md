@@ -790,3 +790,24 @@ MILP solution completes 12, but the Policy still has a lower T score.
 This is expected because the oracle objective is time utility, not raw
 completion count. More completed tasks do not necessarily imply a larger T if
 they finish sufficiently late.
+
+
+## 5R/25T 10-seed plotting dataset
+
+To compare 5R/25T directly against the completed 6R/30T exact dataset, run:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-5r25
+
+Defaults:
+
+    case = 5R/25T
+    seeds = 116040000 through 116040009
+    worlds = 10
+    MILP time limit = unlimited
+    mip_rel_gap = 0
+    exact optimal proof required
+    run dir = runs/gene_mrta_v116_exact_unlimited_5r25_seed116040000
+
+Use the same plot schema as 6R/30T:
+per-seed exact gap/retention and per-seed Policy/MILP method time, plus
+mean/median/max summaries.
