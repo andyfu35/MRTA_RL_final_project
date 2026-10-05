@@ -15,7 +15,7 @@ from marl2d.gene_mrta_v117.oracle import (
 )
 
 
-BANK_VERSION = "v117_stage_a_oracle_bank_v1"
+BANK_VERSION = "v117_stage_a_oracle_bank_v2_completion_ceiling"
 
 
 def build_stage_a_oracle_bank(
