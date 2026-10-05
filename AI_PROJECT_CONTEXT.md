@@ -1737,3 +1737,45 @@ Only workload balance remains non-oracle because the Jain-based objective is
 nonlinear; it is represented as completion retention times Jain fairness.
 
 Run one more smoke after pulling before formal training.
+
+
+## V1.17 smoke #3 and capability-provenance correction
+
+Smoke #3 passed 11 tests and validated exact C*, T*, E*, P*, D* ceilings.
+
+Two smoke worlds:
+
+117000000:
+C*=0.4, T*=0.2242209550768175, E*=0.33060942664538956,
+P*=0.45197901256124035, D*=0.4.
+
+117000001:
+C*=0.4, T*=0.19496278602896533, E*=0.3537811670895189,
+P*=0.5098102611285834, D*=0.4.
+
+Training behavior:
+
+- C/C*=1.0;
+- D/D*=1.0;
+- E/E* reaches 0.9906102433;
+- P/P* reaches 0.9723705458;
+- T/T*=0.9905165213 in this run;
+- Time and Priority specialists remain distinct.
+
+Correction:
+
+Earlier smoke #2 was described as proving true mating capability fusion.
+That claim was too strong because the Record.capabilities field mixed archive
+membership with passed mating inheritance.
+
+V1.17 now separates:
+
+- archive_capabilities;
+- inherited_capabilities;
+- combined capabilities.
+
+Only inherited_capabilities is used to identify and preserve true mating
+fusion. Logs now expose max_inherited_capabilities and best_fusion_gene.
+
+Formal Stage-A training must wait for one final smoke using this provenance
+split.
