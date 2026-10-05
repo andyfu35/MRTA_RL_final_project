@@ -2,6 +2,12 @@ import numpy as np
 
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
+from marl2d.gene_mrta_v117.fusion1 import (
+    _choose_pairs,
+)
+from marl2d.gene_mrta_v117.unseen_audit import (
+    _candidate_ids,
+)
 from marl2d.gene_mrta_v117.stage_a_train import (
     CLEAN_MATING_OPERATORS,
     Record,
@@ -257,4 +263,138 @@ def test_record_round_trip_preserves_capability_provenance():
     assert np.allclose(
         restored.gene.vector_data,
         record.gene.vector_data,
+    )
+
+
+def test_fusion1_prioritizes_complementary_capability_union():
+    scores = {
+        axis: 0.95
+        for axis in BASE_AXES
+    }
+
+    time_gene = _record(
+        "time_gene",
+        scores,
+    )
+    time_gene.capabilities = (
+        "global_time_optimality",
+        "global_deadline_optimality",
+    )
+    time_gene.archive_capabilities = (
+        "global_time_optimality",
+        "global_deadline_optimality",
+    )
+
+    priority_gene = _record(
+        "priority_gene",
+        scores,
+    )
+    priority_gene.capabilities = (
+        "global_priority_optimality",
+        "global_path_efficiency",
+    )
+    priority_gene.archive_capabilities = (
+        "global_priority_optimality",
+        "global_path_efficiency",
+    )
+
+    completion_gene = _record(
+        "completion_gene",
+        scores,
+    )
+    completion_gene.capabilities = (
+        "global_completion_optimality",
+        "workload_balance",
+    )
+    completion_gene.archive_capabilities = (
+        "global_completion_optimality",
+        "workload_balance",
+    )
+
+    records = {
+        record.record_id: record
+        for record in (
+            time_gene,
+            priority_gene,
+            completion_gene,
+        )
+    }
+
+    pairs = _choose_pairs(
+        records,
+        pair_count=3,
+        archive_size=3,
+        rng=np.random.default_rng(11701),
+    )
+
+    assert pairs
+    assert any(
+        (
+            "global_time_optimality"
+            in union
+            and "global_priority_optimality"
+            in union
+        )
+        for _a, _b, union in pairs
+    )
+
+
+def test_unseen_audit_candidate_set_keeps_specialists_and_fusions():
+    scores = {
+        axis: 0.90
+        for axis in BASE_AXES
+    }
+    records = {}
+
+    for index, axis in enumerate(
+        BASE_AXES
+    ):
+        record = _record(
+            f"specialist_{index}",
+            scores,
+        )
+        record.scores = dict(scores)
+        record.scores[axis] = 0.99
+        record.capabilities = (
+            axis,
+        )
+        record.archive_capabilities = (
+            axis,
+        )
+        records[
+            record.record_id
+        ] = record
+
+    fusion = _record(
+        "fusion",
+        {
+            axis: 0.96
+            for axis in BASE_AXES
+        },
+    )
+    fusion.origin = "mating"
+    fusion.inherited_capabilities = (
+        "global_time_optimality",
+        "global_priority_optimality",
+    )
+    fusion.capabilities = (
+        "global_time_optimality",
+        "global_priority_optimality",
+    )
+    records[
+        fusion.record_id
+    ] = fusion
+
+    ids, roles = _candidate_ids(
+        records,
+        archive_size=1,
+        hybrid_count=4,
+    )
+
+    assert "fusion" in ids
+    assert "fusion" in roles["fusion"]
+    assert any(
+        "specialist:global_time_optimality"
+        in role
+        for role in roles.values()
     )
