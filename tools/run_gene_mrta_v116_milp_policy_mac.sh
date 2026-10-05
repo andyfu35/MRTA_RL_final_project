@@ -73,6 +73,25 @@ elif [[ "$MODE" == "exact-regression" ]]; then
     --policy-timeout 60 \
     --no-stop-after-zero-optimal
 
+elif [[ "$MODE" == "exact-5r25" ]]; then
+  EXACT_WORLDS="${V116_EXACT_WORLDS:-10}"
+  EXACT_SEED_BASE="${V116_EXACT_SEED_BASE:-116040000}"
+  EXACT_RUN_DIR="${V116_EXACT_RUN_DIR:-runs/gene_mrta_v116_exact_unlimited_5r25_seed${EXACT_SEED_BASE}}"
+  echo "V116_EXACT_WORLDS=$EXACT_WORLDS"
+  echo "V116_EXACT_SEED_BASE=$EXACT_SEED_BASE"
+  echo "V116_EXACT_RUN_DIR=$EXACT_RUN_DIR"
+  python -m marl2d.gene_mrta_v116.milp_policy_scaling \
+    --v113-checkpoint "$V113_CHECKPOINT" \
+    --cases "5x25" \
+    --worlds-per-case "$EXACT_WORLDS" \
+    --seed-base "$EXACT_SEED_BASE" \
+    --milp-time-limit unlimited \
+    --milp-solver-display \
+    --heartbeat-seconds 30 \
+    --run-dir "$EXACT_RUN_DIR" \
+    --policy-timeout 60 \
+    --no-stop-after-zero-optimal
+
 elif [[ "$MODE" == "exact-unlimited" ]]; then
   EXACT_WORLDS="${V116_EXACT_WORLDS:-1}"
   EXACT_SEED_BASE="${V116_EXACT_SEED_BASE:-116050000}"
@@ -102,6 +121,6 @@ elif [[ "$MODE" == "small10" ]]; then
     --policy-timeout 60
 
 else
-  echo "Usage: bash tools/run_gene_mrta_v116_milp_policy_mac.sh [tests|smoke|ladder3|boundary5|exact-regression|exact-unlimited|small10]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v116_milp_policy_mac.sh [tests|smoke|ladder3|boundary5|exact-regression|exact-5r25|exact-unlimited|small10]" >&2
   exit 2
 fi
