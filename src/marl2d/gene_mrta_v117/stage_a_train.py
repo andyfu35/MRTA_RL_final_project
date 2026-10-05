@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from marl2d.gene_mrta_v110.recombination import offspring_family
+from marl2d.gene_mrta_v110.recombination import recombine
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES, evaluate_gene_base_axes
 from marl2d.gene_mrta_v117.stage_a_oracle_bank import load_stage_a_oracle_bank
@@ -56,6 +56,7 @@ def _evaluate(
     genes: list[RouteTailDirectGene],
     worlds,
     config,
+    completion_optima: list[float],
     time_optima: list[float],
     priority_optima: list[float],
 ) -> list[dict[str, float]]:
@@ -64,6 +65,9 @@ def _evaluate(
             gene,
             worlds,
             config,
+            completion_optima=(
+                completion_optima
+            ),
             time_optima=time_optima,
             priority_optima=priority_optima,
         )
@@ -283,6 +287,70 @@ def _top_per_axis(
     return chosen
 
 
+CLEAN_MATING_OPERATORS = (
+    "parameter_blend",
+    "block_pick",
+    "block_blend",
+)
+
+
+def _clean_offspring_family(
+    parent_a: RouteTailDirectGene,
+    parent_b: RouteTailDirectGene,
+    zero_anchor: RouteTailDirectGene,
+    rng: np.random.Generator,
+    *,
+    children: int,
+    mutation_sigma: float,
+    mutation_rate: float,
+) -> list[tuple[RouteTailDirectGene, str]]:
+    if children <= 0:
+        raise ValueError(
+            "children must be positive"
+        )
+
+    order = rng.permutation(
+        len(CLEAN_MATING_OPERATORS)
+    )
+    result: list[
+        tuple[RouteTailDirectGene, str]
+    ] = []
+    for child_idx in range(children):
+        operator = CLEAN_MATING_OPERATORS[
+            int(
+                order[
+                    child_idx
+                    % len(order)
+                ]
+            )
+        ]
+        merged = recombine(
+            parent_a,
+            parent_b,
+            zero_anchor,
+            rng,
+            operator=operator,
+        )
+        gene = RouteTailDirectGene.from_v18(
+            merged.gene
+        )
+        if mutation_sigma > 0.0:
+            gene = RouteTailDirectGene.from_v18(
+                gene.mutated(
+                    rng,
+                    sigma=mutation_sigma,
+                    mutation_rate=mutation_rate,
+                )
+            )
+        result.append(
+            (
+                gene,
+                operator,
+            )
+        )
+    return result
+
+
 def _mating_rank(
     child_scores: list[dict[str, float]],
     required_caps: list[tuple[str, ...]],
@@ -319,6 +387,7 @@ def run(args: argparse.Namespace) -> Path:
     (
         config,
         worlds,
+        completion_optima,
         time_optima,
         priority_optima,
     ) = load_stage_a_oracle_bank(
@@ -357,6 +426,7 @@ def run(args: argparse.Namespace) -> Path:
         initial_genes,
         worlds,
         config,
+        completion_optima,
         time_optima,
         priority_optima,
     )
@@ -413,6 +483,10 @@ def run(args: argparse.Namespace) -> Path:
             worlds,
             screen_idx,
         )
+        screen_completion = _subset(
+            completion_optima,
+            screen_idx,
+        )
         screen_time = _subset(
             time_optima,
             screen_idx,
@@ -457,6 +531,7 @@ def run(args: argparse.Namespace) -> Path:
             normal_genes,
             screen_worlds,
             config,
+            screen_completion,
             screen_time,
             screen_priority,
         )
@@ -472,6 +547,7 @@ def run(args: argparse.Namespace) -> Path:
             normal_full_genes,
             worlds,
             config,
+            completion_optima,
             time_optima,
             priority_optima,
         )
@@ -479,6 +555,7 @@ def run(args: argparse.Namespace) -> Path:
         mating_genes: list[
             RouteTailDirectGene
         ] = []
+        mating_operators: list[str] = []
         mating_pairs: list[
             tuple[str, str]
         ] = []
@@ -543,7 +620,7 @@ def run(args: argparse.Namespace) -> Path:
                     )
                 )
             )
-            family = offspring_family(
+            family = _clean_offspring_family(
                 records[a].gene,
                 records[b].gene,
                 zero_anchor,
@@ -556,11 +633,12 @@ def run(args: argparse.Namespace) -> Path:
                     args.post_mating_rate
                 ),
             )
-            for result in family:
+            for child_gene, operator in family:
                 mating_genes.append(
-                    RouteTailDirectGene.from_v18(
-                        result.gene
-                    )
+                    child_gene
+                )
+                mating_operators.append(
+                    operator
                 )
                 mating_pairs.append(
                     (a, b)
@@ -573,6 +651,7 @@ def run(args: argparse.Namespace) -> Path:
             mating_genes,
             screen_worlds,
             config,
+            screen_completion,
             screen_time,
             screen_priority,
         ) if mating_genes else []
@@ -591,6 +670,7 @@ def run(args: argparse.Namespace) -> Path:
             ],
             screen_worlds,
             config,
+            screen_completion,
             screen_time,
             screen_priority,
         ) if parent_ids else []
@@ -620,6 +700,7 @@ def run(args: argparse.Namespace) -> Path:
             mating_full_genes,
             worlds,
             config,
+            completion_optima,
             time_optima,
             priority_optima,
         ) if mating_full_genes else []
@@ -690,6 +771,11 @@ def run(args: argparse.Namespace) -> Path:
                     origin="mating",
                     generation=generation,
                     parents=(a, b),
+                    operator=(
+                        mating_operators[
+                            original_idx
+                        ]
+                    ),
                 )
 
         records, archives = _rebuild_active(
@@ -709,10 +795,59 @@ def run(args: argparse.Namespace) -> Path:
             ),
             default=0,
         )
+        most_capable = max(
+            records.values(),
+            key=lambda record: (
+                len(record.capabilities),
+                _quality(record, best),
+            ),
+        )
+        time_id = (
+            archives[
+                "global_time_optimality"
+            ][0]
+            if archives[
+                "global_time_optimality"
+            ]
+            else None
+        )
+        priority_id = (
+            archives[
+                "global_priority_optimality"
+            ][0]
+            if archives[
+                "global_priority_optimality"
+            ]
+            else None
+        )
+
         row = {
             "generation": generation,
             "active_genes": len(records),
             "max_capabilities": max_caps,
+            "time_priority_same_specialist": (
+                time_id == priority_id
+            ),
+            "most_capable_gene": {
+                "record_id": (
+                    most_capable.record_id
+                ),
+                "origin": (
+                    most_capable.origin
+                ),
+                "operator": (
+                    most_capable.operator
+                ),
+                "capabilities": list(
+                    most_capable.capabilities
+                ),
+                "scores": (
+                    most_capable.scores
+                ),
+                "parents": list(
+                    most_capable.parents
+                ),
+            },
             "best": best,
             "specialists": {
                 axis: (
