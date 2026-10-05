@@ -24,9 +24,9 @@ EPS = 1e-12
 BASE_AXES = (
     "global_completion_optimality",
     "global_time_optimality",
-    "path_efficiency",
+    "global_path_efficiency",
     "global_priority_optimality",
-    "deadline_satisfaction",
+    "global_deadline_optimality",
     "workload_balance",
 )
 
@@ -55,7 +55,9 @@ def base_scores_for_evaluation(
     *,
     completion_optimum: float,
     time_optimum: float,
+    path_efficiency_optimum: float,
     priority_optimum: float,
+    deadline_optimum: float,
 ) -> dict[str, float]:
     completion_retention = _retention(
         evaluation.completion,
@@ -65,9 +67,17 @@ def base_scores_for_evaluation(
         evaluation.time_optimality,
         time_optimum,
     )
+    path_retention = _retention(
+        evaluation.efficiency,
+        path_efficiency_optimum,
+    )
     priority_retention = _retention(
         evaluation.priority_satisfaction,
         priority_optimum,
+    )
+    deadline_retention = _retention(
+        evaluation.deadline_satisfaction,
+        deadline_optimum,
     )
 
     raw_fairness = (
@@ -92,22 +102,14 @@ def base_scores_for_evaluation(
         "global_time_optimality": (
             time_retention
         ),
-        "path_efficiency": float(
-            np.clip(
-                evaluation.efficiency,
-                0.0,
-                1.0,
-            )
+        "global_path_efficiency": (
+            path_retention
         ),
         "global_priority_optimality": (
             priority_retention
         ),
-        "deadline_satisfaction": float(
-            np.clip(
-                evaluation.deadline_satisfaction,
-                0.0,
-                1.0,
-            )
+        "global_deadline_optimality": (
+            deadline_retention
         ),
         "workload_balance": (
             normalized_balance
@@ -120,12 +122,16 @@ def aggregate_base_scores(
     *,
     completion_optima: Sequence[float],
     time_optima: Sequence[float],
+    path_efficiency_optima: Sequence[float],
     priority_optima: Sequence[float],
+    deadline_optima: Sequence[float],
 ) -> dict[str, float]:
     if (
         len(evaluations) != len(completion_optima)
         or len(evaluations) != len(time_optima)
+        or len(evaluations) != len(path_efficiency_optima)
         or len(evaluations) != len(priority_optima)
+        or len(evaluations) != len(deadline_optima)
     ):
         raise ValueError(
             "evaluations and oracle-reference lengths mismatch"
@@ -142,18 +148,28 @@ def aggregate_base_scores(
                 completion_star
             ),
             time_optimum=float(time_star),
+            path_efficiency_optimum=float(
+                path_star
+            ),
             priority_optimum=float(priority_star),
+            deadline_optimum=float(
+                deadline_star
+            ),
         )
         for (
             evaluation,
             completion_star,
             time_star,
+            path_star,
             priority_star,
+            deadline_star,
         ) in zip(
             evaluations,
             completion_optima,
             time_optima,
+            path_efficiency_optima,
             priority_optima,
+            deadline_optima,
             strict=True,
         )
     ]
@@ -177,7 +193,9 @@ def evaluate_gene_base_axes(
     *,
     completion_optima: Sequence[float],
     time_optima: Sequence[float],
+    path_efficiency_optima: Sequence[float],
     priority_optima: Sequence[float],
+    deadline_optima: Sequence[float],
 ) -> dict[str, float]:
     evaluations = [
         rollout_route_tail_gene(
@@ -191,5 +209,9 @@ def evaluate_gene_base_axes(
         evaluations,
         completion_optima=completion_optima,
         time_optima=time_optima,
+        path_efficiency_optima=(
+            path_efficiency_optima
+        ),
         priority_optima=priority_optima,
+        deadline_optima=deadline_optima,
     )
