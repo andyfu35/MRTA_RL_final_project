@@ -96,7 +96,6 @@ def test_v118_axes_exclude_completion_gate():
         "path_efficiency",
         "priority_service",
         "deadline_satisfaction",
-        "workload_balance",
     )
 
 
@@ -352,3 +351,7 @@ def test_v118_capability_axes_are_raw_zero_to_one_metrics():
         "global_completion_optimality"
         not in BASE_AXES
     )
+
+
+def test_v118_balance_is_not_a_pareto_axis():
+    assert "workload_balance" not in BASE_AXES
