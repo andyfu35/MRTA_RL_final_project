@@ -1684,3 +1684,56 @@ capabilities, and scores, so actual mating-based fusion can be distinguished
 from simple multi-archive membership.
 
 Run smoke again after pulling before formal training.
+
+
+## V1.17 Stage-A smoke #2: true fusion confirmed
+
+Second smoke:
+
+- tests = 9 passed;
+- exact C* = 0.4 for both 2R/10T worlds;
+- global completion retention reaches 1.0;
+- global time retention reaches 1.0 by generation 1;
+- best global priority retention = 0.9338964620;
+- Time and Priority specialist IDs remain distinct.
+
+True mating fusion is now directly observed.
+
+Generation 1 record:
+
+    812e74f49dfb20a82ae8
+
+origin:
+
+    mating
+
+operator:
+
+    parameter_blend
+
+parents:
+
+    cdc2746ad444bce89452
+    3eab704335a0fbf5c989
+
+It carries five archive/certified capabilities including global Time and global
+Priority, with time retention ~0.98334 and priority retention ~0.93390.
+
+This confirms the intended specialist -> crossover -> multi-capability Gene
+mechanism on the clean random-from-scratch line.
+
+Pre-formal refinement:
+
+Raw Path Efficiency and Deadline are now also replaced by exact-ceiling
+retention axes:
+
+    global_path_efficiency = E / E*
+    global_deadline_optimality = D / D*
+
+The exact Stage-A oracle bank therefore contains C*, T*, E*, P*, and D* for
+every world.
+
+Only workload balance remains non-oracle because the Jain-based objective is
+nonlinear; it is represented as completion retention times Jain fairness.
+
+Run one more smoke after pulling before formal training.
