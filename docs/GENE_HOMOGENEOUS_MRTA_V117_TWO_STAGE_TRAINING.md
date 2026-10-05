@@ -365,3 +365,68 @@ archive memberships, and scores.
 
 This provenance split replaces the earlier ambiguous interpretation of
 max_capabilities.
+
+
+## Stage-A freeze decision
+
+The final provenance smoke validates the pre-registered Stage-A mechanism.
+
+The capability set is frozen:
+
+    global_completion_optimality = C/C*
+    global_time_optimality       = T/T*
+    global_path_efficiency       = E/E*
+    global_priority_optimality   = P/P*
+    global_deadline_optimality   = D/D*
+    workload_balance             = (C/C*) * Jain(workload)
+
+No hard-world-derived axis is active in Stage A.
+
+The final smoke demonstrates:
+
+- distinct Time and Priority specialists;
+- exact-ceiling normalization for all five linear task objectives;
+- genuine mating inheritance tracked separately from archive membership;
+- a mating-derived child retaining three capabilities under the 95% dual gate.
+
+The smoke does not require all six capabilities, or Time+Priority, to fuse
+within five generations. Those are discovery outcomes for the formal
+evolution, not smoke acceptance criteria.
+
+### Formal run reliability
+
+The exact oracle bank is world-level resumable.
+
+If interrupted after some 4R/20T worlds finish, rerunning oracle-formal skips
+completed seeds and resumes from the first unfinished world.
+
+The Stage-A evolutionary run is generation-level resumable.
+
+Every completed generation atomically checkpoints:
+
+- active Gene records and parameters;
+- archive capability provenance;
+- inherited capability provenance;
+- generation history;
+- RNG state;
+- training configuration.
+
+The formal launcher uses a fixed run directory, so rerunning train-formal
+continues the same run.
+
+Status:
+
+    bash tools/run_gene_mrta_v117_mac.sh status-formal
+
+Formal sequence:
+
+    bash tools/run_gene_mrta_v117_mac.sh oracle-formal
+    bash tools/run_gene_mrta_v117_mac.sh train-formal
+
+Recommended on macOS for long runs:
+
+    caffeinate -dimsu bash tools/run_gene_mrta_v117_mac.sh oracle-formal
+
+followed by:
+
+    caffeinate -dimsu bash tools/run_gene_mrta_v117_mac.sh train-formal
