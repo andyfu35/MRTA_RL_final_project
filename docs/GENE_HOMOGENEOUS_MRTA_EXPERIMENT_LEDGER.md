@@ -3025,3 +3025,86 @@ Two new tests ensure:
   fusion candidate.
 
 One additional smoke is required before formal Stage-A freeze.
+
+
+## V1.17 Stage-A freeze gate passed
+
+Final provenance smoke:
+
+runs/gene_mrta_v117_stage_a/gene_mrta_v117_stage_a_20261005_091817_seed117
+
+Tests before the smoke:
+
+13 passed.
+
+The five exact base ceilings remained valid:
+
+- C*
+- T*
+- E*
+- P*
+- D*
+
+Observed best capability values during the 5-generation smoke:
+
+- global_completion_optimality = 1.0
+- global_time_optimality = 0.9999999999999997 by generation 3
+- global_path_efficiency = 0.9930842458608933
+- global_priority_optimality = 0.9723705458253018
+- global_deadline_optimality = 1.0
+- workload_balance = 0.9983580546544989
+
+Time and Priority specialists were distinct in every generation.
+
+Capability provenance is now verified.
+
+Generation 1 reports:
+
+    max_inherited_capabilities = 3
+
+with an explicit best_fusion_gene produced by block_pick and carrying three
+inherited axes.
+
+Generation 2 onward retains a mating-derived Gene with inherited:
+
+- global_completion_optimality
+- global_deadline_optimality
+- global_time_optimality
+
+This confirms genuine inheritance under the 95% dual gate, not archive overlap.
+
+It does not yet demonstrate Time+Priority inheritance in the same child.
+That is not required from a 5-generation smoke; the formal run is responsible
+for discovering richer capability combinations.
+
+Stage-A capability definitions are now FROZEN:
+
+1. C/C*
+2. T/T*
+3. E/E*
+4. P/P*
+5. D/D*
+6. (C/C*) * Jain(workload)
+
+No further Stage-A capability-axis changes are planned before the formal run.
+
+Long-run reliability was added before formal execution:
+
+- exact oracle bank resumes at completed-world granularity;
+- the bank is atomically fsync-written after every completed world;
+- Stage-A training resumes from the latest completed generation;
+- RNG state and capability provenance are checkpointed;
+- formal training uses a fixed run directory;
+- status-formal prints the latest checkpoint summary.
+
+Formal defaults:
+
+- 4R/20T
+- 32 exact oracle worlds
+- 256 random initial Genes
+- 50 generations
+- 16 Genes per axis archive
+- 128 mutation children/generation
+- 32 mating pairs x 4 children
+- 8 screen worlds
+- 95% capability inheritance threshold
