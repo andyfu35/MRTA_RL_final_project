@@ -53,8 +53,27 @@ elif [[ "$MODE" == "train-smoke" ]]; then
     --seed 117
 
 elif [[ "$MODE" == "smoke" ]]; then
-  bash "$0" oracle-smoke
-  bash "$0" train-smoke
+  python -m marl2d.gene_mrta_v117.stage_a_oracle_bank \
+    --robots 2 \
+    --tasks 10 \
+    --world-count 2 \
+    --seed-base 117000000 \
+    --time-limit 60 \
+    --output "$SMOKE_BANK"
+
+  python -m marl2d.gene_mrta_v117.stage_a_train \
+    --oracle-bank "$SMOKE_BANK" \
+    --generations 5 \
+    --population 32 \
+    --archive-size 4 \
+    --hybrid-limit 16 \
+    --normal-children 32 \
+    --normal-full-per-axis 2 \
+    --mating-pairs 8 \
+    --children-per-pair 2 \
+    --mating-full-limit 8 \
+    --screen-worlds 2 \
+    --seed 117
 
 elif [[ "$MODE" == "oracle-formal" ]]; then
   FORMAL_WORLDS="${V117_FORMAL_WORLDS:-32}"
