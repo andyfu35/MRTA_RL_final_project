@@ -2101,7 +2101,7 @@ Benchmark structure:
 - 180 original MTRPD instances;
 - 6 TSPLIB families x 10 replicates x {30,40,50} total vertices;
 - 29/39/49 customer tasks plus depot;
-- K varies by instance (original construction uses max(K_ini, ceil(n/5)));
+- public scales use 6/8/10 repairmen for 30/40/50 total vertices;
 - route limit L=2*d_max;
 - 179/180 published proven optimal solutions.
 
