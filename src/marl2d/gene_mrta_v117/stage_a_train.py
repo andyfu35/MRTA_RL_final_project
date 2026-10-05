@@ -870,7 +870,7 @@ def run(args: argparse.Namespace) -> Path:
 
         checkpoint = {
             "version": (
-                "v117_stage_a_checkpoint_v1"
+                "v117_stage_a_checkpoint_v2_completion_ceiling"
             ),
             "generation": generation,
             "axes": list(BASE_AXES),
