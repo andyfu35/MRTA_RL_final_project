@@ -2667,3 +2667,31 @@ Special case:
 seed 116050005 has Policy completed_tasks=13 versus MILP completed_tasks=12,
 while the Policy time objective remains lower. This is not a contradiction:
 the exact oracle optimizes T=(1/N) sum(1-F_j/H), not completed-task count alone.
+
+
+## V1.16 5R/25T exact plotting protocol
+
+A matched 10-seed exact-unlimited 5R/25T dataset will be generated for direct
+comparison with the completed 6R/30T 10-seed benchmark.
+
+Command:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-5r25
+
+Default seed namespace:
+
+116040000 through 116040009.
+
+The same frozen 148-parameter V1.13 Gene, world generation rules, A* path
+preprocessing, time objective, exact MILP semantics, and summary metrics are
+used.
+
+Primary plotting metrics:
+
+- per-seed exact retention;
+- per-seed exact relative gap;
+- Policy solve time;
+- MILP total exact-proof time;
+- MILP/Policy runtime ratio;
+- mean/median/max MILP time;
+- mean/min retention and max observed exact gap.
