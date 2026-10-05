@@ -1570,3 +1570,48 @@ Implemented:
 - tests/test_gene_mrta_v117_schema.py
 - tools/run_gene_mrta_v117_mac.sh
 - docs/GENE_HOMOGENEOUS_MRTA_V117_TWO_STAGE_TRAINING.md
+
+
+## V1.17 global objective specialist refinement
+
+Stage-A capability design was refined so that the Gene Bank can explicitly
+preserve different global-objective specialists.
+
+Primary exact-ceiling axes:
+
+    global_time_optimality = T_gene / T_star
+
+where
+
+    T = (1/N) * sum_completed(1 - finish/H)
+
+and T_star is a proven global MILP optimum.
+
+Also:
+
+    global_priority_optimality = P_gene / P_star
+
+where P_gene is completed-priority / total-priority and P_star is the proven
+maximum feasible priority satisfaction from a separate MILP objective.
+
+A score of 1.0 on either axis therefore has a clear interpretation: the Gene
+has reached the global optimum for that capability objective on the evaluated
+world.
+
+Revised Stage-A axes:
+
+- completion
+- global_time_optimality
+- path_efficiency
+- global_priority_optimality
+- deadline_satisfaction
+- workload_balance
+
+This allows selecting a global-time specialist or a global-priority specialist
+from the same Gene Bank before capability fusion.
+
+Implemented:
+
+- exact V1.17 priority MILP oracle;
+- normalized global-time and global-priority capability scoring;
+- unit tests for the priority oracle and 1.0 optimality semantics.
