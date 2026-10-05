@@ -3238,3 +3238,116 @@ The v2 run uses a fresh directory:
     runs/gene_mrta_v117_fusion1/formal_4r20t_seed117_v2_progressive
 
 The unseen-map stage should not start until Fusion-1 v2 is inspected.
+
+
+## V1.17 Pareto Gene Bank architecture
+
+The post-Stage-A Gene Bank no longer uses manually declared capability
+combinations as its survival rule.
+
+The six capability axes remain fixed measurements:
+
+- global_completion_optimality
+- global_time_optimality
+- global_path_efficiency
+- global_priority_optimality
+- global_deadline_optimality
+- workload_balance
+
+A Gene is represented by the six-dimensional capability vector:
+
+    c(g) = [C, T, E, P, D, B]
+
+Gene Bank admission is now pure Pareto dominance.
+
+Gene A dominates Gene B iff:
+
+    A_k >= B_k for every capability k
+
+and:
+
+    A_k > B_k for at least one capability k
+
+A newly evaluated Gene is retained if it remains nondominated after comparison
+with the Bank. Any existing Genes dominated by the new Gene are removed.
+
+The Bank does NOT require:
+
+- a named Time+Priority combination;
+- a minimum inherited capability count;
+- a 95% parent-union inheritance gate;
+- a scalar weighted reward;
+- a predefined importance ordering between axes.
+
+The previous inherited_capabilities/archive_capabilities fields are retained
+only for backward compatibility with the frozen Stage-A checkpoint and lineage
+analysis. They do not control Pareto Bank membership.
+
+### Bounded Pareto retention
+
+High-dimensional Pareto fronts can grow large. Storage is bounded without
+adding axis weights:
+
+1. exact Pareto dominance removes dominated Genes;
+2. epsilon capability cells remove practically duplicate vectors;
+3. if still above the Bank limit, NSGA-II-style crowding distance preserves
+   capability-space extremes and spread.
+
+Defaults:
+
+    pareto_epsilon = 0.005
+    pareto_max_size = 256
+
+The epsilon rule is storage compression only. Within one epsilon cell the
+existing representative is kept; no weighted scalar preference is introduced.
+
+### Pareto mating
+
+Fusion-1 now starts from the frozen Stage-A checkpoint, rebuilds its
+nondominated Pareto Bank, and mates capability-space-distant parents.
+
+Parent pairing uses only Euclidean distance between six-dimensional capability
+vectors. It does not name or prioritize Time, Priority, Deadline, or any other
+axis.
+
+Mating still uses parent-preserving parameter operators:
+
+- sparse_block_graft
+- sparse_block_blend
+- near_parent_blend
+
+Children are screened on a fixed subset of worlds. The screen-level Pareto
+front is promoted to full 32-world evaluation. Fully evaluated children are
+then submitted directly to the Pareto Gene Bank.
+
+The relevant log fields are now:
+
+- pareto_size
+- pareto_inserted_children
+- old_pareto_removed
+- best_scores
+- analysis_best_by_axis
+- maximin_gene
+
+analysis_best_by_axis and maximin_gene are views only; they do not affect
+membership.
+
+### Unseen-map evaluation
+
+The unseen audit now evaluates the Pareto Bank itself rather than a manually
+selected set of named specialists/hybrids.
+
+For each unseen world it records:
+
+- the world-specific Pareto front across Bank Genes;
+- the best maximin Gene on that world;
+- the weakest capability of that maximin Gene;
+- per-axis Bank frontier maxima.
+
+Hard worlds are ranked first by low Bank maximin capability, then by weak Bank
+frontier coverage.
+
+This preserves the SEGB principle:
+
+    define how capabilities are measured;
+    let the Gene Bank discover which capability combinations survive.
