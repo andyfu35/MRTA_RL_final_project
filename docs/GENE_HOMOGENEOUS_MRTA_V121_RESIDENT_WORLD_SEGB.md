@@ -139,7 +139,9 @@ sampling probabilities.
 
 ## Logs
 
-    world_events.jsonl
+    world_events/round_000.jsonl
+    ...
+    world_events/round_049.jsonl
 
 One row for every candidate world:
 
