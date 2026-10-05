@@ -322,3 +322,43 @@ Protected large-scale evaluation should be run only after the mutation-only
 protocol and stopping rule are frozen:
 
     bash tools/run_gene_mrta_v120_mac.sh evaluate-protected
+
+
+## Published objective precision
+
+Public certificates and paper tables report objective values at finite decimal
+precision. V1.20 must not interpret a lower full-precision reconstructed value
+as a super-optimal solution when both values round to the same published
+number.
+
+Example observed during smoke:
+
+    published exact reference: 2299.16
+    Gene objective:            2299.157678942173
+
+The Gene objective rounds to 2299.16. Therefore the two values are
+indistinguishable at the published two-decimal precision.
+
+V1.20 defines the comparison tolerance as half of one unit in the last
+published decimal place, with a small numerical floor.
+
+For a two-decimal reference:
+
+    tolerance = 0.005
+
+For a zero-decimal/integer reference:
+
+    tolerance = 0.5
+
+Exact OPT:
+- within the published precision interval -> retention = 1.0, gap = 0;
+- below the reference by more than the interval -> evaluator/reference
+  inconsistency, abort.
+
+BKS:
+- within the published precision interval -> retention = 1.0, not a BKS
+  improvement;
+- below BKS by more than the interval -> legal BKS improvement candidate.
+
+This prevents publication rounding from injecting artificial retention values
+slightly above 1 into the Gene Bank.
