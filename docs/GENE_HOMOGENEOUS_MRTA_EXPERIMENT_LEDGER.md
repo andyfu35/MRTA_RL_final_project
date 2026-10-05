@@ -3678,3 +3678,61 @@ Implementation:
 Public raw supplement is not fabricated. The historical supplement endpoint is
 kept as an external source and must be inspected before writing the exact raw
 importer.
+
+
+## V1.20 Public MinMax-mTSP primary benchmark
+
+V1.19 MTRPD data acquisition is frozen/aborted for formal use because the
+historical raw supplement could not be recovered from the dead original host
+or attempted archive paths. Do not report V1.19 synthetic fixtures as public
+benchmark results.
+
+V1.20 uses the currently accessible MILS public benchmark from
+pengfeihe-angers/mils and mirrors the actual raw assets into this repository.
+
+Raw assets:
+- benchmarks/minmax_mtsp_mils/instances.zip
+- benchmarks/minmax_mtsp_mils/Certification.zip
+- benchmarks/minmax_mtsp_mils/SOURCE_README.md
+- benchmarks/minmax_mtsp_mils/PROVENANCE.md
+
+Dataset:
+- 77 minmax-mTSP instances;
+- 51..5915 vertices;
+- robot/salesman counts 3, 5, 10, 20, 30;
+- paper set S = 41 small/medium instances;
+- paper set L = 36 large instances;
+- 72 solution certificates in the source archive;
+- five references are read from paper Table A.1;
+- 22 instances are marked known exact optimum by the paper;
+- remaining references are BKS.
+
+Objective:
+    minimize max route length
+
+Per-instance capability:
+    reference / Gene objective
+
+Exact reference:
+    ratio > 1 beyond tolerance => evaluator mismatch/error.
+
+BKS reference:
+    ratio > 1 => legal new-best-known candidate.
+
+Distance definitions were independently checked against public certificates:
+- EUC_2D uses continuous Euclidean length;
+- ATT uses TSPLIB ATT pseudo-Euclidean.
+
+Training:
+- one shared 148-parameter Gene;
+- mutation-only primary phase;
+- parent/child evaluated on identical public instances;
+- paired per-instance delta logged;
+- cKDTree nearest-candidate decoder for scalability;
+- Set S is development/validation;
+- entire Set L is protected from evolution and reserved for large-scale
+  generalization evaluation.
+
+Mating/recombination remains disabled until the V1.20 mutation-only Gene Bank
+has converged. A later phase will test whether specialists can fuse into one
+strong universal Gene.
