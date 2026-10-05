@@ -124,3 +124,85 @@ def test_clean_stage_a_mating_uses_no_ancestor_delta_operators():
     assert "ancestor_delta" not in CLEAN_MATING_OPERATORS
     assert "ties_delta" not in CLEAN_MATING_OPERATORS
     assert "dare_delta" not in CLEAN_MATING_OPERATORS
+
+
+def test_archive_membership_is_not_mating_inheritance():
+    dominant_scores = {
+        axis: 1.0
+        for axis in BASE_AXES
+    }
+    fusion_scores = {
+        axis: 0.96
+        for axis in BASE_AXES
+    }
+
+    dominant = _record(
+        "dominant",
+        dominant_scores,
+    )
+    fusion = _record(
+        "fusion",
+        fusion_scores,
+    )
+    fusion.origin = "mating"
+    fusion.inherited_capabilities = (
+        "global_time_optimality",
+        "global_priority_optimality",
+    )
+    fusion.capabilities = (
+        "global_time_optimality",
+        "global_priority_optimality",
+    )
+
+    active, _archives = _rebuild_active(
+        {
+            "dominant": dominant,
+            "fusion": fusion,
+        },
+        archive_size=1,
+        hybrid_limit=1,
+        certification_threshold=0.95,
+    )
+
+    assert active["fusion"].archive_capabilities == ()
+    assert active["fusion"].inherited_capabilities == (
+        "global_priority_optimality",
+        "global_time_optimality",
+    )
+    assert active["fusion"].capabilities == (
+        "global_priority_optimality",
+        "global_time_optimality",
+    )
+
+
+def test_non_inherited_mating_gene_is_not_kept_as_fusion():
+    dominant_scores = {
+        axis: 1.0
+        for axis in BASE_AXES
+    }
+    weak_scores = {
+        axis: 0.96
+        for axis in BASE_AXES
+    }
+
+    dominant = _record(
+        "dominant",
+        dominant_scores,
+    )
+    weak = _record(
+        "weak",
+        weak_scores,
+    )
+    weak.origin = "mating"
+
+    active, _archives = _rebuild_active(
+        {
+            "dominant": dominant,
+            "weak": weak,
+        },
+        archive_size=1,
+        hybrid_limit=1,
+        certification_threshold=0.95,
+    )
+
+    assert "weak" not in active
