@@ -2865,3 +2865,88 @@ Corrections implemented after smoke #1:
 - remove repeated pytest execution inside smoke recursion.
 
 A second smoke is required before formal training.
+
+
+## V1.17 Stage-A smoke #2
+
+Run:
+
+runs/gene_mrta_v117_stage_a/gene_mrta_v117_stage_a_20261005_090202_seed117
+
+Tests:
+
+9 passed.
+
+Oracle smoke:
+
+2R/10T, seeds 117000000 and 117000001.
+
+Exact completion ceilings:
+
+- seed 117000000: C* = 0.4
+- seed 117000001: C* = 0.4
+
+This confirms that the previous raw completion score 0.4 was not a weak Policy
+result; the tested worlds themselves permit at most 4/10 completed tasks.
+
+Important Stage-A results:
+
+- global_completion_optimality reaches 1.0;
+- global_time_optimality reaches 0.9905165 at generation 0 and a proven
+  1.0 archive best by generation 1;
+- global_priority_optimality reaches 0.9338965;
+- Time and Priority specialists remain different Gene IDs in all five logged
+  generations;
+- a true mating-derived five-capability Gene appears at generation 1.
+
+First true fusion Gene:
+
+record_id = 812e74f49dfb20a82ae8
+origin = mating
+operator = parameter_blend
+
+Parents:
+
+- cdc2746ad444bce89452
+- 3eab704335a0fbf5c989
+
+Certified/archive capabilities:
+
+- deadline_satisfaction
+- global_completion_optimality
+- global_priority_optimality
+- global_time_optimality
+- workload_balance
+
+Scores:
+
+- completion retention = 1.0
+- time retention = 0.9833370
+- priority retention = 0.9338965
+- deadline raw score = 0.4
+- workload balance = 0.9900686
+
+This is direct evidence that the clean random-lineage crossover can fuse
+conflicting specialists without loading a previous Policy checkpoint.
+
+Final pre-formal capability refinement:
+
+The smoke also shows that raw Deadline=0.4 and raw Path Efficiency~=0.339 do
+not reveal distance to their world-specific ceilings.
+
+Therefore Stage A now uses exact ceilings for all linear task objectives:
+
+- global_completion_optimality = C / C*
+- global_time_optimality = T / T*
+- global_path_efficiency = E / E*
+- global_priority_optimality = P / P*
+- global_deadline_optimality = D / D*
+
+Workload balance remains a structural nonlinear capability:
+
+    completion_retention * Jain(workload)
+
+A fake MILP ceiling is not introduced for Jain fairness.
+
+A third smoke with the full exact-axis bank is required before starting formal
+Stage-A training.
