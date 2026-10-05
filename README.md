@@ -417,3 +417,24 @@ Exact MILP:
 The worst quality seed is 116050009. The slowest MILP seed is 116050002.
 These are empirical extrema over 10 tested worlds, not theoretical worst-case
 bounds.
+
+
+## V1.17 clean two-stage Gene training
+
+V1.17 starts a fresh Policy-training line using a two-stage scientific
+procedure.
+
+Stage A starts with the complete known task semantics and six independent
+capability axes: completion, exact time retention, path efficiency, priority
+satisfaction, deadline satisfaction, and workload balance.
+
+Stage B is not preloaded with old robustness assumptions. After Stage A is
+frozen, hard-world traces are analyzed and only repeated failure mechanisms
+become new targeted capability axes.
+
+The canonical static Task record is:
+
+    {task_id, position, service_time, priority, deadline}
+
+Robot battery is a hard feasibility constraint; A* paths and consequence
+features remain derived state rather than static Task fields.
