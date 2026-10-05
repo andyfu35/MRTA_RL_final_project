@@ -1,15 +1,23 @@
+from types import SimpleNamespace
+
 import numpy as np
 
+from marl2d.gene_mrta_v120 import capabilities
 from marl2d.gene_mrta_v120.benchmark import (
     CERTIFICATE_ZIP,
     EXACT_OPTIMUM_IDS,
     INSTANCE_ZIP,
     PAPER_ONLY_REFERENCES,
+    MinMaxMTSPInstance,
     _parse_instance_text,
     describe_benchmark,
     edge_distance,
     load_benchmark,
     load_certificates,
+)
+from marl2d.gene_mrta_v120.capabilities import (
+    _published_rounding_tolerance,
+    evaluate_gene,
 )
 from marl2d.gene_mrta_v120.gene import (
     ScalableRouteTailGene,
@@ -174,3 +182,100 @@ def test_v120_parser_accepts_standard_tsplib_eof_marker():
     assert edge_type == "EUC_2D"
     assert robot_count == 3
     assert coordinates.shape == (5, 2)
+
+
+def _precision_instance(
+    *,
+    reference_kind,
+    reference_value=2299.16,
+):
+    return MinMaxMTSPInstance(
+        instance_id="precision_case",
+        base_name="precision_case",
+        edge_weight_type="EUC_2D",
+        robot_count=1,
+        coordinates=np.asarray(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+            ],
+            dtype=np.float64,
+        ),
+        reference_value=reference_value,
+        reference_kind=reference_kind,
+        reference_source="test",
+        benchmark_set="S",
+        split="evolution",
+    )
+
+
+def test_v120_published_two_decimal_tolerance_is_half_cent():
+    assert np.isclose(
+        _published_rounding_tolerance(2299.16),
+        0.005,
+    )
+
+
+def test_v120_exact_reference_rounding_does_not_create_false_super_optimum(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        capabilities,
+        "rollout_gene",
+        lambda *args, **kwargs: SimpleNamespace(
+            success=True,
+            completion=1.0,
+            objective=2299.157678942173,
+        ),
+    )
+    assessment = evaluate_gene(
+        None,
+        [
+            _precision_instance(
+                reference_kind="exact_optimum",
+            )
+        ],
+    )
+    row = assessment.instances[0]
+    assert row.reference_retention == 1.0
+    assert row.gap_to_reference == 0.0
+    assert assessment.exact_matches == 1
+
+
+def test_v120_bks_requires_improvement_beyond_published_precision(
+    monkeypatch,
+):
+    objectives = iter(
+        [
+            2299.157678942173,
+            2299.14,
+        ]
+    )
+
+    monkeypatch.setattr(
+        capabilities,
+        "rollout_gene",
+        lambda *args, **kwargs: SimpleNamespace(
+            success=True,
+            completion=1.0,
+            objective=next(objectives),
+        ),
+    )
+
+    instance = _precision_instance(
+        reference_kind="best_known",
+    )
+
+    rounded_equal = evaluate_gene(
+        None,
+        [instance],
+    )
+    assert rounded_equal.instances[0].reference_retention == 1.0
+    assert rounded_equal.bks_improvements == 0
+
+    genuine_improvement = evaluate_gene(
+        None,
+        [instance],
+    )
+    assert genuine_improvement.instances[0].reference_retention > 1.0
+    assert genuine_improvement.bks_improvements == 1
