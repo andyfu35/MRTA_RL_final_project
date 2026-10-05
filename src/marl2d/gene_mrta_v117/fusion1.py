@@ -11,30 +11,55 @@ import numpy as np
 from marl2d.gene_mrta_v110.recombination import hidden_block_indices
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
+from marl2d.gene_mrta_v117.pareto_bank import (
+    analysis_best_by_axis,
+    capability_distance,
+    crowding_trim_ids,
+    maximin_gene_id,
+    pareto_front_ids,
+    rebuild_pareto_bank,
+)
 from marl2d.gene_mrta_v117.stage_a_oracle_bank import load_stage_a_oracle_bank
 from marl2d.gene_mrta_v117.stage_a_train import (
-    EPS,
     CHECKPOINT_VERSION,
     Record,
-    _archives,
-    _best,
     _evaluate,
     _gene_id,
     _record_from_dict,
-    _rebuild_active,
     _screen_indices,
     _subset,
 )
 
 
-FUSION1_VERSION = "v117_fusion1_checkpoint_v2_progressive"
+FUSION1_VERSION = "v117_fusion1_checkpoint_v3_pareto"
 
 
-PROGRESSIVE_OPERATORS = (
-    "sparse_block_graft",
-    "sparse_block_blend",
-    "near_parent_blend",
-)
+def _atomic_write(
+    path: Path,
+    payload: dict[str, Any],
+) -> None:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    temp = path.with_suffix(
+        path.suffix + ".tmp"
+    )
+    with temp.open(
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(
+            payload,
+            handle,
+            indent=2,
+            ensure_ascii=False,
+        )
+        handle.flush()
+        os.fsync(
+            handle.fileno()
+        )
+    temp.replace(path)
 
 
 def _progressive_offspring_family(
@@ -43,8 +68,6 @@ def _progressive_offspring_family(
     rng: np.random.Generator,
     *,
     children: int,
-    mutation_sigma: float,
-    mutation_rate: float,
 ) -> list[tuple[RouteTailDirectGene, str]]:
     if children <= 0:
         raise ValueError(
@@ -68,6 +91,12 @@ def _progressive_offspring_family(
         ]
     ] = []
 
+    operators = (
+        "sparse_block_graft",
+        "sparse_block_blend",
+        "near_parent_blend",
+    )
+
     for child_index in range(
         children
     ):
@@ -90,17 +119,17 @@ def _progressive_offspring_family(
             else "B<-A"
         )
 
-        operator = PROGRESSIVE_OPERATORS[
+        operator = operators[
             child_index
-            % len(
-                PROGRESSIVE_OPERATORS
-            )
+            % len(operators)
         ]
 
         recipient_vec = (
             recipient.vector_data
         )
-        donor_vec = donor.vector_data
+        donor_vec = (
+            donor.vector_data
+        )
         child = recipient_vec.copy()
 
         if operator in {
@@ -198,7 +227,6 @@ def _progressive_offspring_family(
                 + donor_weight
                 * donor_vec
             )
-
         else:
             raise AssertionError(
                 operator
@@ -213,19 +241,6 @@ def _progressive_offspring_family(
                 recipient.hidden_dim
             ),
         )
-        if mutation_sigma > 0.0:
-            gene = RouteTailDirectGene.from_v18(
-                gene.mutated(
-                    rng,
-                    sigma=(
-                        mutation_sigma
-                    ),
-                    mutation_rate=(
-                        mutation_rate
-                    ),
-                )
-            )
-
         result.append(
             (
                 gene,
@@ -239,291 +254,171 @@ def _progressive_offspring_family(
     return result
 
 
-def _passed_axes(
-    child_score: dict[str, float],
-    union: tuple[str, ...],
-    parent_a: dict[str, float],
-    parent_b: dict[str, float],
-    ceiling: dict[str, float] | None,
-    *,
-    threshold: float,
-) -> tuple[str, ...]:
-    passed: list[str] = []
-    for axis in union:
-        parent_floor = max(
-            parent_a[axis],
-            parent_b[axis],
-            EPS,
-        )
-        if (
-            child_score[axis]
-            / parent_floor
-            < threshold
-        ):
-            continue
-        if ceiling is not None:
-            if (
-                child_score[axis]
-                / max(
-                    ceiling[axis],
-                    EPS,
-                )
-                < threshold
-            ):
-                continue
-        passed.append(axis)
-    return tuple(
-        sorted(passed)
-    )
-
-
-def _atomic_write(
-    path: Path,
-    payload: dict[str, Any],
-) -> None:
-    path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-    temp = path.with_suffix(
-        path.suffix + ".tmp"
-    )
-    with temp.open(
-        "w",
-        encoding="utf-8",
-    ) as handle:
-        json.dump(
-            payload,
-            handle,
-            indent=2,
-            ensure_ascii=False,
-        )
-        handle.flush()
-        os.fsync(
-            handle.fileno()
-        )
-    temp.replace(path)
-
-
-def _record_quality(
-    record: Record,
-    best: dict[str, float],
-) -> float:
-    caps = (
-        record.capabilities
-        if record.capabilities
-        else BASE_AXES
-    )
-    return float(
-        min(
-            record.scores[axis]
-            / max(best[axis], EPS)
-            for axis in caps
-        )
-    )
-
-
-def _parent_pool(
-    records: dict[str, Record],
-    *,
-    archive_size: int,
-) -> list[str]:
-    archives = _archives(
-        records,
-        archive_size,
-    )
-    ids: set[str] = set()
-    for axis_ids in archives.values():
-        ids.update(axis_ids)
-
-    for rid, record in records.items():
-        if len(
-            record.inherited_capabilities
-        ) >= 2:
-            ids.add(rid)
-
-    return sorted(ids)
-
-
 def _choose_pairs(
     records: dict[str, Record],
     *,
     pair_count: int,
-    archive_size: int,
     rng: np.random.Generator,
-) -> list[tuple[str, str, tuple[str, ...]]]:
-    ids = _parent_pool(
-        records,
-        archive_size=archive_size,
-    )
+) -> list[tuple[str, str]]:
+    ids = list(records)
     if len(ids) < 2:
         raise RuntimeError(
-            "Fusion-1 requires at least two parent candidates"
+            "Pareto mating requires at least two Genes"
         )
 
-    best = _best(records)
     ranked: list[
         tuple[
-            tuple[float, ...],
+            float,
+            float,
             str,
             str,
-            tuple[str, ...],
         ]
     ] = []
 
     for i, a in enumerate(ids):
-        caps_a = set(
-            records[a].capabilities
-        )
-        if not caps_a:
-            continue
-
         for b in ids[i + 1 :]:
-            caps_b = set(
-                records[b].capabilities
-            )
-            if not caps_b:
-                continue
-
-            union = tuple(
-                sorted(
-                    caps_a | caps_b
+            distance = (
+                capability_distance(
+                    records[a].scores,
+                    records[b].scores,
                 )
-            )
-            if len(union) < 2:
-                continue
-
-            adds_a = len(
-                caps_b - caps_a
-            )
-            adds_b = len(
-                caps_a - caps_b
-            )
-            complementary = (
-                adds_a + adds_b
-            )
-            if complementary <= 0:
-                continue
-
-            has_time_priority = int(
-                (
-                    "global_time_optimality"
-                    in union
-                )
-                and (
-                    "global_priority_optimality"
-                    in union
-                )
-            )
-            q = min(
-                _record_quality(
-                    records[a],
-                    best,
-                ),
-                _record_quality(
-                    records[b],
-                    best,
-                ),
-            )
-
-            # Primary goal: maximize capability union.
-            # Secondary goal: explicitly expose the Time/Priority conflict.
-            # Tiny random jitter prevents the same deterministic pair set
-            # from dominating every Fusion-1 round.
-            rank = (
-                float(len(union)),
-                float(has_time_priority),
-                float(complementary),
-                float(q),
-                float(rng.random()),
             )
             ranked.append(
                 (
-                    rank,
+                    distance,
+                    float(
+                        rng.random()
+                    ),
                     a,
                     b,
-                    union,
                 )
             )
 
     ranked.sort(
-        key=lambda item: item[0],
-        reverse=True,
+        reverse=True
     )
-    selected = ranked[
-        : min(
-            pair_count,
-            len(ranked),
-        )
-    ]
     return [
-        (
-            a,
-            b,
-            union,
-        )
-        for _rank, a, b, union
-        in selected
+        (a, b)
+        for _distance, _jitter, a, b
+        in ranked[
+            : min(
+                pair_count,
+                len(ranked),
+            )
+        ]
     ]
 
 
-def _inheritance_ratio(
-    child_score: dict[str, float],
-    union: tuple[str, ...],
-    parent_a: dict[str, float],
-    parent_b: dict[str, float],
-) -> float:
-    if not union:
-        return 0.0
+def _screen_pareto_indices(
+    genes: list[RouteTailDirectGene],
+    scores: list[dict[str, float]],
+    *,
+    limit: int,
+) -> list[int]:
+    temp: dict[str, Record] = {}
+    index_by_id: dict[str, int] = {}
 
-    ratios = []
-    for axis in union:
-        baseline = max(
-            parent_a[axis],
-            parent_b[axis],
-            EPS,
+    for index, (
+        gene,
+        score,
+    ) in enumerate(
+        zip(
+            genes,
+            scores,
+            strict=True,
         )
-        ratios.append(
-            child_score[axis]
-            / baseline
+    ):
+        rid = (
+            f"screen_{index:06d}"
         )
-    return float(
-        min(ratios)
+        temp[rid] = Record(
+            record_id=rid,
+            gene=gene,
+            scores=score,
+            capabilities=(),
+            origin="screen",
+            generation=0,
+        )
+        index_by_id[rid] = (
+            index
+        )
+
+    front, _dominated = (
+        pareto_front_ids(
+            temp
+        )
     )
+    kept, _removed = (
+        crowding_trim_ids(
+            temp,
+            front,
+            max_size=max(
+                1,
+                limit,
+            ),
+        )
+    )
+    return [
+        index_by_id[rid]
+        for rid in kept
+    ]
 
 
-def _best_fusion_record(
+def _bank_best_scores(
     records: dict[str, Record],
-) -> Record | None:
-    best = _best(records)
-    candidates = [
-        record
-        for record in records.values()
-        if len(
-            record.inherited_capabilities
-        ) >= 2
-    ]
-    if not candidates:
-        return None
+) -> dict[str, float]:
+    if not records:
+        return {
+            axis: 0.0
+            for axis in BASE_AXES
+        }
+    return {
+        axis: max(
+            float(
+                record.scores[
+                    axis
+                ]
+            )
+            for record
+            in records.values()
+        )
+        for axis in BASE_AXES
+    }
 
-    return max(
-        candidates,
-        key=lambda record: (
-            len(
-                record.inherited_capabilities
-            ),
-            min(
-                record.scores[axis]
-                / max(best[axis], EPS)
-                for axis in (
-                    record.inherited_capabilities
-                )
-            ),
-        ),
+
+def _maximin_summary(
+    records: dict[str, Record],
+) -> dict[str, Any] | None:
+    rid = maximin_gene_id(
+        records
     )
+    if rid is None:
+        return None
+    record = records[rid]
+    return {
+        "record_id": rid,
+        "scores": record.scores,
+        "min_capability": float(
+            min(
+                record.scores[
+                    axis
+                ]
+                for axis in BASE_AXES
+            )
+        ),
+        "origin": record.origin,
+        "parents": list(
+            record.parents
+        ),
+        "operator": (
+            record.operator
+        ),
+    }
 
 
-def run(args: argparse.Namespace) -> Path:
+def run(
+    args: argparse.Namespace,
+) -> Path:
     source_path = Path(
         args.source_checkpoint
     )
@@ -537,13 +432,14 @@ def run(args: argparse.Namespace) -> Path:
         != CHECKPOINT_VERSION
     ):
         raise ValueError(
-            "Fusion-1 source must be a final V1.17 Stage-A checkpoint"
+            "Pareto Fusion-1 source must be the frozen Stage-A checkpoint"
         )
-    if source.get("axes") != list(
-        BASE_AXES
+    if (
+        source.get("axes")
+        != list(BASE_AXES)
     ):
         raise ValueError(
-            "Fusion-1 source capability axes do not match"
+            "Source capability axes do not match"
         )
 
     oracle_bank = Path(
@@ -580,15 +476,41 @@ def run(args: argparse.Namespace) -> Path:
             != FUSION1_VERSION
         ):
             raise ValueError(
-                "Existing Fusion-1 checkpoint has incompatible version"
+                "Existing Pareto Fusion-1 checkpoint has incompatible version"
             )
+        if (
+            float(
+                checkpoint[
+                    "pareto_epsilon"
+                ]
+            )
+            != float(
+                args.pareto_epsilon
+            )
+            or int(
+                checkpoint[
+                    "pareto_max_size"
+                ]
+            )
+            != int(
+                args.pareto_max_size
+            )
+        ):
+            raise ValueError(
+                "Pareto Bank settings do not match existing checkpoint"
+            )
+
         rng = np.random.default_rng()
         rng.bit_generator.state = (
-            checkpoint["rng_state"]
+            checkpoint[
+                "rng_state"
+            ]
         )
         records = {
             row["record_id"]:
-                _record_from_dict(row)
+                _record_from_dict(
+                    row
+                )
             for row in checkpoint[
                 "records"
             ]
@@ -599,11 +521,16 @@ def run(args: argparse.Namespace) -> Path:
                 [],
             )
         )
-        start_round = int(
-            checkpoint["round"]
-        ) + 1
+        start_round = (
+            int(
+                checkpoint[
+                    "round"
+                ]
+            )
+            + 1
+        )
         print(
-            "V117_FUSION1_RESUME "
+            "V117_PARETO_FUSION_RESUME "
             + json.dumps(
                 {
                     "next_round": (
@@ -612,7 +539,7 @@ def run(args: argparse.Namespace) -> Path:
                     "target_rounds": (
                         args.rounds
                     ),
-                    "active_genes": len(
+                    "pareto_size": len(
                         records
                     ),
                 }
@@ -627,197 +554,147 @@ def run(args: argparse.Namespace) -> Path:
         rng = np.random.default_rng(
             args.seed
         )
-        records = {
+        source_records = {
             row["record_id"]:
-                _record_from_dict(row)
+                _record_from_dict(
+                    row
+                )
             for row in source[
                 "records"
             ]
         }
+        initial = rebuild_pareto_bank(
+            source_records,
+            max_size=(
+                args.pareto_max_size
+            ),
+            epsilon=(
+                args.pareto_epsilon
+            ),
+        )
+        records = dict(
+            initial.records
+        )
         history = []
         start_round = 0
 
-    zero_anchor = RouteTailDirectGene(
-        np.zeros(
-            RouteTailDirectGene.parameter_count(
-                8
+        print(
+            "V117_PARETO_INIT "
+            + json.dumps(
+                {
+                    "source_genes": len(
+                        source_records
+                    ),
+                    "pareto_genes": len(
+                        records
+                    ),
+                    "dominated_removed": len(
+                        initial.dominated_ids
+                    ),
+                    "epsilon_removed": len(
+                        initial.epsilon_duplicate_ids
+                    ),
+                    "crowding_removed": len(
+                        initial.crowding_removed_ids
+                    ),
+                }
             ),
-            dtype=np.float64,
-        ),
-        hidden_dim=8,
-    )
+            flush=True,
+        )
 
     for round_index in range(
         start_round,
         args.rounds,
     ):
-        best_before = _best(
-            records
-        )
-        pairs = _choose_pairs(
+        parent_pairs = _choose_pairs(
             records,
-            pair_count=args.mating_pairs,
-            archive_size=args.archive_size,
+            pair_count=(
+                args.mating_pairs
+            ),
             rng=rng,
         )
 
+        child_genes: list[
+            RouteTailDirectGene
+        ] = []
+        child_parents: list[
+            tuple[str, str]
+        ] = []
+        child_operators: list[
+            str
+        ] = []
+
+        for a, b in parent_pairs:
+            family = (
+                _progressive_offspring_family(
+                    records[a].gene,
+                    records[b].gene,
+                    rng,
+                    children=(
+                        args.children_per_pair
+                    ),
+                )
+            )
+            for gene, operator in family:
+                child_genes.append(
+                    gene
+                )
+                child_parents.append(
+                    (a, b)
+                )
+                child_operators.append(
+                    operator
+                )
+
         screen_idx = _screen_indices(
-            10000 + round_index,
+            20000 + round_index,
             len(worlds),
             min(
                 args.screen_worlds,
                 len(worlds),
             ),
         )
-        screen_worlds = _subset(
-            worlds,
-            screen_idx,
-        )
-        screen_completion = _subset(
-            completion_optima,
-            screen_idx,
-        )
-        screen_time = _subset(
-            time_optima,
-            screen_idx,
-        )
-        screen_path = _subset(
-            path_optima,
-            screen_idx,
-        )
-        screen_priority = _subset(
-            priority_optima,
-            screen_idx,
-        )
-        screen_deadline = _subset(
-            deadline_optima,
-            screen_idx,
-        )
-
-        child_genes: list[
-            RouteTailDirectGene
-        ] = []
-        child_pairs: list[
-            tuple[str, str]
-        ] = []
-        child_unions: list[
-            tuple[str, ...]
-        ] = []
-        child_operators: list[
-            str
-        ] = []
-
-        for a, b, union in pairs:
-            family = _progressive_offspring_family(
-                records[a].gene,
-                records[b].gene,
-                rng,
-                children=(
-                    args.children_per_pair
-                ),
-                mutation_sigma=(
-                    args.post_mating_sigma
-                ),
-                mutation_rate=(
-                    args.post_mating_rate
-                ),
-            )
-            for gene, operator in family:
-                child_genes.append(gene)
-                child_pairs.append(
-                    (a, b)
-                )
-                child_unions.append(
-                    union
-                )
-                child_operators.append(
-                    operator
-                )
-
         child_screen = _evaluate(
             child_genes,
-            screen_worlds,
-            config,
-            screen_completion,
-            screen_time,
-            screen_path,
-            screen_priority,
-            screen_deadline,
-        )
-
-        parent_ids = sorted(
-            {
-                rid
-                for pair in child_pairs
-                for rid in pair
-            }
-        )
-        parent_screen_values = _evaluate(
-            [
-                records[rid].gene
-                for rid in parent_ids
-            ],
-            screen_worlds,
-            config,
-            screen_completion,
-            screen_time,
-            screen_path,
-            screen_priority,
-            screen_deadline,
-        )
-        parent_screen = {
-            rid: score
-            for rid, score in zip(
-                parent_ids,
-                parent_screen_values,
-                strict=True,
-            )
-        }
-
-        ranked = sorted(
-            range(
-                len(child_genes)
+            _subset(
+                worlds,
+                screen_idx,
             ),
-            key=lambda idx: (
-                len(
-                    _passed_axes(
-                        child_screen[idx],
-                        child_unions[idx],
-                        parent_screen[
-                            child_pairs[idx][0]
-                        ],
-                        parent_screen[
-                            child_pairs[idx][1]
-                        ],
-                        None,
-                        threshold=(
-                            args.screen_threshold
-                        ),
-                    )
-                ),
-                _inheritance_ratio(
-                    child_screen[idx],
-                    child_unions[idx],
-                    parent_screen[
-                        child_pairs[idx][0]
-                    ],
-                    parent_screen[
-                        child_pairs[idx][1]
-                    ],
-                ),
+            config,
+            _subset(
+                completion_optima,
+                screen_idx,
             ),
-            reverse=True,
+            _subset(
+                time_optima,
+                screen_idx,
+            ),
+            _subset(
+                path_optima,
+                screen_idx,
+            ),
+            _subset(
+                priority_optima,
+                screen_idx,
+            ),
+            _subset(
+                deadline_optima,
+                screen_idx,
+            ),
         )
-        full_idx = ranked[
-            : min(
-                args.full_candidates,
-                len(ranked),
-            )
-        ]
 
+        full_idx = (
+            _screen_pareto_indices(
+                child_genes,
+                child_screen,
+                limit=(
+                    args.full_candidates
+                ),
+            )
+        )
         full_genes = [
-            child_genes[idx]
-            for idx in full_idx
+            child_genes[index]
+            for index in full_idx
         ]
         full_scores = _evaluate(
             full_genes,
@@ -830,13 +707,19 @@ def run(args: argparse.Namespace) -> Path:
             deadline_optima,
         )
 
-        accepted = 0
-        full_union_accepted = 0
-        accepted_sizes: list[int] = []
-        accepted_time_priority = 0
-        for local_idx, (
+        before_ids = set(
+            records
+        )
+        candidate_ids: list[
+            str
+        ] = []
+
+        merged = dict(
+            records
+        )
+        for local_index, (
             gene,
-            score,
+            scores,
         ) in enumerate(
             zip(
                 full_genes,
@@ -844,176 +727,129 @@ def run(args: argparse.Namespace) -> Path:
                 strict=True,
             )
         ):
-            source_idx = full_idx[
-                local_idx
-            ]
-            a, b = child_pairs[
-                source_idx
-            ]
-            union = child_unions[
-                source_idx
-            ]
-
-            inherited = _passed_axes(
-                score,
-                union,
-                records[a].scores,
-                records[b].scores,
-                best_before,
-                threshold=(
-                    args.threshold
-                ),
+            source_index = (
+                full_idx[
+                    local_index
+                ]
             )
-            passed = (
-                len(inherited)
-                >= args.min_inherited
-            )
-
             rid = _gene_id(
                 gene
             )
-            if rid in records:
+            if rid in merged:
                 continue
 
-            records[rid] = Record(
+            candidate_ids.append(
+                rid
+            )
+            merged[rid] = Record(
                 record_id=rid,
                 gene=gene,
-                scores=score,
-                capabilities=(
-                    inherited
-                    if passed
-                    else ()
-                ),
-                inherited_capabilities=(
-                    inherited
-                    if passed
-                    else ()
-                ),
-                origin="mating",
+                scores=scores,
+                capabilities=(),
+                archive_capabilities=(),
+                inherited_capabilities=(),
+                origin="pareto_mating",
                 generation=(
-                    1000
+                    2000
                     + round_index
                 ),
-                parents=(a, b),
+                parents=(
+                    child_parents[
+                        source_index
+                    ]
+                ),
                 operator=(
                     child_operators[
-                        source_idx
+                        source_index
                     ]
                 ),
             )
-            if passed:
-                accepted += 1
-                accepted_sizes.append(
-                    len(inherited)
-                )
-                if (
-                    len(inherited)
-                    == len(union)
-                ):
-                    full_union_accepted += 1
-                if (
-                    "global_time_optimality"
-                    in inherited
-                    and "global_priority_optimality"
-                    in inherited
-                ):
-                    accepted_time_priority += 1
 
-        records, archives = _rebuild_active(
-            records,
-            archive_size=(
-                args.archive_size
+        rebuilt = rebuild_pareto_bank(
+            merged,
+            max_size=(
+                args.pareto_max_size
             ),
-            hybrid_limit=(
-                args.hybrid_limit
+            epsilon=(
+                args.pareto_epsilon
             ),
-            certification_threshold=(
-                args.threshold
-            ),
+        )
+        records = dict(
+            rebuilt.records
         )
 
-        best_after = _best(
+        after_ids = set(
             records
         )
-        fusion = _best_fusion_record(
-            records
+        inserted_ids = sorted(
+            set(candidate_ids)
+            & after_ids
         )
-        max_inherited = max(
-            (
-                len(
-                    record.inherited_capabilities
-                )
-                for record
-                in records.values()
-            ),
-            default=0,
+        old_removed_ids = sorted(
+            before_ids
+            - after_ids
+        )
+
+        best_view = (
+            analysis_best_by_axis(
+                records
+            )
         )
         row = {
             "round": round_index,
-            "active_genes": len(
+            "pareto_size": len(
                 records
             ),
             "mating_pairs": len(
-                pairs
+                parent_pairs
             ),
             "children_screened": len(
                 child_genes
             ),
-            "children_full_evaluated": (
-                len(full_genes)
+            "screen_pareto_candidates": len(
+                full_genes
             ),
-            "accepted_progressive_children": (
-                accepted
+            "new_children_full_evaluated": len(
+                candidate_ids
             ),
-            "accepted_full_union_children": (
-                full_union_accepted
+            "pareto_inserted_children": len(
+                inserted_ids
             ),
-            "accepted_inherited_sizes": (
-                accepted_sizes
+            "pareto_inserted_ids": (
+                inserted_ids
             ),
-            "accepted_time_priority_children": (
-                accepted_time_priority
+            "old_pareto_removed": len(
+                old_removed_ids
             ),
-            "max_inherited_capabilities": (
-                max_inherited
+            "dominated_removed_total": len(
+                rebuilt.dominated_ids
             ),
-            "best": best_after,
-            "specialists": {
-                axis: (
-                    archives[axis][0]
-                    if archives[axis]
-                    else None
+            "epsilon_removed_total": len(
+                rebuilt.epsilon_duplicate_ids
+            ),
+            "crowding_removed_total": len(
+                rebuilt.crowding_removed_ids
+            ),
+            "best_scores": (
+                _bank_best_scores(
+                    records
                 )
-                for axis in BASE_AXES
-            },
-            "best_fusion_gene": (
-                None
-                if fusion is None
-                else {
-                    "record_id": (
-                        fusion.record_id
-                    ),
-                    "operator": (
-                        fusion.operator
-                    ),
-                    "parents": list(
-                        fusion.parents
-                    ),
-                    "inherited_capabilities": list(
-                        fusion.inherited_capabilities
-                    ),
-                    "archive_capabilities": list(
-                        fusion.archive_capabilities
-                    ),
-                    "scores": (
-                        fusion.scores
-                    ),
-                }
+            ),
+            "analysis_best_by_axis": (
+                best_view
+            ),
+            "maximin_gene": (
+                _maximin_summary(
+                    records
+                )
             ),
         }
-        history.append(row)
+        history.append(
+            row
+        )
+
         print(
-            "V117_FUSION1 "
+            "V117_PARETO_FUSION "
             + json.dumps(
                 row,
                 ensure_ascii=False,
@@ -1022,7 +858,9 @@ def run(args: argparse.Namespace) -> Path:
         )
 
         payload = {
-            "version": FUSION1_VERSION,
+            "version": (
+                FUSION1_VERSION
+            ),
             "round": round_index,
             "source_checkpoint": str(
                 source_path
@@ -1033,13 +871,20 @@ def run(args: argparse.Namespace) -> Path:
             "axes": list(
                 BASE_AXES
             ),
+            "pareto_epsilon": float(
+                args.pareto_epsilon
+            ),
+            "pareto_max_size": int(
+                args.pareto_max_size
+            ),
             "rng_state": (
                 rng.bit_generator.state
             ),
             "records": [
                 record.to_dict()
-                for record
-                in records.values()
+                for record in (
+                    records.values()
+                )
             ],
             "history": history,
         }
@@ -1048,19 +893,8 @@ def run(args: argparse.Namespace) -> Path:
             payload,
         )
 
-        if (
-            max_inherited
-            >= len(BASE_AXES)
-        ):
-            print(
-                "V117_FUSION1_ALL_CAPABILITIES=true",
-                flush=True,
-            )
-            if args.stop_on_all:
-                break
-
     print(
-        f"V117_FUSION1_RUN_DIR={output_dir}",
+        f"V117_PARETO_FUSION_RUN_DIR={output_dir}",
         flush=True,
     )
     return output_dir
@@ -1094,57 +928,27 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--screen-worlds",
         type=int,
-        default=8,
+        default=12,
     )
     p.add_argument(
         "--full-candidates",
         type=int,
-        default=32,
+        default=64,
     )
     p.add_argument(
-        "--archive-size",
+        "--pareto-max-size",
         type=int,
-        default=16,
+        default=256,
     )
     p.add_argument(
-        "--hybrid-limit",
-        type=int,
-        default=192,
-    )
-    p.add_argument(
-        "--threshold",
+        "--pareto-epsilon",
         type=float,
-        default=0.95,
-    )
-    p.add_argument(
-        "--screen-threshold",
-        type=float,
-        default=0.90,
-    )
-    p.add_argument(
-        "--min-inherited",
-        type=int,
-        default=2,
-    )
-    p.add_argument(
-        "--post-mating-sigma",
-        type=float,
-        default=0.0,
-    )
-    p.add_argument(
-        "--post-mating-rate",
-        type=float,
-        default=0.05,
+        default=0.005,
     )
     p.add_argument(
         "--seed",
         type=int,
-        default=11701,
-    )
-    p.add_argument(
-        "--stop-on-all",
-        action=argparse.BooleanOptionalAction,
-        default=False,
+        default=11702,
     )
     return p
 
