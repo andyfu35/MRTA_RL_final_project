@@ -391,3 +391,29 @@ solution may already have been discovered.
 
 This is one exact hard world only; do not generalize the 98.19% retention to
 all 6R/30T instances yet.
+
+
+## V1.16 6R/30T 10-seed exact result
+
+Ten 6R/30T worlds (seeds 116050000..116050009) were solved to proven global
+optimality with unlimited HiGHS.
+
+Frozen 148-parameter Gene Policy:
+
+- mean exact retention: 96.95%;
+- worst observed retention: 91.52%;
+- worst observed exact relative gap: 8.48%;
+- mean Policy time: 7.98 ms;
+- maximum Policy time: 11.51 ms.
+
+Exact MILP:
+
+- mean proof time: 453.48 s;
+- median proof time: 231.52 s;
+- maximum proof time: 1734.61 s = 28.91 min;
+- 5/10 worlds exceed 300 s;
+- mean MILP/Policy time ratio: about 47,885x.
+
+The worst quality seed is 116050009. The slowest MILP seed is 116050002.
+These are empirical extrema over 10 tested worlds, not theoretical worst-case
+bounds.
