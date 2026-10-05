@@ -21,6 +21,11 @@ from .fixture import (
 )
 
 
+INFORMS_SUPPLEMENT_URL = (
+    "https://pubsonline.informs.org/doi/suppl/10.1287/trsc.2020.1005"
+)
+
+
 class _LinkParser(
     HTMLParser
 ):
@@ -163,6 +168,214 @@ def _safe_relative_path(
     if not relative:
         relative = "index.html"
     return relative
+
+
+def download_informs_supplement(
+    output_dir: Path,
+    *,
+    supplement_url: str = (
+        INFORMS_SUPPLEMENT_URL
+    ),
+) -> list[
+    Path
+]:
+    """
+    Recover the LQL/MTRPD benchmark from the supplemental-material page of
+    Muritiba et al. (Transportation Science, DOI 10.1287/trsc.2020.1005).
+
+    That paper explicitly reuses the 180 Luo-Qin-Lim MTRPD instances.
+    We preserve every downloadable supplemental asset exactly as published.
+    """
+    target_root = Path(
+        output_dir
+    )
+    target_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    body = _read_url(
+        supplement_url
+    )
+    text_body = body.decode(
+        "utf-8",
+        errors="replace",
+    )
+    parser = _LinkParser()
+    parser.feed(
+        text_body
+    )
+
+    candidates: list[
+        str
+    ] = []
+    for href in parser.links:
+        absolute = urllib.parse.urljoin(
+            supplement_url,
+            href,
+        )
+        parsed = urllib.parse.urlparse(
+            absolute
+        )
+        if parsed.scheme not in {
+            "http",
+            "https",
+        }:
+            continue
+        if parsed.netloc != "pubsonline.informs.org":
+            continue
+        lower = absolute.lower()
+        if (
+            "downloadsupplement"
+            in lower
+            or "/supp/" in lower
+            or "supplement"
+            in lower
+            or lower.endswith(
+                (
+                    ".zip",
+                    ".csv",
+                    ".txt",
+                    ".dat",
+                    ".xlsx",
+                    ".xls",
+                    ".json",
+                    ".pdf",
+                )
+            )
+        ):
+            candidates.append(
+                absolute
+            )
+
+    # Some publisher pages expose the supplemental page itself through a
+    # redirect but hide asset links behind script-generated markup. Preserve
+    # the page for inspection even when no files are discovered.
+    page_path = (
+        target_root
+        / "_INFORMS_SUPPLEMENT_PAGE.html"
+    )
+    page_path.write_bytes(
+        body
+    )
+
+    downloaded: list[
+        Path
+    ] = []
+    seen: set[
+        str
+    ] = set()
+    for index, url in enumerate(
+        candidates
+    ):
+        if url in seen:
+            continue
+        seen.add(
+            url
+        )
+        try:
+            payload = _read_url(
+                url
+            )
+        except Exception as exc:
+            print(
+                "V119_INFORMS_SKIP "
+                f"{url} "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
+            continue
+
+        parsed = urllib.parse.urlparse(
+            url
+        )
+        name = Path(
+            parsed.path
+        ).name
+        if (
+            not name
+            or name in {
+                "supp",
+                "downloadSupplement",
+            }
+        ):
+            name = (
+                f"supplement_{index:03d}.bin"
+            )
+
+        target = (
+            target_root
+            / name
+        )
+        counter = 1
+        while target.exists():
+            target = (
+                target_root
+                / (
+                    f"{target.stem}_{counter}"
+                    f"{target.suffix}"
+                )
+            )
+            counter += 1
+
+        target.write_bytes(
+            payload
+        )
+        downloaded.append(
+            target
+        )
+        print(
+            "V119_INFORMS "
+            f"{target} "
+            f"url={url}",
+            flush=True,
+        )
+
+    metadata = {
+        "source": (
+            "Muritiba et al. 2021 Transportation Science supplement"
+        ),
+        "doi": (
+            "10.1287/trsc.2020.1005"
+        ),
+        "supplement_url": (
+            supplement_url
+        ),
+        "discovered_candidate_count": len(
+            candidates
+        ),
+        "downloaded_file_count": len(
+            downloaded
+        ),
+        "files": [
+            str(
+                path.relative_to(
+                    target_root
+                )
+            )
+            for path in downloaded
+        ],
+    }
+    (
+        target_root
+        / "_INFORMS_RECOVERY.json"
+    ).write_text(
+        json.dumps(
+            metadata,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    if not downloaded:
+        raise RuntimeError(
+            "INFORMS supplemental page was reachable but no downloadable "
+            "supplement assets were discovered. Inspect "
+            "_INFORMS_SUPPLEMENT_PAGE.html."
+        )
+
+    return downloaded
 
 
 def download_wayback_supplement(
@@ -670,29 +883,50 @@ def main() -> None:
                 flush=True,
             )
             print(
-                "V119_DOWNLOAD_FALLBACK=wayback",
+                "V119_DOWNLOAD_FALLBACK=informs",
                 flush=True,
             )
             try:
                 files = (
-                    download_wayback_supplement(
+                    download_informs_supplement(
                         Path(
                             args.output_dir
-                        ),
-                        root_url=(
-                            args.root_url
-                        ),
+                        )
                     )
                 )
-                source = "wayback"
-            except Exception as archive_exc:
-                raise SystemExit(
-                    "Could not download the historical MTRPD supplement "
-                    "from either the original host or the Internet Archive. "
-                    f"Original source: {args.root_url}\n"
-                    f"Live error: {type(live_exc).__name__}: {live_exc}\n"
-                    f"Wayback error: {type(archive_exc).__name__}: {archive_exc}"
-                ) from archive_exc
+                source = "informs"
+            except Exception as informs_exc:
+                print(
+                    "V119_INFORMS_DOWNLOAD_FAILED "
+                    f"{type(informs_exc).__name__}: {informs_exc}",
+                    flush=True,
+                )
+                print(
+                    "V119_DOWNLOAD_FALLBACK=wayback",
+                    flush=True,
+                )
+                try:
+                    files = (
+                        download_wayback_supplement(
+                            Path(
+                                args.output_dir
+                            ),
+                            root_url=(
+                                args.root_url
+                            ),
+                        )
+                    )
+                    source = "wayback"
+                except Exception as archive_exc:
+                    raise SystemExit(
+                        "Could not recover the MTRPD benchmark from the "
+                        "original host, the INFORMS supplemental-material "
+                        "page, or the Internet Archive. "
+                        f"Original source: {args.root_url}\n"
+                        f"Live error: {type(live_exc).__name__}: {live_exc}\n"
+                        f"INFORMS error: {type(informs_exc).__name__}: {informs_exc}\n"
+                        f"Wayback error: {type(archive_exc).__name__}: {archive_exc}"
+                    ) from archive_exc
         print(
             "V119_DOWNLOAD_SOURCE="
             f"{source}",
