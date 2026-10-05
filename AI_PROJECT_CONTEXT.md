@@ -1499,3 +1499,74 @@ Defaults:
 
 This dataset is intended to be directly comparable with the completed 10-seed
 6R/30T exact dataset for plotting quality and runtime scaling.
+
+
+## V1.17 clean two-stage retraining line
+
+A new clean training line has started. The purpose is to rebuild a Policy Gene
+using lessons from V1-V1.16 without inheriting old Policy parameters or old
+capability labels.
+
+Stage A is designed from complete known task semantics before hard-world
+inspection.
+
+Canonical Task:
+
+    task_id
+    position [x,y]
+    service_time
+    priority
+    deadline
+
+Canonical Robot:
+
+    robot_id
+    start_position [x,y]
+    initial_battery
+
+Global environment:
+
+    episode horizon
+    robot speed
+    battery capacity
+    energy per distance
+    obstacles
+    grid resolution
+
+A* path tables and all route-tail pair features are derived data, not static
+Task fields.
+
+Stage-A independent capability axes:
+
+1. completion
+2. time_retention = T_gene / T_star
+3. path_efficiency
+4. priority_satisfaction
+5. deadline_satisfaction
+6. workload_balance
+
+Battery remains a hard feasibility constraint rather than a capability axis.
+With the current energy model, energy is proportional to A* path distance, so
+path_efficiency supplies the travel/energy pressure without the trivial
+remaining-battery no-work loophole.
+
+Stage B is evidence-driven:
+
+- freeze Stage-A model/bank;
+- evaluate a large fixed development set;
+- extract hard worlds;
+- classify repeated failure mechanisms;
+- add only evidence-supported robustness axes;
+- retrain/fuse a final multi-capability model.
+
+Continuation preservation, fleet option reserve, tail-10 time, and similar
+robustness axes are intentionally NOT active in Stage A. They may be introduced
+in Stage B only if the new Stage-A failure analysis supports them.
+
+Implemented:
+
+- src/marl2d/gene_mrta_v117/schema.py
+- src/marl2d/gene_mrta_v117/capabilities.py
+- tests/test_gene_mrta_v117_schema.py
+- tools/run_gene_mrta_v117_mac.sh
+- docs/GENE_HOMOGENEOUS_MRTA_V117_TWO_STAGE_TRAINING.md
