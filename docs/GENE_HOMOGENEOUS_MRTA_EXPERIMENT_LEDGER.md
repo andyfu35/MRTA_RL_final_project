@@ -3736,3 +3736,36 @@ Training:
 Mating/recombination remains disabled until the V1.20 mutation-only Gene Bank
 has converged. A later phase will test whether specialists can fuse into one
 strong universal Gene.
+
+
+## V1.21 Resident-World SEGB
+
+V1.21 replaces the V1.20 small-population trainer as the primary SEGB
+evolution scheduler.
+
+Formal protocol:
+- 1000 candidate Gene worlds per round;
+- every Gene runs all 34 fixed evolution benchmark instances;
+- 50 rounds;
+- 34,000 rollouts per round;
+- 1,700,000 rollouts total;
+- Round 0: 1000 random Genes;
+- Round 1..49: 1000 inherited+mutated children from the previous frozen Gene
+  Bank;
+- parent sampling probability proportional to equal-axis total score squared;
+- Bank is updated only after all 1000 worlds complete the full 34-instance
+  evaluation;
+- Bank admission uses external capability Pareto selection, not parent-child
+  win/loss;
+- parent-child delta remains diagnostic only.
+
+Primary round-level convergence evidence:
+- population mean/median/min/max/std retention_small;
+- population mean/median/min/max/std retention_medium;
+- per-axis population mean delta from the previous round;
+- population overall retention;
+- population worst-instance retention;
+- Bank specialists and global best.
+
+V1.20 formal_s_mutation_seed120 is a conventional small-population baseline,
+not the primary SEGB result.
