@@ -3108,3 +3108,73 @@ Formal defaults:
 - 32 mating pairs x 4 children
 - 8 screen worlds
 - 95% capability inheritance threshold
+
+
+## V1.17 post-Stage-A pipeline
+
+Stage A formal 4R/20T x 32 exact-oracle worlds completed 50 generations.
+
+Final specialist ceilings at generation 49:
+
+- global_completion_optimality = 0.9440577651515143
+- global_time_optimality = 0.9848937195581706
+- global_path_efficiency = 0.9338499169797052
+- global_priority_optimality = 0.942236871706114
+- global_deadline_optimality = 0.9214409722222221
+- workload_balance = 0.9084818733160203
+
+Time and Priority specialists remained distinct through generation 49.
+
+Maximum inherited capability count briefly reached 5 at generation 2, then the
+formal population stabilized around 4-capability hybrids. This is treated as a
+capability-fusion bottleneck rather than a reason to redefine Stage-A axes.
+
+The next protocol is frozen as:
+
+1. Fusion-1:
+   mating-only consolidation from the final Stage-A bank;
+2. Unseen exact evaluation:
+   run mature specialists and Fusion-1 hybrids on new 4R/20T worlds;
+3. Hard-world mining:
+   select worlds where even the best hybrid has a weak worst capability;
+4. Hard-world targeted training:
+   define additional Stage-B robustness capability only after trace evidence;
+5. Fusion-2:
+   final mating between Stage-A specialists, Fusion-1 hybrids, and Stage-B
+   targeted specialists.
+
+Fusion-1 intentionally disables ordinary mutation and uses only clean
+parameter/block crossover operators.
+
+Default Fusion-1:
+
+- 20 mating rounds;
+- 64 parent pairs / round;
+- 4 children / pair;
+- 8-world screening;
+- 32 children promoted to full 32-world evaluation;
+- 95% full-union inheritance gate;
+- no post-mating mutation.
+
+Unseen development bank default:
+
+- 64 new 4R/20T worlds;
+- seed namespace 117200000+;
+- exact C*, T*, E*, P*, D*;
+- resumable oracle generation.
+
+Unseen audit candidate cohort:
+
+- one current specialist per Stage-A axis;
+- top 12 Fusion-1 hybrids;
+- hard worlds ranked primarily by the best available hybrid's weakest
+  capability retention, secondarily by the whole candidate frontier's weakest
+  capability.
+
+The hard-world audit exports:
+
+- unseen_audit.json
+- hard_world_bank.json
+
+Stage-B targeted capability definitions are deliberately not pre-registered.
+They must be justified by the unseen hard-world traces.
