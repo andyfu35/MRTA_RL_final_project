@@ -2058,3 +2058,32 @@ Reuse:
 
 Fresh 4-axis run:
     runs/gene_mrta_v118/formal_4r20t_100_fast_v3_4axis_seed118
+
+
+## V1.18 Primary three-axis update
+
+Current Primary definition:
+
+    Completion = hard success gate
+    Pareto = [Time, Path, Priority]
+
+Formal axis names:
+
+    time_earliness
+    path_efficiency
+    priority_service
+
+Removed from formal Pareto:
+- workload_balance
+- deadline_satisfaction
+
+Deadline remains world metadata / an observation feature for architecture
+compatibility, but it does not affect current Primary selection or Gene Bank
+membership. A future deadline-aware scenario can re-enable it as a separate
+variant rather than mixing it into the Primary benchmark.
+
+Reuse:
+    runs/gene_mrta_v118/world_formal_4r20t_100_fast_v2.json
+
+Fresh three-axis run:
+    runs/gene_mrta_v118/formal_4r20t_100_fast_v4_3axis_seed118
