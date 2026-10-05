@@ -4,8 +4,12 @@ import argparse
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+import ssl
+import subprocess
 import urllib.parse
 import urllib.request
+
+import truststore
 
 from .benchmark import (
     PUBLIC_SOURCE_URL,
@@ -48,6 +52,43 @@ class _LinkParser(
                 )
 
 
+def _system_ssl_context():
+    # Use the native macOS/Windows/Linux trust store instead of relying on
+    # the Python.org framework bundle. TLS verification remains enabled.
+    return truststore.SSLContext(
+        ssl.PROTOCOL_TLS_CLIENT
+    )
+
+
+def _curl_verified_read(
+    url: str,
+) -> bytes:
+    parsed = urllib.parse.urlparse(
+        url
+    )
+    if parsed.scheme != "https":
+        raise RuntimeError(
+            "curl fallback only supports HTTPS"
+        )
+    result = subprocess.run(
+        [
+            "/usr/bin/curl",
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--location",
+            "--max-time",
+            "30",
+            url,
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return bytes(
+        result.stdout
+    )
+
+
 def _read_url(
     url: str,
 ) -> bytes:
@@ -59,11 +100,44 @@ def _read_url(
             )
         },
     )
-    with urllib.request.urlopen(
-        request,
-        timeout=30,
-    ) as response:
-        return response.read()
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=30,
+            context=(
+                _system_ssl_context()
+                if url.startswith(
+                    "https://"
+                )
+                else None
+            ),
+        ) as response:
+            return response.read()
+    except Exception as urllib_exc:
+        # macOS command-line curl uses the system trust configuration via
+        # SecureTransport/Security.framework. Use it only as a second,
+        # still-verified HTTPS path for Wayback.
+        parsed = urllib.parse.urlparse(
+            url
+        )
+        if (
+            parsed.scheme == "https"
+            and parsed.netloc
+            == "web.archive.org"
+        ):
+            try:
+                payload = _curl_verified_read(
+                    url
+                )
+                print(
+                    "V119_TLS_FALLBACK=system_curl "
+                    f"url={url}",
+                    flush=True,
+                )
+                return payload
+            except Exception:
+                pass
+        raise urllib_exc
 
 
 def _safe_relative_path(
