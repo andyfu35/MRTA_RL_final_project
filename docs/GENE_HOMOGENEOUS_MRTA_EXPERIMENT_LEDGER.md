@@ -2586,3 +2586,84 @@ Interpretation rule:
 
 maximum observed gap over 10 seeds is an empirical worst case, not a guaranteed
 global worst-case bound over all possible worlds.
+
+
+## V1.16 6R/30T 10-seed exact benchmark result
+
+STATUS:
+
+COMPLETED.
+
+Run:
+
+runs/gene_mrta_v116_exact_unlimited_6r30_seed116050000
+
+Seeds:
+
+116050000..116050009.
+
+Pre-run tests:
+
+10 passed.
+
+Exact proof:
+
+10/10 worlds proven globally optimal.
+
+Quality:
+
+- mean retention = 0.9694540924627978;
+- mean exact relative gap = 0.030545907537202176;
+- mean exact absolute gap = 0.006215299617823469;
+- minimum retention = 0.9152010318146683;
+- maximum observed relative gap = 0.08479896818533172;
+- maximum observed absolute gap = 0.017600480877557306;
+- worst-gap seed = 116050009.
+
+Worst-gap seed 116050009:
+
+- T_policy = 0.18995488511570233;
+- T* = 0.20755536599325963;
+- Policy completed 11 tasks;
+- MILP completed 13 tasks;
+- retention = 91.520103%;
+- gap = 8.479897%.
+
+Runtime:
+
+- mean Policy = 7.9796 ms;
+- median Policy = 8.5153 ms;
+- max Policy = 11.5070 ms;
+- mean MILP = 453.4836 s = 7.558 min;
+- median MILP = 231.5171 s = 3.859 min;
+- max MILP = 1734.6120 s = 28.910 min;
+- slowest MILP seed = 116050002;
+- mean per-world MILP/Policy ratio = 47,884.56x.
+
+Five of ten MILP worlds exceed 300 s exact-proof time.
+
+Observed MILP exact runtime spans approximately 2.48 s to 1734.61 s for the
+same 6R/30T problem dimension, confirming strong instance-dependent hardness.
+
+Policy quality frequencies:
+
+- 10/10 retention >= 90%;
+- 9/10 retention >= 95%;
+- 5/10 retention >= 98%;
+- 2/10 retention >= 99%;
+- 9/10 gap <= 5%.
+
+Interpretation:
+
+The frozen 148-parameter Policy preserves about 96.95% of the true optimum on
+average and at least 91.52% on all 10 tested worlds while remaining under 12 ms.
+
+This supports a strong practical quality/runtime result, but the 8.48% maximum
+must be described as the maximum observed gap among 10 seeds, not a theoretical
+worst-case bound.
+
+Special case:
+
+seed 116050005 has Policy completed_tasks=13 versus MILP completed_tasks=12,
+while the Policy time objective remains lower. This is not a contradiction:
+the exact oracle optimizes T=(1/N) sum(1-F_j/H), not completed-task count alone.
