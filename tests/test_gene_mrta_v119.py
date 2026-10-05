@@ -352,3 +352,51 @@ def test_v119_manifest_loader_supports_variable_robot_counts(
     assert rows[
         1
     ].split == "validation"
+
+
+
+def test_v119_informs_supplement_recovery(
+    tmp_path,
+    monkeypatch,
+):
+    from marl2d.gene_mrta_v119 import (
+        dataset_tool,
+    )
+
+    page = b"""
+    <html><body>
+      <a href="/action/downloadSupplement?doi=10.1287%2Ftrsc.2020.1005&file=lql_instances.zip">
+        LQL instances
+      </a>
+    </body></html>
+    """
+    payload = b"PK\x03\x04fake-zip"
+
+    def fake_read(url):
+        if "/doi/suppl/" in url:
+            return page
+        if "downloadSupplement" in url:
+            return payload
+        raise AssertionError(url)
+
+    monkeypatch.setattr(
+        dataset_tool,
+        "_read_url",
+        fake_read,
+    )
+
+    files = (
+        dataset_tool.download_informs_supplement(
+            tmp_path
+        )
+    )
+    assert len(files) == 1
+    assert files[0].read_bytes() == payload
+    assert (
+        tmp_path
+        / "_INFORMS_RECOVERY.json"
+    ).exists()
+    assert (
+        tmp_path
+        / "_INFORMS_SUPPLEMENT_PAGE.html"
+    ).exists()
