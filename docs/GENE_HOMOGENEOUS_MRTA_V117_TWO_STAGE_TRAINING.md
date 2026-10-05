@@ -271,3 +271,51 @@ Formal defaults currently use:
 - certification threshold 0.95.
 
 These defaults remain adjustable after the smoke results are inspected.
+
+
+## Final Stage-A capability scale before formal training
+
+Smoke #2 confirmed both specialist separation and real mating-based fusion.
+
+To make capability scores comparable across worlds, all linear task objectives
+now use exact per-world ceilings.
+
+The final Stage-A axes are:
+
+1. global_completion_optimality = C / C*
+2. global_time_optimality = T / T*
+3. global_path_efficiency = E / E*
+4. global_priority_optimality = P / P*
+5. global_deadline_optimality = D / D*
+6. workload_balance = (C/C*) * Jain(workload)
+
+Interpretation:
+
+For axes 1-5, a score of 1.0 means the Policy reaches the proven global optimum
+of that objective on the evaluated world.
+
+Definitions:
+
+    C = completed_tasks / N
+
+    T = (1/N) * sum_completed(1 - finish/H)
+
+    E = (1/N) * sum_completed(
+            1 - clip(A*_incoming_distance / map_diagonal, 0, 1)
+        )
+
+    P = sum_priority(completed) / sum_priority(all)
+
+    D = on_time_tasks / N
+
+The exact oracle bank now solves five independent objective MILPs per world:
+
+    C*, T*, E*, P*, D*
+
+This allows the Gene Bank to retain genuinely distinct global specialists such
+as fastest-time, highest-priority, shortest-path, or best-deadline Genes without
+scalarizing those objectives.
+
+Jain workload fairness remains the only structural axis without a MILP ceiling,
+because the current Jain ratio is nonlinear and should not be replaced by a
+different linear surrogate merely to force a common normalization scheme.
