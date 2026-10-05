@@ -1779,3 +1779,59 @@ fusion. Logs now expose max_inherited_capabilities and best_fusion_gene.
 
 Formal Stage-A training must wait for one final smoke using this provenance
 split.
+
+
+## V1.17 Stage-A protocol FROZEN
+
+Final provenance smoke passed the freeze gate.
+
+Smoke run:
+
+runs/gene_mrta_v117_stage_a/gene_mrta_v117_stage_a_20261005_091817_seed117
+
+Key observations:
+
+- tests = 13 passed;
+- C/C* = 1.0;
+- T/T* reaches numerical 1.0 by generation 3;
+- E/E* = 0.9930842459 best;
+- P/P* = 0.9723705458 best;
+- D/D* = 1.0;
+- workload balance = 0.9983580547 best;
+- Time and Priority specialists remain distinct.
+
+True mating inheritance is now proven by provenance fields.
+
+From generation 1:
+
+    max_inherited_capabilities = 3
+
+and best_fusion_gene is non-null.
+
+A mating child explicitly inherits three axes under the 95% dual gate.
+The strongest retained example carries completion, deadline, and time.
+
+This does not yet claim Time+Priority fusion; the 5-generation smoke only
+validates that true multi-capability inheritance works.
+
+Stage-A axes are frozen as:
+
+    global_completion_optimality = C/C*
+    global_time_optimality = T/T*
+    global_path_efficiency = E/E*
+    global_priority_optimality = P/P*
+    global_deadline_optimality = D/D*
+    workload_balance = (C/C*) * Jain(workload)
+
+Formal reliability:
+
+- oracle-formal resumes completed worlds from the existing bank;
+- completed oracle rows are atomically saved after every world;
+- train-formal resumes from a fixed checkpoint directory;
+- RNG state is checkpointed so a resumed run continues the evolutionary
+  sequence rather than silently starting a different one;
+- checkpoint capability provenance is preserved;
+- status-formal displays the latest generation.
+
+Formal training remains random-from-scratch. No V1.13/V1.10 Policy parameters
+are loaded.
