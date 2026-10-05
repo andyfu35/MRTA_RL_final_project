@@ -3,7 +3,9 @@ import numpy as np
 from marl2d.gene_mrta_v113.direct_gene import RouteTailDirectGene
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
 from marl2d.gene_mrta_v117.fusion1 import (
+    PROGRESSIVE_OPERATORS,
     _choose_pairs,
+    _passed_axes,
 )
 from marl2d.gene_mrta_v117.unseen_audit import (
     _candidate_ids,
@@ -398,3 +400,51 @@ def test_unseen_audit_candidate_set_keeps_specialists_and_fusions():
         in role
         for role in roles.values()
     )
+
+
+def test_progressive_fusion_accepts_partial_inheritance_without_lowering_gate():
+    union = tuple(BASE_AXES[:4])
+    parent_a = {
+        axis: 1.0
+        for axis in BASE_AXES
+    }
+    parent_b = dict(parent_a)
+    ceiling = dict(parent_a)
+
+    child = {
+        axis: 0.80
+        for axis in BASE_AXES
+    }
+    child[union[0]] = 0.97
+    child[union[1]] = 0.96
+    child[union[2]] = 0.94
+    child[union[3]] = 0.99
+
+    inherited = _passed_axes(
+        child,
+        union,
+        parent_a,
+        parent_b,
+        ceiling,
+        threshold=0.95,
+    )
+
+    assert inherited == tuple(
+        sorted(
+            (
+                union[0],
+                union[1],
+                union[3],
+            )
+        )
+    )
+
+
+def test_progressive_fusion_uses_parent_preserving_operators():
+    assert set(
+        PROGRESSIVE_OPERATORS
+    ) == {
+        "sparse_block_graft",
+        "sparse_block_blend",
+        "near_parent_blend",
+    }
