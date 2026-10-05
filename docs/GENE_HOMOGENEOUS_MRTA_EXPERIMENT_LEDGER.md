@@ -3616,3 +3616,65 @@ Existing 100-world constructive bank is reused unchanged:
 Fresh three-axis formal run:
 
     runs/gene_mrta_v118/formal_4r20t_100_fast_v4_3axis_seed118
+
+
+## V1.19 Public MTRPD benchmark phase
+
+Primary goal:
+train one shared 148-parameter RouteTailDirectGene across a public benchmark
+with changing robot/task counts and independently published global optima.
+
+External benchmark:
+Luo, Qin, Lim MTRPD public set.
+
+Authoritative generation description:
+- six TSPLIB families;
+- ten subsets for each 30/40/50-vertex scale;
+- 180 instances total;
+- n = 29/39/49 customers plus one depot;
+- K is instance-dependent: max(K_ini, ceil(n/5));
+- route limit L = 2*d_max;
+- published proven optima for 179/180 instances.
+
+V1.19 does not hard-code 4 robots or one task count.
+
+Formal per-instance capability:
+
+    retention_i = OPT_i / Cost_i
+
+where Cost_i is total customer latency. Illegal/incomplete solutions receive
+zero retention.
+
+Hard success:
+all tasks must be legally served and every robot route must be able to return
+to depot within L.
+
+V1.19 uses a native route-limit-aware rollout. Every candidate append checks:
+
+    used + segment + return_to_depot <= L
+
+Mutation-only first phase:
+- no mating;
+- parent/child run on exactly the same evolution instances;
+- paired per-instance delta and W/T/L are logged;
+- scale Pareto axes are v30/v40/v50 optimum retention;
+- overall/worst retention are diagnostics;
+- parent sampling uses squared overall-retention pressure after feasibility.
+
+Default public split:
+- 4 of 10 replicates/group evolution -> 72 total;
+- 3 validation -> 54;
+- 3 protected test -> 54.
+
+Mating/fusion is deferred until mutation-only Gene Bank convergence is
+characterized.
+
+Implementation:
+- src/marl2d/gene_mrta_v119/
+- tests/test_gene_mrta_v119.py
+- tools/run_gene_mrta_v119_mac.sh
+- docs/GENE_HOMOGENEOUS_MRTA_V119_PUBLIC_MTRPD.md
+
+Public raw supplement is not fabricated. The historical supplement endpoint is
+kept as an external source and must be inspected before writing the exact raw
+importer.
