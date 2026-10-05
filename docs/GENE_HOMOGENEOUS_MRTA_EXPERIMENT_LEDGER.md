@@ -2742,3 +2742,30 @@ This explicitly separates:
 - external capability evaluation.
 
 The first code layer and tests are now present under gene_mrta_v117.
+
+
+## V1.17 Stage-A global objective specialists
+
+The Stage-A archive definition has been refined.
+
+Two axes now use exact per-world capability ceilings:
+
+    global_time_optimality = T_gene / T_star
+
+and
+
+    global_priority_optimality = P_gene / P_star
+
+T_star and P_star are globally proven MILP optima for different objectives.
+MILP provides only the objective ceilings/routes for verification and never
+supplies action labels to the Gene.
+
+This design intentionally allows the bank to retain distinct specialists:
+
+- a Gene that is globally strong on completion-time utility;
+- a Gene that is globally strong on completed priority.
+
+The remaining base archives are completion, path efficiency, deadline
+satisfaction, and workload balance.
+
+This preserves conflicts instead of hiding them inside a weighted scalar sum.
