@@ -35,7 +35,7 @@ from marl2d.gene_mrta_v118.pareto_bank import (
 
 
 CHECKPOINT_VERSION = (
-    "v118_feasibility_first_raw_4axis_pareto_train_v3"
+    "v118_feasibility_first_raw_3axis_pareto_train_v4"
 )
 
 
