@@ -3632,7 +3632,7 @@ Authoritative generation description:
 - ten subsets for each 30/40/50-vertex scale;
 - 180 instances total;
 - n = 29/39/49 customers plus one depot;
-- K is instance-dependent: max(K_ini, ceil(n/5));
+- public scales use 6/8/10 repairmen for 30/40/50 total vertices;
 - route limit L = 2*d_max;
 - published proven optima for 179/180 instances.
 
