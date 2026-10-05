@@ -430,3 +430,40 @@ Recommended on macOS for long runs:
 followed by:
 
     caffeinate -dimsu bash tools/run_gene_mrta_v117_mac.sh train-formal
+
+
+## Post-Stage-A Pareto retention
+
+After the frozen Stage-A experiment, Gene Bank retention changes from
+axis-specific archive bookkeeping to a unified Pareto archive.
+
+The capability measurements themselves do not change.
+
+For Gene g:
+
+    c(g) =
+    [
+        global_completion_optimality,
+        global_time_optimality,
+        global_path_efficiency,
+        global_priority_optimality,
+        global_deadline_optimality,
+        workload_balance
+    ]
+
+The Bank retains the nondominated set in this six-dimensional space.
+
+This means the system defines the capability measurements but does not define
+which combinations should exist. Time specialists, Priority specialists,
+balanced knees, and other trade-offs emerge as geometry of the Pareto front.
+
+Single-axis best Genes and maximin Genes are analysis/deployment views only.
+They are never admission rules.
+
+This Pareto Bank is used for:
+
+1. post-Stage-A mating;
+2. unseen-world evaluation;
+3. hard-world mining;
+4. later Stage-B evolution;
+5. final Fusion-2.
