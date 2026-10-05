@@ -23,34 +23,47 @@ EPS = 1e-12
 # hard-world analysis. Stage B is intentionally not defined here.
 BASE_AXES = (
     "completion",
-    "time_retention",
+    "global_time_optimality",
     "path_efficiency",
-    "priority_satisfaction",
+    "global_priority_optimality",
     "deadline_satisfaction",
     "workload_balance",
 )
+
+
+def _retention(
+    value: float,
+    optimum: float,
+) -> float:
+    if optimum <= EPS:
+        return (
+            1.0
+            if value <= EPS
+            else 0.0
+        )
+    return float(
+        np.clip(
+            value / optimum,
+            0.0,
+            1.0,
+        )
+    )
 
 
 def base_scores_for_evaluation(
     evaluation: Evaluation,
     *,
     time_optimum: float,
+    priority_optimum: float,
 ) -> dict[str, float]:
-    if time_optimum <= EPS:
-        time_retention = (
-            1.0
-            if evaluation.time_optimality <= EPS
-            else 0.0
-        )
-    else:
-        time_retention = float(
-            np.clip(
-                evaluation.time_optimality
-                / time_optimum,
-                0.0,
-                1.0,
-            )
-        )
+    time_retention = _retention(
+        evaluation.time_optimality,
+        time_optimum,
+    )
+    priority_retention = _retention(
+        evaluation.priority_satisfaction,
+        priority_optimum,
+    )
 
     return {
         "completion": float(
@@ -60,7 +73,7 @@ def base_scores_for_evaluation(
                 1.0,
             )
         ),
-        "time_retention": (
+        "global_time_optimality": (
             time_retention
         ),
         "path_efficiency": float(
@@ -70,12 +83,8 @@ def base_scores_for_evaluation(
                 1.0,
             )
         ),
-        "priority_satisfaction": float(
-            np.clip(
-                evaluation.priority_satisfaction,
-                0.0,
-                1.0,
-            )
+        "global_priority_optimality": (
+            priority_retention
         ),
         "deadline_satisfaction": float(
             np.clip(
@@ -98,10 +107,14 @@ def aggregate_base_scores(
     evaluations: Sequence[Evaluation],
     *,
     time_optima: Sequence[float],
+    priority_optima: Sequence[float],
 ) -> dict[str, float]:
-    if len(evaluations) != len(time_optima):
+    if (
+        len(evaluations) != len(time_optima)
+        or len(evaluations) != len(priority_optima)
+    ):
         raise ValueError(
-            "evaluations and time_optima length mismatch"
+            "evaluations and oracle-reference lengths mismatch"
         )
     if not evaluations:
         raise ValueError(
@@ -111,11 +124,13 @@ def aggregate_base_scores(
     rows = [
         base_scores_for_evaluation(
             evaluation,
-            time_optimum=float(star),
+            time_optimum=float(time_star),
+            priority_optimum=float(priority_star),
         )
-        for evaluation, star in zip(
+        for evaluation, time_star, priority_star in zip(
             evaluations,
             time_optima,
+            priority_optima,
             strict=True,
         )
     ]
@@ -138,6 +153,7 @@ def evaluate_gene_base_axes(
     config: EnvConfig,
     *,
     time_optima: Sequence[float],
+    priority_optima: Sequence[float],
 ) -> dict[str, float]:
     evaluations = [
         rollout_route_tail_gene(
@@ -150,4 +166,5 @@ def evaluate_gene_base_axes(
     return aggregate_base_scores(
         evaluations,
         time_optima=time_optima,
+        priority_optima=priority_optima,
     )
