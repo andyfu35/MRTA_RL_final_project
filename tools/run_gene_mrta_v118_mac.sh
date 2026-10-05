@@ -4,11 +4,13 @@ set -euo pipefail
 MODE="${1:-tests}"
 VENV_DIR="${VENV_DIR:-.venv-gene}"
 
-SMOKE_BANK="${V118_SMOKE_BANK:-runs/gene_mrta_v118/oracle_smoke_2r6t.json}"
-SMOKE_RUN_DIR="${V118_SMOKE_RUN_DIR:-runs/gene_mrta_v118/smoke_2r6t_seed118}"
+SMOKE_WORLD_BANK="${V118_SMOKE_WORLD_BANK:-runs/gene_mrta_v118/world_smoke_2r6t_fast_v2.json}"
+SMOKE_RUN_DIR="${V118_SMOKE_RUN_DIR:-runs/gene_mrta_v118/smoke_2r6t_fast_v2_seed118}"
 
-FORMAL_BANK="${V118_FORMAL_BANK:-runs/gene_mrta_v118/oracle_formal_4r20t.json}"
-FORMAL_RUN_DIR="${V118_FORMAL_RUN_DIR:-runs/gene_mrta_v118/formal_4r20t_seed118}"
+FORMAL_WORLD_BANK="${V118_FORMAL_WORLD_BANK:-runs/gene_mrta_v118/world_formal_4r20t_100_fast_v2.json}"
+FORMAL_RUN_DIR="${V118_FORMAL_RUN_DIR:-runs/gene_mrta_v118/formal_4r20t_100_fast_v2_seed118}"
+
+EXACT_SMOKE_BANK="${V118_EXACT_SMOKE_BANK:-runs/gene_mrta_v118/oracle_smoke_2r6t_exact_v1.json}"
 
 if [[ ! -d "$VENV_DIR" ]]; then
   python3 -m venv "$VENV_DIR"
@@ -25,22 +27,22 @@ pytest -q \
 if [[ "$MODE" == "tests" ]]; then
   exit 0
 
-elif [[ "$MODE" == "oracle-smoke" ]]; then
-  python -m marl2d.gene_mrta_v118.oracle_bank \
+elif [[ "$MODE" == "world-smoke" ]]; then
+  python -m marl2d.gene_mrta_v118.world_bank \
     --robots 2 \
     --tasks 6 \
     --world-count 2 \
     --seed-base 118000000 \
-    --time-limit 60 \
-    --output "$SMOKE_BANK"
+    --output "$SMOKE_WORLD_BANK"
 
 elif [[ "$MODE" == "train-smoke" ]]; then
-  if [[ ! -f "$SMOKE_BANK" ]]; then
-    echo "Missing V1.18 smoke bank: $SMOKE_BANK" >&2
+  if [[ ! -f "$SMOKE_WORLD_BANK" ]]; then
+    echo "Missing V1.18 smoke world bank: $SMOKE_WORLD_BANK" >&2
+    echo "Run: bash tools/run_gene_mrta_v118_mac.sh world-smoke" >&2
     exit 2
   fi
   python -m marl2d.gene_mrta_v118.train \
-    --oracle-bank "$SMOKE_BANK" \
+    --world-bank "$SMOKE_WORLD_BANK" \
     --run-dir "$SMOKE_RUN_DIR" \
     --generations 5 \
     --population 64 \
@@ -51,17 +53,16 @@ elif [[ "$MODE" == "train-smoke" ]]; then
     --seed 118
 
 elif [[ "$MODE" == "smoke" ]]; then
-  if [[ ! -f "$SMOKE_BANK" ]]; then
-    python -m marl2d.gene_mrta_v118.oracle_bank \
+  if [[ ! -f "$SMOKE_WORLD_BANK" ]]; then
+    python -m marl2d.gene_mrta_v118.world_bank \
       --robots 2 \
       --tasks 6 \
       --world-count 2 \
       --seed-base 118000000 \
-      --time-limit 60 \
-      --output "$SMOKE_BANK"
+      --output "$SMOKE_WORLD_BANK"
   fi
   python -m marl2d.gene_mrta_v118.train \
-    --oracle-bank "$SMOKE_BANK" \
+    --world-bank "$SMOKE_WORLD_BANK" \
     --run-dir "$SMOKE_RUN_DIR" \
     --generations 5 \
     --population 64 \
@@ -71,30 +72,30 @@ elif [[ "$MODE" == "smoke" ]]; then
     --pareto-max-size 64 \
     --seed 118
 
-elif [[ "$MODE" == "oracle-formal" ]]; then
-  FORMAL_WORLDS="${V118_FORMAL_WORLDS:-16}"
-  FORMAL_SEED_BASE="${V118_FORMAL_SEED_BASE:-118100000}"
-  echo "V118_FORMAL_WORLDS=$FORMAL_WORLDS"
-  echo "V118_FORMAL_SEED_BASE=$FORMAL_SEED_BASE"
-  python -m marl2d.gene_mrta_v118.oracle_bank \
+elif [[ "$MODE" == "world-formal" ]]; then
+  FORMAL_WORLDS="${V118_FORMAL_WORLDS:-100}"
+  FORMAL_SEED_BASE="${V118_FORMAL_SEED_BASE:-117100000}"
+  echo "V118_FAST_FORMAL_WORLDS=$FORMAL_WORLDS"
+  echo "V118_FAST_FORMAL_SEED_BASE=$FORMAL_SEED_BASE"
+  python -m marl2d.gene_mrta_v118.world_bank \
     --robots 4 \
     --tasks 20 \
     --world-count "$FORMAL_WORLDS" \
     --seed-base "$FORMAL_SEED_BASE" \
-    --time-limit unlimited \
-    --output "$FORMAL_BANK"
+    --battery-reserve-fraction 0.05 \
+    --output "$FORMAL_WORLD_BANK"
 
 elif [[ "$MODE" == "train-formal" ]]; then
-  if [[ ! -f "$FORMAL_BANK" ]]; then
-    echo "Missing V1.18 formal bank: $FORMAL_BANK" >&2
-    echo "Run oracle-formal first." >&2
+  if [[ ! -f "$FORMAL_WORLD_BANK" ]]; then
+    echo "Missing V1.18 formal world bank: $FORMAL_WORLD_BANK" >&2
+    echo "Run: bash tools/run_gene_mrta_v118_mac.sh world-formal" >&2
     exit 2
   fi
   FORMAL_GENERATIONS="${V118_GENERATIONS:-50}"
   echo "V118_FORMAL_RUN_DIR=$FORMAL_RUN_DIR"
   echo "V118_GENERATIONS=$FORMAL_GENERATIONS"
   python -m marl2d.gene_mrta_v118.train \
-    --oracle-bank "$FORMAL_BANK" \
+    --world-bank "$FORMAL_WORLD_BANK" \
     --run-dir "$FORMAL_RUN_DIR" \
     --generations "$FORMAL_GENERATIONS" \
     --population 256 \
@@ -127,7 +128,16 @@ if history:
     print("maximin_gene=", json.dumps(row.get("maximin_gene"), ensure_ascii=False), sep="")
 PY
 
+elif [[ "$MODE" == "exact-smoke" ]]; then
+  python -m marl2d.gene_mrta_v118.oracle_bank \
+    --robots 2 \
+    --tasks 6 \
+    --world-count 2 \
+    --seed-base 118000000 \
+    --time-limit 60 \
+    --output "$EXACT_SMOKE_BANK"
+
 else
-  echo "Usage: bash tools/run_gene_mrta_v118_mac.sh [tests|oracle-smoke|train-smoke|smoke|oracle-formal|train-formal|status-formal]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v118_mac.sh [tests|world-smoke|train-smoke|smoke|world-formal|train-formal|status-formal|exact-smoke]" >&2
   exit 2
 fi
