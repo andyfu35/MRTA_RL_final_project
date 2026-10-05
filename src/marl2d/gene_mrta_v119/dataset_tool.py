@@ -12,6 +12,9 @@ from .benchmark import (
     describe_manifest,
     load_manifest,
 )
+from .fixture import (
+    write_smoke_manifest,
+)
 
 
 class _LinkParser(
@@ -328,6 +331,14 @@ def parser() -> argparse.ArgumentParser:
         "--manifest",
         required=True,
     )
+
+    smoke = sub.add_parser(
+        "make-smoke"
+    )
+    smoke.add_argument(
+        "--output",
+        required=True,
+    )
     return p
 
 
@@ -372,6 +383,17 @@ def main() -> None:
             Path(
                 args.manifest
             )
+        )
+    elif args.command == "make-smoke":
+        target = Path(
+            args.output
+        )
+        write_smoke_manifest(
+            target
+        )
+        print(
+            f"V119_SMOKE_MANIFEST={target}",
+            flush=True,
         )
 
 
