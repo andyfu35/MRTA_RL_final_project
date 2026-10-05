@@ -1474,3 +1474,28 @@ A notable objective effect occurs at seed 116050005: Policy completes 13 tasks
 while the exact T-optimal MILP completes 12, yet Policy T is lower. This is
 consistent with the benchmark objective optimizing completion time utility T,
 not raw task count.
+
+
+## V1.16 5R/25T plotting dataset
+
+Next plotting dataset is a 10-seed exact-unlimited 5R/25T benchmark using the
+same frozen V1.13 Gene and the same V1.16 MILP/Policy fairness rules.
+
+Launcher:
+
+    bash tools/run_gene_mrta_v116_milp_policy_mac.sh exact-5r25
+
+Defaults:
+
+- case = 5R/25T;
+- seeds = 116040000 through 116040009;
+- worlds = 10;
+- MILP time limit = none;
+- mip_rel_gap = 0.0;
+- exact proof required;
+- heartbeat = 30 s;
+- fixed run directory =
+  runs/gene_mrta_v116_exact_unlimited_5r25_seed116040000.
+
+This dataset is intended to be directly comparable with the completed 10-seed
+6R/30T exact dataset for plotting quality and runtime scaling.
