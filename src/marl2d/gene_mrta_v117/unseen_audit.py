@@ -10,22 +10,23 @@ import numpy as np
 
 from marl2d.gene_mrta_v117.capabilities import BASE_AXES
 from marl2d.gene_mrta_v117.fusion1 import FUSION1_VERSION
+from marl2d.gene_mrta_v117.pareto_bank import (
+    crowding_trim_ids,
+    pareto_front_ids,
+)
 from marl2d.gene_mrta_v117.stage_a_oracle_bank import (
     BANK_VERSION,
     load_stage_a_oracle_bank,
 )
 from marl2d.gene_mrta_v117.stage_a_train import (
-    EPS,
     Record,
-    _archives,
-    _best,
     _record_from_dict,
     evaluate_gene_base_axes,
 )
 
 
-AUDIT_VERSION = "v117_unseen_audit_v1"
-HARD_BANK_VERSION = "v117_hard_world_bank_v1"
+AUDIT_VERSION = "v117_unseen_pareto_audit_v2"
+HARD_BANK_VERSION = "v117_hard_world_bank_v2_pareto"
 
 
 def _atomic_write(
@@ -54,74 +55,6 @@ def _atomic_write(
             handle.fileno()
         )
     temp.replace(path)
-
-
-def _candidate_ids(
-    records: dict[str, Record],
-    *,
-    archive_size: int,
-    hybrid_count: int,
-) -> tuple[
-    list[str],
-    dict[str, str],
-]:
-    archives = _archives(
-        records,
-        archive_size,
-    )
-    selected: list[str] = []
-    roles: dict[str, str] = {}
-
-    for axis in BASE_AXES:
-        ids = archives[axis]
-        if not ids:
-            continue
-        rid = ids[0]
-        if rid not in roles:
-            selected.append(rid)
-            roles[rid] = (
-                f"specialist:{axis}"
-            )
-        else:
-            roles[rid] += (
-                f"|specialist:{axis}"
-            )
-
-    best = _best(records)
-    hybrids = [
-        record
-        for record in records.values()
-        if len(
-            record.inherited_capabilities
-        ) >= 2
-    ]
-    hybrids.sort(
-        key=lambda record: (
-            len(
-                record.inherited_capabilities
-            ),
-            min(
-                record.scores[axis]
-                / max(best[axis], EPS)
-                for axis in (
-                    record.inherited_capabilities
-                )
-            ),
-        ),
-        reverse=True,
-    )
-
-    for record in hybrids[
-        :hybrid_count
-    ]:
-        rid = record.record_id
-        if rid not in roles:
-            selected.append(rid)
-            roles[rid] = "fusion"
-        else:
-            roles[rid] += "|fusion"
-
-    return selected, roles
 
 
 def _one_world_scores(
@@ -157,7 +90,70 @@ def _one_world_scores(
     )
 
 
-def run(args: argparse.Namespace) -> Path:
+def _representative_ids(
+    records: dict[str, Record],
+    *,
+    limit: int,
+) -> list[str]:
+    ids = list(
+        records
+    )
+    if len(ids) <= limit:
+        return ids
+
+    kept, _removed = (
+        crowding_trim_ids(
+            records,
+            ids,
+            max_size=limit,
+        )
+    )
+    return list(
+        kept
+    )
+
+
+def _world_pareto_ids(
+    records: dict[str, Record],
+    scores_by_gene: dict[
+        str,
+        dict[str, float],
+    ],
+) -> list[str]:
+    temp: dict[str, Record] = {}
+    for rid, scores in (
+        scores_by_gene.items()
+    ):
+        source = records[rid]
+        temp[rid] = Record(
+            record_id=rid,
+            gene=source.gene,
+            scores=scores,
+            capabilities=(),
+            origin=source.origin,
+            generation=(
+                source.generation
+            ),
+            parents=(
+                source.parents
+            ),
+            operator=(
+                source.operator
+            ),
+        )
+    front, _dominated = (
+        pareto_front_ids(
+            temp
+        )
+    )
+    return list(
+        front
+    )
+
+
+def run(
+    args: argparse.Namespace,
+) -> Path:
     checkpoint_path = Path(
         args.fusion_checkpoint
     )
@@ -171,15 +167,29 @@ def run(args: argparse.Namespace) -> Path:
         != FUSION1_VERSION
     ):
         raise ValueError(
-            "Unseen audit requires a Fusion-1 checkpoint"
+            "Unseen audit requires a Pareto Fusion-1 checkpoint"
         )
 
-    records = {
+    all_records = {
         row["record_id"]:
-            _record_from_dict(row)
+            _record_from_dict(
+                row
+            )
         for row in checkpoint[
             "records"
         ]
+    }
+    candidate_ids = (
+        _representative_ids(
+            all_records,
+            limit=(
+                args.pareto_candidates
+            ),
+        )
+    )
+    records = {
+        rid: all_records[rid]
+        for rid in candidate_ids
     }
 
     (
@@ -191,7 +201,9 @@ def run(args: argparse.Namespace) -> Path:
         priority_optima,
         deadline_optima,
     ) = load_stage_a_oracle_bank(
-        Path(args.unseen_bank)
+        Path(
+            args.unseen_bank
+        )
     )
     bank_raw = json.loads(
         Path(
@@ -208,41 +220,18 @@ def run(args: argparse.Namespace) -> Path:
             "Unexpected unseen oracle bank version"
         )
 
-    candidate_ids, roles = _candidate_ids(
-        records,
-        archive_size=(
-            args.archive_size
-        ),
-        hybrid_count=(
-            args.hybrid_count
-        ),
-    )
-    if not candidate_ids:
-        raise RuntimeError(
-            "No candidates selected for unseen audit"
-        )
-
     candidate_world_scores: dict[
         str,
-        list[dict[str, float]],
+        list[
+            dict[str, float]
+        ],
     ] = {
         rid: []
         for rid in candidate_ids
     }
-
     world_rows: list[
         dict[str, Any]
     ] = []
-
-    fusion_ids = [
-        rid
-        for rid in candidate_ids
-        if "fusion" in roles[rid]
-    ]
-    if not fusion_ids:
-        fusion_ids = list(
-            candidate_ids
-        )
 
     for index, world in enumerate(
         worlds
@@ -288,12 +277,21 @@ def run(args: argparse.Namespace) -> Path:
                     ]
                 ),
             )
-            scores_by_gene[rid] = (
-                scores
-            )
+            scores_by_gene[
+                rid
+            ] = scores
             candidate_world_scores[
                 rid
-            ].append(scores)
+            ].append(
+                scores
+            )
+
+        world_pareto = (
+            _world_pareto_ids(
+                records,
+                scores_by_gene,
+            )
+        )
 
         frontier = {
             axis: max(
@@ -306,42 +304,36 @@ def run(args: argparse.Namespace) -> Path:
             for axis in BASE_AXES
         }
 
-        fusion_quality: list[
-            tuple[
-                float,
-                str,
-                str,
-            ]
-        ] = []
-        for rid in fusion_ids:
-            scores = scores_by_gene[
-                rid
-            ]
-            worst_axis = min(
-                BASE_AXES,
-                key=lambda axis: (
-                    scores[axis]
-                ),
-            )
-            min_score = float(
-                scores[worst_axis]
-            )
-            fusion_quality.append(
-                (
-                    min_score,
-                    rid,
-                    worst_axis,
+        maximin_id = max(
+            candidate_ids,
+            key=lambda rid: (
+                min(
+                    scores_by_gene[
+                        rid
+                    ][axis]
+                    for axis
+                    in BASE_AXES
                 )
-            )
-
-        fusion_quality.sort(
-            reverse=True
+            ),
         )
-        (
-            best_fusion_min,
-            best_fusion_id,
-            best_fusion_worst_axis,
-        ) = fusion_quality[0]
+        maximin_scores = (
+            scores_by_gene[
+                maximin_id
+            ]
+        )
+        worst_axis = min(
+            BASE_AXES,
+            key=lambda axis: (
+                maximin_scores[
+                    axis
+                ]
+            ),
+        )
+        maximin_value = float(
+            maximin_scores[
+                worst_axis
+            ]
+        )
 
         frontier_worst_axis = min(
             BASE_AXES,
@@ -355,27 +347,30 @@ def run(args: argparse.Namespace) -> Path:
             ]
         )
 
-        # Main hard-world criterion:
-        # even the best available hybrid has a weak worst capability.
-        # Secondary criterion:
-        # even the whole cohort frontier cannot cover one capability well.
-        hardness = float(
-            1.0
-            - best_fusion_min
-        )
-
         row = {
             "world_index": index,
             "seed": seed,
-            "hardness": hardness,
-            "best_fusion_min": float(
-                best_fusion_min
+            "hardness": float(
+                1.0
+                - maximin_value
             ),
-            "best_fusion_id": (
-                best_fusion_id
+            "bank_maximin_gene": (
+                maximin_id
             ),
-            "best_fusion_worst_axis": (
-                best_fusion_worst_axis
+            "bank_maximin_value": (
+                maximin_value
+            ),
+            "bank_maximin_worst_axis": (
+                worst_axis
+            ),
+            "bank_maximin_scores": (
+                maximin_scores
+            ),
+            "world_pareto_size": len(
+                world_pareto
+            ),
+            "world_pareto_ids": (
+                world_pareto
             ),
             "frontier_min": (
                 frontier_min
@@ -388,18 +383,24 @@ def run(args: argparse.Namespace) -> Path:
                 scores_by_gene
             ),
         }
-        world_rows.append(row)
+        world_rows.append(
+            row
+        )
+
         print(
-            "V117_UNSEEN_WORLD "
+            "V117_UNSEEN_PARETO_WORLD "
             + json.dumps(
                 {
                     "index": index,
                     "seed": seed,
-                    "best_fusion_min": (
-                        best_fusion_min
+                    "bank_maximin_value": (
+                        maximin_value
                     ),
                     "worst_axis": (
-                        best_fusion_worst_axis
+                        worst_axis
+                    ),
+                    "world_pareto_size": len(
+                        world_pareto
                     ),
                     "frontier_min": (
                         frontier_min
@@ -443,33 +444,36 @@ def run(args: argparse.Namespace) -> Path:
             )
             for axis in BASE_AXES
         }
-        min_mean = float(
-            min(
-                axis_mean.values()
-            )
-        )
         candidate_summary[rid] = {
-            "role": roles[rid],
-            "inherited_capabilities": list(
-                records[
-                    rid
-                ].inherited_capabilities
-            ),
-            "archive_capabilities": list(
-                records[
-                    rid
-                ].archive_capabilities
-            ),
             "mean": axis_mean,
             "p10": axis_p10,
-            "min_mean": min_mean,
+            "min_mean": float(
+                min(
+                    axis_mean.values()
+                )
+            ),
+            "origin": (
+                records[rid].origin
+            ),
+            "parents": list(
+                records[rid].parents
+            ),
+            "operator": (
+                records[
+                    rid
+                ].operator
+            ),
         }
 
     ranked_worlds = sorted(
         world_rows,
         key=lambda row: (
-            row["best_fusion_min"],
-            row["frontier_min"],
+            row[
+                "bank_maximin_value"
+            ],
+            row[
+                "frontier_min"
+            ],
         ),
     )
     hard_rows = ranked_worlds[
@@ -479,7 +483,9 @@ def run(args: argparse.Namespace) -> Path:
         )
     ]
     hard_seeds = [
-        int(row["seed"])
+        int(
+            row["seed"]
+        )
         for row in hard_rows
     ]
 
@@ -496,9 +502,12 @@ def run(args: argparse.Namespace) -> Path:
         "source_unseen_bank": str(
             args.unseen_bank
         ),
+        "source_pareto_checkpoint": str(
+            checkpoint_path
+        ),
         "selection": {
             "criterion": (
-                "lowest_best_hybrid_min_then_frontier_min"
+                "lowest_bank_maximin_then_frontier_min"
             ),
             "hard_count": len(
                 hard_rows
@@ -540,12 +549,20 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     audit_payload = {
-        "version": AUDIT_VERSION,
+        "version": (
+            AUDIT_VERSION
+        ),
         "fusion_checkpoint": str(
             checkpoint_path
         ),
         "unseen_bank": str(
             args.unseen_bank
+        ),
+        "source_pareto_size": len(
+            all_records
+        ),
+        "candidate_count": len(
+            candidate_ids
         ),
         "candidate_ids": (
             candidate_ids
@@ -554,7 +571,9 @@ def run(args: argparse.Namespace) -> Path:
             candidate_summary
         ),
         "worlds": world_rows,
-        "hard_seeds": hard_seeds,
+        "hard_seeds": (
+            hard_seeds
+        ),
     }
 
     _atomic_write(
@@ -598,14 +617,9 @@ def parser() -> argparse.ArgumentParser:
         required=True,
     )
     p.add_argument(
-        "--archive-size",
+        "--pareto-candidates",
         type=int,
-        default=16,
-    )
-    p.add_argument(
-        "--hybrid-count",
-        type=int,
-        default=12,
+        default=256,
     )
     p.add_argument(
         "--hard-count",
