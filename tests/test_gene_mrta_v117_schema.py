@@ -96,6 +96,7 @@ def test_stage_a_axes_cover_known_objectives_without_battery_loophole():
     scores = base_scores_for_evaluation(
         evaluation,
         time_optimum=0.25,
+        priority_optimum=0.875,
     )
 
     assert tuple(scores) == BASE_AXES
@@ -104,7 +105,7 @@ def test_stage_a_axes_cover_known_objectives_without_battery_loophole():
         0.8,
     )
     assert np.isclose(
-        scores["time_retention"],
+        scores["global_time_optimality"],
         0.96,
     )
     assert np.isclose(
@@ -112,8 +113,8 @@ def test_stage_a_axes_cover_known_objectives_without_battery_loophole():
         0.6,
     )
     assert np.isclose(
-        scores["priority_satisfaction"],
-        0.7,
+        scores["global_priority_optimality"],
+        0.8,
     )
     assert np.isclose(
         scores["deadline_satisfaction"],
@@ -125,3 +126,45 @@ def test_stage_a_axes_cover_known_objectives_without_battery_loophole():
     )
     assert "battery_remaining" not in scores
     assert "energy_consumed" not in scores
+
+
+def test_global_capability_one_means_axis_optimum():
+    evaluation = Evaluation(
+        completion=1.0,
+        efficiency=0.8,
+        priority_satisfaction=0.9,
+        deadline_satisfaction=0.7,
+        balance=0.85,
+        time_optimality=0.3,
+        route_efficiency=0.8,
+        completed_tasks=20.0,
+        completed_priority=9.0,
+        total_priority=10.0,
+        on_time_tasks=14.0,
+        total_travel=80.0,
+        total_euclidean_travel=75.0,
+        detour_ratio=1.066,
+        mean_initial_battery=50.0,
+        mean_final_battery=30.0,
+        battery_remaining_fraction=0.6,
+        energy_consumed=80.0,
+        battery_blocked_pair_events=0.0,
+        robot_task_counts=(5.0, 5.0, 5.0, 5.0),
+        robot_workloads=(20.0, 20.0, 20.0, 20.0),
+        robot_final_batteries=(30.0, 30.0, 30.0, 30.0),
+    )
+
+    scores = base_scores_for_evaluation(
+        evaluation,
+        time_optimum=0.3,
+        priority_optimum=0.9,
+    )
+
+    assert np.isclose(
+        scores["global_time_optimality"],
+        1.0,
+    )
+    assert np.isclose(
+        scores["global_priority_optimality"],
+        1.0,
+    )
