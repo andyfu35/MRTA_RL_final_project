@@ -17,7 +17,8 @@ export PYTHONPATH="$PWD/src"
 
 pytest -q \
   tests/test_gene_mrta_v117_schema.py \
-  tests/test_gene_mrta_v117_oracle.py
+  tests/test_gene_mrta_v117_oracle.py \
+  tests/test_gene_mrta_v117_stage_a.py
 
 if [[ "$MODE" == "tests" ]]; then
   exit 0
