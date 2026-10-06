@@ -179,12 +179,28 @@ def test_pareto_mixed_directions_without_axis_bounds():
 
 
 
-def test_epsilon_grid_merges_near_identical_pareto_cells():
+def test_epsilon_grid_merges_near_identical_nonchampion_cells():
+    time_priority_champion = _record(
+        "h",
+        {
+            "total_time": 50.0,
+            "priority": 19.0,
+            "on_time_completed_tasks": 39.0,
+        },
+    )
+    completion_champion = _record(
+        "i",
+        {
+            "total_time": 70.0,
+            "priority": 30.0,
+            "on_time_completed_tasks": 50.0,
+        },
+    )
     a = _record(
         "d",
         {
             "total_time": 60.01,
-            "priority": 20.01,
+            "priority": 20.09,
             "on_time_completed_tasks": 40.01,
         },
     )
@@ -192,15 +208,23 @@ def test_epsilon_grid_merges_near_identical_pareto_cells():
         "e",
         {
             "total_time": 60.49,
-            "priority": 20.09,
+            "priority": 20.01,
             "on_time_completed_tasks": 40.49,
         },
     )
     kept = rebuild_bank(
-        [a, b],
+        [
+            time_priority_champion,
+            completion_champion,
+            a,
+            b,
+        ],
         resolutions=DEFAULT_RESOLUTIONS,
     )
-    assert len(kept) == 1
+    assert not (
+        "d" in kept
+        and "e" in kept
+    )
 
 
 def test_epsilon_grid_always_preserves_exact_axis_champions():
