@@ -25,13 +25,16 @@ if [[ "$MODE" == "tests" ]]; then
   pytest -q tests/test_gene_mrta_v20.py
 elif [[ "$MODE" == "smoke" ]]; then
   python -m marl2d.gene_mrta_v20.train \
-    --run-dir "${V20_RUN_DIR:-$ROOT/smoke_8g_10s_2r_seed200}" \
+    --run-dir "${V20_RUN_DIR:-$ROOT/smoke_8g_10s_2r_seed200_epsgrid_v2}" \
     --rounds 2 \
     --genes-per-round 8 \
     --world-count 10 \
     --gene-batch-size 8 \
     --seed 200 \
     --device auto
+elif [[ "$MODE" == "analyze-grid" ]]; then
+  V20_OLD_CHECKPOINT="${V20_OLD_CHECKPOINT:-$ROOT/fixed100_50r_seed200/checkpoint.json}"
+  python -m marl2d.gene_mrta_v20.analyze_bank_grid --checkpoint "$V20_OLD_CHECKPOINT"
 elif [[ "$MODE" == "train-50" ]]; then
   V20_ROUNDS="${V20_ROUNDS:-50}"
   V20_GENES_PER_ROUND="${V20_GENES_PER_ROUND:-64}"
@@ -61,6 +64,6 @@ elif [[ "$MODE" == "train-50" ]]; then
     --on-time-completed-tasks-resolution "$V20_ONTIME_RESOLUTION" \
     --device auto
 else
-  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|train-50]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50]" >&2
   exit 2
 fi
