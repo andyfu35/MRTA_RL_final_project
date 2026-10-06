@@ -11,6 +11,7 @@ import torch
 
 from .bank import (
     BankRecord,
+    DEFAULT_RESOLUTIONS,
     make_record,
     rank_selection_scores,
     rebuild_bank,
@@ -30,8 +31,8 @@ from .suite import (
 )
 
 
-CHECKPOINT_VERSION = "gene_global_set_mrta_v20_checkpoint_v1"
-PROTOCOL = "gene_global_set_mrta_v20_fixed100"
+CHECKPOINT_VERSION = "gene_global_set_mrta_v20_checkpoint_v2"
+PROTOCOL = "gene_global_set_mrta_v20_fixed100_epsgrid_v2"
 
 
 def _atomic_json(
@@ -100,7 +101,7 @@ def _seed_progress(
     result = {
         "total_time_improved": 0,
         "priority_improved": 0,
-        "completed_tasks_improved": 0,
+        "on_time_completed_tasks_improved": 0,
         "deadline_rate_improved": 0,
         "all_three_improved": 0,
     }
@@ -115,8 +116,8 @@ def _seed_progress(
             < before.priority - 1e-9
         )
         ci = (
-            row.completed_tasks
-            > before.completed_tasks + 1e-9
+            row.on_time_completed_tasks
+            > before.on_time_completed_tasks + 1e-9
         )
         di = (
             row.deadline_completion_rate
@@ -124,7 +125,7 @@ def _seed_progress(
         )
         result["total_time_improved"] += int(ti)
         result["priority_improved"] += int(pi)
-        result["completed_tasks_improved"] += int(ci)
+        result["on_time_completed_tasks_improved"] += int(ci)
         result["deadline_rate_improved"] += int(di)
         result["all_three_improved"] += int(
             ti and pi and ci
@@ -144,8 +145,8 @@ def _evaluation_from_dict(
     return GeneEvaluation(
         total_time=float(data["total_time"]),
         priority=float(data["priority"]),
-        completed_tasks=float(
-            data["completed_tasks"]
+        on_time_completed_tasks=float(
+            data["on_time_completed_tasks"]
         ),
         deadline_completion_rate=float(
             data["deadline_completion_rate"]
@@ -166,8 +167,8 @@ def _evaluation_dict(
     return {
         "total_time": evaluation.total_time,
         "priority": evaluation.priority,
-        "completed_tasks": (
-            evaluation.completed_tasks
+        "on_time_completed_tasks": (
+            evaluation.on_time_completed_tasks
         ),
         "deadline_completion_rate": (
             evaluation.deadline_completion_rate
@@ -202,6 +203,14 @@ def run(
         raise RuntimeError(
             "Fixed 100-seed suite changed unexpectedly"
         )
+
+    resolutions = {
+        "total_time": args.total_time_resolution,
+        "priority": args.priority_resolution,
+        "on_time_completed_tasks": (
+            args.on_time_completed_tasks_resolution
+        ),
+    }
 
     rng = np.random.default_rng(
         args.seed
@@ -240,6 +249,7 @@ def run(
             "mutation_rate": (
                 args.mutation_rate
             ),
+            "bank_resolution": resolutions,
         }
         for key, expected in immutable.items():
             if data.get(key) != expected:
@@ -364,7 +374,7 @@ def run(
                         "min priority-weighted "
                         "completion rank"
                     ),
-                    "completed_tasks": (
+                    "on_time_completed_tasks": (
                         "max tasks completed "
                         "before own deadline"
                     ),
@@ -372,12 +382,13 @@ def run(
                 "axis_normalization": (
                     "none"
                 ),
+                "bank_resolution": resolutions,
                 "parent_selection": (
                     "equal-axis percentile "
                     "ranks squared"
                 ),
                 "bank": (
-                    "unbounded pure Pareto"
+                    "unbounded epsilon-grid Pareto"
                 ),
             },
             ensure_ascii=False,
@@ -490,7 +501,8 @@ def run(
         ]
         bank = rebuild_bank(
             list(bank.values())
-            + candidates
+            + candidates,
+            resolutions=resolutions,
         )
 
         rep_id = representative_id(
@@ -505,12 +517,33 @@ def run(
             gene_batch_size=1,
         )[0]
 
+        bank_best_by_axis = {}
+        for axis in AXES:
+            best_record = (
+                min(
+                    bank.values(),
+                    key=lambda row: row.scores[axis],
+                )
+                if AXIS_DIRECTIONS[axis] == "min"
+                else max(
+                    bank.values(),
+                    key=lambda row: row.scores[axis],
+                )
+            )
+            bank_best_by_axis[axis] = {
+                "record_id": best_record.record_id,
+                "value": best_record.scores[axis],
+                "scores": dict(best_record.scores),
+            }
+
         summary: dict[
             str,
             Any,
         ] = {
             "round": round_index,
             "bank_size": len(bank),
+            "bank_resolution": resolutions,
+            "bank_best_by_axis": bank_best_by_axis,
             "population_axis_stats": {
                 axis: _axis_stats(
                     [
@@ -542,8 +575,8 @@ def run(
                 "priority": (
                     rep_eval.priority
                 ),
-                "completed_tasks": (
-                    rep_eval.completed_tasks
+                "on_time_completed_tasks": (
+                    rep_eval.on_time_completed_tasks
                 ),
                 "deadline_completion_rate": (
                     rep_eval.deadline_completion_rate
@@ -610,6 +643,7 @@ def run(
                 "mutation_rate": (
                     args.mutation_rate
                 ),
+                "bank_resolution": resolutions,
                 "rng_state": (
                     rng.bit_generator.state
                 ),
@@ -692,6 +726,23 @@ def parser() -> argparse.ArgumentParser:
         default=200,
     )
     p.add_argument(
+        "--total-time-resolution",
+        type=float,
+        default=DEFAULT_RESOLUTIONS["total_time"],
+    )
+    p.add_argument(
+        "--priority-resolution",
+        type=float,
+        default=DEFAULT_RESOLUTIONS["priority"],
+    )
+    p.add_argument(
+        "--on-time-completed-tasks-resolution",
+        type=float,
+        default=DEFAULT_RESOLUTIONS[
+            "on_time_completed_tasks"
+        ],
+    )
+    p.add_argument(
         "--device",
         choices=(
             "auto",
@@ -715,6 +766,14 @@ def main() -> None:
             "rounds, genes-per-round "
             "and gene-batch-size "
             "must be positive"
+        )
+    if (
+        args.total_time_resolution <= 0.0
+        or args.priority_resolution <= 0.0
+        or args.on_time_completed_tasks_resolution <= 0.0
+    ):
+        raise ValueError(
+            "All Bank resolutions must be positive"
         )
     run(args)
 

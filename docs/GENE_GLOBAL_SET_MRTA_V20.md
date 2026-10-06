@@ -24,9 +24,9 @@ No fixed score ceiling or 0–1 capability normalization is used.
 
 - `total_time` — minimize raw makespan after all assigned work completes.
 - `priority` — minimize priority-weighted completion rank. High-priority tasks executed later produce a larger cost.
-- `completed_tasks` — maximize the number of tasks completed before their own deadline. Total assigned/completed tasks are separately checked as a legality diagnostic.
+- `on_time_completed_tasks` — maximize the number of tasks completed before their own deadline. Total assigned/completed tasks are separately checked as a legality diagnostic.
 
-The Gene Bank uses mixed-direction Pareto dominance directly on these raw values. Parent sampling cannot safely sum raw axes with different scales, so it uses equal-axis percentile ranks and squares the resulting rank score.
+The Gene Bank uses mixed-direction Pareto dominance on raw values without fixed score ceilings. To avoid preserving hundreds of numerically near-identical Pareto Genes, the archive uses an epsilon grid with default raw resolutions: `total_time=0.5 s`, `priority=0.10`, and `on_time_completed_tasks=0.5 task`. There is still no hard Bank size cap. Exact per-axis champions are always preserved. Parent sampling cannot safely sum raw axes with different scales, so it uses equal-axis percentile ranks and squares the resulting rank score.
 
 ## Fixed 100-seed suite
 

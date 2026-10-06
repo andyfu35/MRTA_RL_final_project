@@ -2,6 +2,7 @@ import numpy as np
 
 from marl2d.gene_mrta_v20.bank import (
     BankRecord,
+    DEFAULT_RESOLUTIONS,
     dominates,
     rebuild_bank,
 )
@@ -113,12 +114,12 @@ def test_rollout_completes_every_task_and_returns_raw_axes():
     assert row.priority >= 0.0
     assert (
         0.0
-        <= row.completed_tasks
+        <= row.on_time_completed_tasks
         <= world.task_count
     )
     assert np.isclose(
         row.deadline_completion_rate,
-        row.completed_tasks
+        row.on_time_completed_tasks
         / world.task_count,
     )
 
@@ -152,7 +153,7 @@ def test_pareto_mixed_directions_without_axis_bounds():
         {
             "total_time": 10.0,
             "priority": 4.0,
-            "completed_tasks": 20.0,
+            "on_time_completed_tasks": 20.0,
         },
     )
     b = _record(
@@ -160,7 +161,7 @@ def test_pareto_mixed_directions_without_axis_bounds():
         {
             "total_time": 12.0,
             "priority": 5.0,
-            "completed_tasks": 19.0,
+            "on_time_completed_tasks": 19.0,
         },
     )
     c = _record(
@@ -168,10 +169,62 @@ def test_pareto_mixed_directions_without_axis_bounds():
         {
             "total_time": 9.0,
             "priority": 8.0,
-            "completed_tasks": 21.0,
+            "on_time_completed_tasks": 21.0,
         },
     )
     assert dominates(a, b)
     assert not dominates(a, c)
     kept = rebuild_bank([a, b, c])
     assert set(kept) == {"a", "c"}
+
+
+
+def test_epsilon_grid_merges_near_identical_pareto_cells():
+    a = _record(
+        "d",
+        {
+            "total_time": 60.01,
+            "priority": 20.01,
+            "on_time_completed_tasks": 40.01,
+        },
+    )
+    b = _record(
+        "e",
+        {
+            "total_time": 60.49,
+            "priority": 20.09,
+            "on_time_completed_tasks": 40.49,
+        },
+    )
+    kept = rebuild_bank(
+        [a, b],
+        resolutions=DEFAULT_RESOLUTIONS,
+    )
+    assert len(kept) == 1
+
+
+def test_epsilon_grid_always_preserves_exact_axis_champions():
+    rows = [
+        _record(
+            "f",
+            {
+                "total_time": 60.01,
+                "priority": 20.09,
+                "on_time_completed_tasks": 40.01,
+            },
+        ),
+        _record(
+            "g",
+            {
+                "total_time": 60.49,
+                "priority": 20.01,
+                "on_time_completed_tasks": 40.49,
+            },
+        ),
+    ]
+    kept = rebuild_bank(
+        rows,
+        resolutions=DEFAULT_RESOLUTIONS,
+    )
+    assert "f" in kept
+    assert "g" in kept

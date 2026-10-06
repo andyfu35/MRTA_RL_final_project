@@ -10,11 +10,11 @@ from .gene import ROBOT_DIM, TASK_DIM, SetAssignmentGene
 from .suite import World, WorldConfig
 
 
-AXES = ("total_time", "priority", "completed_tasks")
+AXES = ("total_time", "priority", "on_time_completed_tasks")
 AXIS_DIRECTIONS = {
     "total_time": "min",
     "priority": "min",
-    "completed_tasks": "max",
+    "on_time_completed_tasks": "max",
 }
 
 
@@ -23,7 +23,7 @@ class WorldMetrics:
     seed: int
     total_time: float
     priority: float
-    completed_tasks: float
+    on_time_completed_tasks: float
     total_tasks: int
     deadline_completion_rate: float
     all_tasks_completed: int
@@ -33,7 +33,7 @@ class WorldMetrics:
         return {
             "total_time": self.total_time,
             "priority": self.priority,
-            "completed_tasks": self.completed_tasks,
+            "on_time_completed_tasks": self.on_time_completed_tasks,
         }
 
     def to_dict(self) -> dict[str, float | int]:
@@ -41,7 +41,7 @@ class WorldMetrics:
             "seed": self.seed,
             "total_time": self.total_time,
             "priority": self.priority,
-            "completed_tasks": self.completed_tasks,
+            "on_time_completed_tasks": self.on_time_completed_tasks,
             "total_tasks": self.total_tasks,
             "deadline_completion_rate": self.deadline_completion_rate,
             "all_tasks_completed": self.all_tasks_completed,
@@ -53,7 +53,7 @@ class WorldMetrics:
 class GeneEvaluation:
     total_time: float
     priority: float
-    completed_tasks: float
+    on_time_completed_tasks: float
     deadline_completion_rate: float
     all_tasks_completed: float
     total_distance: float
@@ -63,7 +63,7 @@ class GeneEvaluation:
         return {
             "total_time": self.total_time,
             "priority": self.priority,
-            "completed_tasks": self.completed_tasks,
+            "on_time_completed_tasks": self.on_time_completed_tasks,
         }
 
 
@@ -401,15 +401,15 @@ def rollout_gene_batch(
         completion_times
         <= deadlines[None, :] + 1e-6
     )
-    completed_tasks = (
+    on_time_completed_tasks = (
         on_time.to(torch.float32).sum(dim=1)
     )
-    deadline_rate = completed_tasks / float(t_count)
+    deadline_rate = on_time_completed_tasks / float(t_count)
 
     arrays = [
         total_time.detach().cpu().numpy(),
         priority_cost.detach().cpu().numpy(),
-        completed_tasks.detach().cpu().numpy(),
+        on_time_completed_tasks.detach().cpu().numpy(),
         deadline_rate.detach().cpu().numpy(),
         total_distance.detach().cpu().numpy(),
     ]
@@ -419,7 +419,7 @@ def rollout_gene_batch(
             seed=world.seed,
             total_time=float(arrays[0][i]),
             priority=float(arrays[1][i]),
-            completed_tasks=float(arrays[2][i]),
+            on_time_completed_tasks=float(arrays[2][i]),
             total_tasks=t_count,
             deadline_completion_rate=float(arrays[3][i]),
             all_tasks_completed=t_count,
@@ -478,9 +478,9 @@ def evaluate_population(
                         [x.priority for x in rows]
                     )
                 ),
-                completed_tasks=float(
+                on_time_completed_tasks=float(
                     np.mean(
-                        [x.completed_tasks for x in rows]
+                        [x.on_time_completed_tasks for x in rows]
                     )
                 ),
                 deadline_completion_rate=float(

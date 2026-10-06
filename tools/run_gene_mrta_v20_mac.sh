@@ -4,7 +4,7 @@ set -euo pipefail
 MODE="${1:-tests}"
 VENV_DIR="${VENV_DIR:-.venv-gene}"
 ROOT="runs/gene_mrta_v20"
-RUN_DIR="${V20_RUN_DIR:-$ROOT/fixed100_50r_seed200}"
+RUN_DIR="${V20_RUN_DIR:-$ROOT/fixed100_50r_seed200_epsgrid_v2}"
 
 if [[ ! -d "$VENV_DIR" ]]; then
   python3 -m venv "$VENV_DIR"
@@ -37,12 +37,18 @@ elif [[ "$MODE" == "train-50" ]]; then
   V20_GENES_PER_ROUND="${V20_GENES_PER_ROUND:-64}"
   V20_GENE_BATCH_SIZE="${V20_GENE_BATCH_SIZE:-32}"
   V20_SEED="${V20_SEED:-200}"
+  V20_TIME_RESOLUTION="${V20_TIME_RESOLUTION:-0.5}"
+  V20_PRIORITY_RESOLUTION="${V20_PRIORITY_RESOLUTION:-0.10}"
+  V20_ONTIME_RESOLUTION="${V20_ONTIME_RESOLUTION:-0.5}"
   echo "V20_RUN_DIR=$RUN_DIR"
   echo "V20_FIXED_SEEDS=100"
   echo "V20_ROUNDS=$V20_ROUNDS"
   echo "V20_GENES_PER_ROUND=$V20_GENES_PER_ROUND"
   echo "V20_GENE_BATCH_SIZE=$V20_GENE_BATCH_SIZE"
   echo "V20_SEED=$V20_SEED"
+  echo "V20_TIME_RESOLUTION=$V20_TIME_RESOLUTION"
+  echo "V20_PRIORITY_RESOLUTION=$V20_PRIORITY_RESOLUTION"
+  echo "V20_ONTIME_RESOLUTION=$V20_ONTIME_RESOLUTION"
   python -m marl2d.gene_mrta_v20.train \
     --run-dir "$RUN_DIR" \
     --rounds "$V20_ROUNDS" \
@@ -50,6 +56,9 @@ elif [[ "$MODE" == "train-50" ]]; then
     --world-count 100 \
     --gene-batch-size "$V20_GENE_BATCH_SIZE" \
     --seed "$V20_SEED" \
+    --total-time-resolution "$V20_TIME_RESOLUTION" \
+    --priority-resolution "$V20_PRIORITY_RESOLUTION" \
+    --on-time-completed-tasks-resolution "$V20_ONTIME_RESOLUTION" \
     --device auto
 else
   echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|train-50]" >&2
