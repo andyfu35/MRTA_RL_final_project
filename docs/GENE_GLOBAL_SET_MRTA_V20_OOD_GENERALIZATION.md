@@ -245,3 +245,134 @@ Interpretation:
 - do not treat larger raw Total Time as failure by itself;
 - use TotalTime/BaselineTime and exact On-time percentage as the primary
   cross-scale indicators.
+
+
+## Density-controlled cardinality scaling
+
+Protocol version:
+
+`gene_global_set_mrta_v20_zero_shot_ood_v2`
+
+This stage keeps spatial density constant while increasing robot/task
+cardinality.
+
+The frozen policy already normalizes:
+
+- task/robot x-y coordinates by `world_size`;
+- pair distance by the world diagonal;
+- deadline/service/finish-time quantities by the world's baseline time scale;
+- accumulated distance by a scale derived from baseline time, speed, and map
+  diagonal.
+
+Therefore expanding `world_size` does not expose the Gene to unnormalized raw
+coordinates outside the original 0..100 scale. The test still changes the
+physical map and cardinality, but the observation representation remains
+scale-normalized by design.
+
+Reference density anchor:
+
+- 20 Robots;
+- world size = 100;
+- area = 10,000;
+- robot density = 0.002 robots/unit^2.
+
+For larger robot counts:
+
+[
+L(R) = 100\sqrt{R/20}
+]
+
+so robot density stays constant.
+
+Two workload ladders are tested.
+
+### 5 Tasks/Robot
+
+| Robots | Tasks | World size |
+|---:|---:|---:|
+| 20 | 100 | 100.000 |
+| 40 | 200 | 141.421 |
+| 60 | 300 | 173.205 |
+| 80 | 400 | 200.000 |
+| 100 | 500 | 223.607 |
+
+This keeps both robot density and task density constant.
+
+### 15 Tasks/Robot
+
+| Robots | Tasks | World size |
+|---:|---:|---:|
+| 20 | 300 | 100.000 |
+| 40 | 600 | 141.421 |
+| 60 | 900 | 173.205 |
+| 80 | 1200 | 200.000 |
+| 100 | 1500 | 223.607 |
+
+This also keeps both densities constant within the ladder, while using a
+three-times-higher task load than the 5 Tasks/Robot ladder.
+
+### Stage 1 smoke
+
+The default smoke stops at 80 Robots to avoid conflating a slow large-world
+baseline generator with Policy failure.
+
+```bash
+bash tools/run_gene_mrta_v20_mac.sh ood-density-smoke
+```
+
+Defaults:
+
+- 20 unseen seeds/cell;
+- seed namespace = 20110001;
+- 8 cells total;
+- maximum cell = 80R/1200T.
+
+### Stage 2 extreme
+
+If Stage 1 remains valid:
+
+```bash
+bash tools/run_gene_mrta_v20_mac.sh ood-density-extreme
+```
+
+Defaults:
+
+- 5 unseen seeds/cell;
+- seed namespace = 20120001;
+- 100R/500T;
+- 100R/1500T.
+
+The evaluator reports world-generation runtime separately from Gene-evaluation
+runtime, because feasible-baseline deadline construction becomes expensive at
+large task counts.
+
+Cell syntax now supports an optional map size:
+
+```text
+ROBOTSxTASKS@WORLD_SIZE
+```
+
+Example:
+
+```text
+60x900@173.205081
+```
+
+Outputs additionally record:
+
+- world_size;
+- world_area;
+- robot_density;
+- task_density;
+- world_generation_runtime_s;
+- cell_runtime_s.
+
+Interpretation:
+
+1. compare 20/40/60/80 at fixed workload and fixed spatial density to isolate
+   cardinality scaling more cleanly;
+2. compare the 5-task and 15-task ladders to measure workload sensitivity;
+3. a failure during world generation is infrastructure/generator scaling, not
+   a frozen Gene inference failure;
+4. TotalTime/BaselineTime and exact On-time % remain the primary behavioral
+   metrics.
