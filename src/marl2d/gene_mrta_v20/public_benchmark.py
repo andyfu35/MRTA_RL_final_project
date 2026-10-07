@@ -355,6 +355,7 @@ def evaluate_twpc_gene(
     robot_finish = np.zeros(robot_count, dtype=np.float64)
     robot_distance = np.zeros(robot_count, dtype=np.float64)
     completed = np.zeros(task_count, dtype=bool)
+    task_finish = np.full(task_count, np.nan, dtype=np.float64)
     sequence: list[tuple[int, int]] = []
 
     predecessors: list[list[int]] = []
@@ -374,6 +375,13 @@ def evaluate_twpc_gene(
         if not np.any(available):
             break
 
+        precedence_release = np.zeros(task_count, dtype=np.float64)
+        for t in range(task_count):
+            if predecessors[t]:
+                precedence_release[t] = max(
+                    float(task_finish[p]) for p in predecessors[t]
+                )
+
         robot_xy = normalized[robot_nodes]
         robot_input = np.column_stack([
             robot_xy,
@@ -391,6 +399,10 @@ def evaluate_twpc_gene(
         ]
         arrival = robot_finish[:, None] + pair_dist
         start_time = np.maximum(arrival, est[task_nodes][None, :])
+        start_time = np.maximum(
+            start_time,
+            precedence_release[None, :],
+        )
         finish_time = start_time + duration[task_nodes][None, :]
         feasible = (
             available[None, :]
@@ -428,6 +440,7 @@ def evaluate_twpc_gene(
         robot_distance[robot] += pair_dist[robot, task]
         robot_nodes[robot] = task_nodes[task]
         completed[task] = True
+        task_finish[task] = finish_time[robot, task]
         sequence.append((robot, task))
 
     runtime_s = time.perf_counter() - started
