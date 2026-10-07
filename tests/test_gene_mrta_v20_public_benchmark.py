@@ -6,6 +6,7 @@ from marl2d.gene_mrta_v20.public_benchmark import (
     _parse_tsplib,
     _parse_twpc_csv,
     _parse_twpc_solution,
+    _twpc_precedence_state,
 )
 
 
@@ -77,3 +78,18 @@ def test_twpc_full_completion_is_trivial_primary_upper_bound():
 """
     )
     assert sol["finished"] == sol["tasks"] == 18
+
+
+
+def test_twpc_precedence_releases_successor_at_predecessor_finish():
+    completed = np.asarray([True, False], dtype=bool)
+    task_finish = np.asarray([12.5, np.nan], dtype=np.float64)
+    predecessors = [[], [0]]
+    available, release = _twpc_precedence_state(
+        completed,
+        task_finish,
+        predecessors,
+    )
+    assert available.tolist() == [False, True]
+    assert np.isclose(release[0], 0.0)
+    assert np.isclose(release[1], 12.5)
