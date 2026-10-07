@@ -12,6 +12,7 @@ from urllib.request import urlopen
 
 import numpy as np
 import torch
+import truststore
 
 from .gene import SetAssignmentGene
 from .ood_generalization import _actual_device, _load_checkpoint_records, _select_record
@@ -19,6 +20,10 @@ from .rollout import _unpack_gene_batch
 
 
 PROTOCOL = "gene_global_set_mrta_v20_public_benchmark_v1"
+
+# Use the operating system trust store for HTTPS downloads. This avoids
+# macOS framework-Python CA-chain failures without disabling TLS verification.
+truststore.inject_into_ssl()
 
 TSPLIB_BASE = "https://raw.githubusercontent.com/mastqe/tsplib/master"
 TWPC_BASE = "https://raw.githubusercontent.com/zhanglixuan0720/TWPC-MRTA/main"
