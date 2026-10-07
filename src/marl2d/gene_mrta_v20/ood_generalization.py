@@ -15,7 +15,7 @@ from .rollout import GeneEvaluation, evaluate_population
 from .suite import FIXED_WORLD_SEEDS, WorldConfig, generate_world
 
 
-PROTOCOL = "gene_global_set_mrta_v20_zero_shot_size_ood_v1"
+PROTOCOL = "gene_global_set_mrta_v20_zero_shot_ood_v2"
 TRAIN_ROBOT_RANGE = (5, 20)
 TRAIN_TASK_RANGE = (10, 100)
 DEFAULT_CELLS = (
