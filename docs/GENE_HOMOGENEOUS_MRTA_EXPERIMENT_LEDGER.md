@@ -3817,3 +3817,40 @@ Next frozen action:
 1. run `bash tools/run_gene_mrta_v20_mac.sh tests`;
 2. run `bash tools/run_gene_mrta_v20_mac.sh ood-smoke`;
 3. inspect 20-seed/cell results before starting `ood-formal`.
+
+
+## V2.0 workload-ratio OOD matrix
+
+Implemented after the first zero-shot size-OOD smoke.
+
+Goal:
+separate absolute-cardinality effects from task-load-per-robot effects.
+
+Frozen Genes remain unchanged:
+- Total-Time champion `5b448ba2073a90eba8d5`;
+- On-Time champion `ba1efa666ac266786b69`.
+
+No retraining and no Gene-Bank feedback.
+
+Default workload matrix:
+- Robots = 20, 40, 60;
+- Tasks/Robot = 2.5, 5, 10, 15;
+- cells = 20x50, 20x100, 20x200, 20x300,
+  40x100, 40x200, 40x400, 40x600,
+  60x150, 60x300, 60x600, 60x900.
+
+Smoke:
+- 20 unseen seeds/cell;
+- seed namespace 20100001;
+- command: `bash tools/run_gene_mrta_v20_mac.sh ood-load-smoke`.
+
+Formal:
+- 100 unseen seeds/cell;
+- command: `bash tools/run_gene_mrta_v20_mac.sh ood-load-formal`.
+
+Evaluator outputs now include `tasks_per_robot`.
+
+Primary interpretation:
+- at fixed Tasks/Robot, compare 20R vs 40R vs 60R for absolute-size degradation;
+- at fixed Robot count, compare Tasks/Robot 2.5/5/10/15 for load degradation;
+- primary cross-size metrics are TotalTime/BaselineTime and exact On-time %.
