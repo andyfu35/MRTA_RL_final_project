@@ -44,24 +44,33 @@ def _atomic_json(path: Path, payload: object) -> None:
     tmp.replace(path)
 
 
-def _parse_cells(text: str | None) -> list[tuple[int, int]]:
+def _parse_cells(text: str | None) -> list[tuple[int, int, float]]:
     if text is None or not text.strip():
-        return list(DEFAULT_CELLS)
-    cells: list[tuple[int, int]] = []
-    seen: set[tuple[int, int]] = set()
+        return [(r, t, 100.0) for r, t in DEFAULT_CELLS]
+    cells: list[tuple[int, int, float]] = []
+    seen: set[tuple[int, int, float]] = set()
     for raw in text.split(","):
         token = raw.strip().lower()
         if not token:
             continue
-        parts = token.split("x")
+        if "@" in token:
+            shape_token, world_token = token.split("@", 1)
+            world_size = float(world_token)
+        else:
+            shape_token = token
+            world_size = 100.0
+        parts = shape_token.split("x")
         if len(parts) != 2:
             raise ValueError(
-                f"Invalid cell {raw!r}; expected ROBOTSxTASKS, e.g. 20x100"
+                f"Invalid cell {raw!r}; expected ROBOTSxTASKS or "
+                "ROBOTSxTASKS@WORLD_SIZE"
             )
         robots, tasks = (int(parts[0]), int(parts[1]))
-        if robots <= 0 or tasks <= 0:
-            raise ValueError("Robot/task counts must be positive")
-        cell = (robots, tasks)
+        if robots <= 0 or tasks <= 0 or world_size <= 0.0:
+            raise ValueError(
+                "Robot/task counts and world size must be positive"
+            )
+        cell = (robots, tasks, world_size)
         if cell not in seen:
             cells.append(cell)
             seen.add(cell)
@@ -146,8 +155,10 @@ def _worlds_for_cell(
     robots: int,
     tasks: int,
     seeds: Iterable[int],
+    world_size: float = 100.0,
 ) -> tuple[WorldConfig, list[object]]:
     config = WorldConfig(
+        world_size=float(world_size),
         robot_min=robots,
         robot_max=robots,
         task_min=tasks,
@@ -167,6 +178,8 @@ def _summary_row(
     robots: int,
     tasks: int,
     seed_count: int,
+    world_size: float,
+    world_generation_runtime_s: float,
     cell_runtime_s: float,
 ) -> dict[str, object]:
     ratios = np.asarray(
@@ -186,6 +199,10 @@ def _summary_row(
         "robots": robots,
         "tasks": tasks,
         "tasks_per_robot": float(tasks) / float(robots),
+        "world_size": float(world_size),
+        "world_area": float(world_size) ** 2,
+        "robot_density": float(robots) / (float(world_size) ** 2),
+        "task_density": float(tasks) / (float(world_size) ** 2),
         "regime": _regime(robots, tasks),
         "seed_count": seed_count,
         "total_time_s": evaluation.total_time,
@@ -195,6 +212,7 @@ def _summary_row(
         "priority_rank": evaluation.priority,
         "on_time_percent": 100.0 * evaluation.deadline_completion_rate,
         "total_distance": evaluation.total_distance,
+        "world_generation_runtime_s": world_generation_runtime_s,
         "cell_runtime_s": cell_runtime_s,
     }
 
@@ -206,6 +224,7 @@ def _per_seed_rows(
     worlds: list[object],
     robots: int,
     tasks: int,
+    world_size: float,
 ) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     for metric, world in zip(evaluation.per_seed, worlds):
@@ -217,6 +236,10 @@ def _per_seed_rows(
                 "robots": robots,
                 "tasks": tasks,
                 "tasks_per_robot": float(tasks) / float(robots),
+                "world_size": float(world_size),
+                "world_area": float(world_size) ** 2,
+                "robot_density": float(robots) / (float(world_size) ** 2),
+                "task_density": float(tasks) / (float(world_size) ** 2),
                 "regime": _regime(robots, tasks),
                 "seed": metric.seed,
                 "total_time_s": metric.total_time,
@@ -277,9 +300,13 @@ def run(args: argparse.Namespace) -> Path:
                 "robots": r,
                 "tasks": t,
                 "tasks_per_robot": float(t) / float(r),
+                "world_size": world_size,
+                "world_area": world_size ** 2,
+                "robot_density": float(r) / (world_size ** 2),
+                "task_density": float(t) / (world_size ** 2),
                 "regime": _regime(r, t),
             }
-            for r, t in cells
+            for r, t, world_size in cells
         ],
         "unseen_seed_base": args.seed,
         "unseen_seeds": seeds,
@@ -307,8 +334,17 @@ def run(args: argparse.Namespace) -> Path:
     summary_rows: list[dict[str, object]] = []
     per_seed_rows: list[dict[str, object]] = []
 
-    for robots, tasks in cells:
-        config, worlds = _worlds_for_cell(robots, tasks, seeds)
+    for robots, tasks, world_size in cells:
+        generation_started = time.perf_counter()
+        config, worlds = _worlds_for_cell(
+            robots,
+            tasks,
+            seeds,
+            world_size=world_size,
+        )
+        world_generation_runtime_s = (
+            time.perf_counter() - generation_started
+        )
 
         started = time.perf_counter()
         evaluations = evaluate_population(
@@ -329,6 +365,8 @@ def run(args: argparse.Namespace) -> Path:
                 robots,
                 tasks,
                 args.seeds,
+                world_size,
+                world_generation_runtime_s,
                 cell_runtime_s,
             )
             summary_rows.append(row)
@@ -340,6 +378,7 @@ def run(args: argparse.Namespace) -> Path:
                     worlds,
                     robots,
                     tasks,
+                    world_size,
                 )
             )
             print(
