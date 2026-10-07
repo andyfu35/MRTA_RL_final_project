@@ -486,3 +486,55 @@ Next frozen action:
 1. run `bash tools/run_gene_mrta_v20_mac.sh tests`;
 2. run `bash tools/run_gene_mrta_v20_mac.sh ood-smoke`;
 3. inspect 20-seed/cell results before starting `ood-formal`.
+
+
+## V2.0 frozen public benchmark transfer
+
+Status: IMPLEMENTED, READY TO RUN.
+
+Purpose:
+evaluate the already-trained V2.0 Total-Time and On-Time specialists on exact
+public benchmark instances without retraining or Gene-Bank feedback.
+
+Frozen checkpoint:
+`runs/gene_mrta_v20/longrun_1024g_200r_seed200/checkpoint.json`
+
+Frozen Genes:
+- Total-Time: `5b448ba2073a90eba8d5`
+- On-Time: `ba1efa666ac266786b69`
+
+Track A — Total-Time / MinMax mTSP:
+- public mTSPLib instances eil51, berlin52, eil76, rat99;
+- m = 2 and 5;
+- common depot and mandatory closed tours;
+- objective = minimum longest route;
+- published baselines = CPLEX, OR-Tools, ScheduleNet, SOM, ACO, EA;
+- only explicitly starred CPLEX values are called proven optimum;
+- selected exact OPT cases: eil51/m2 = 222.73, eil76/m2 = 280.85;
+- non-optimal CPLEX entries are midpoint references only, never BKS/OPT;
+- TT Gene is primary; On-Time Gene is cross-specialist control.
+
+Track B — On-Time / TWPC-MRTA:
+- public RL5, 5 robots, 18 tasks, map m0, samples 0..9;
+- exact public robot starts, x/y, EST, TWL, DUR, precedence and distance matrix;
+- V2.0 Task mapping = [x,y,priority=1,deadline=EST+TWL,service=DUR];
+- EST and precedence stay external hard constraints, not new learned inputs;
+- published baselines loaded on the same instances:
+  MIP, BMRTA/Batch, TePSSI/AuctionO;
+- completion count is the primary aligned metric;
+- a constraint-valid Gene N/N completion is globally optimal on that primary
+  count objective because N is the absolute upper bound;
+- makespan/distance/runtime remain secondary diagnostics.
+
+Implementation:
+- `src/marl2d/gene_mrta_v20/public_benchmark.py`
+- `tests/test_gene_mrta_v20_public_benchmark.py`
+- `docs/GENE_GLOBAL_SET_MRTA_V20_PUBLIC_BENCHMARK.md`
+- launcher modes:
+  `public-tt`, `public-ontime`, `public-benchmark`.
+
+Mandatory claim discipline:
+- OPT gap only for proven optima;
+- otherwise use gap to best published feasible baseline;
+- never call TWPC task-count optimality makespan optimality;
+- public results never feed training if the result is described as zero-shot.
