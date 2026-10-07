@@ -335,6 +335,20 @@ def run(args: argparse.Namespace) -> Path:
     per_seed_rows: list[dict[str, object]] = []
 
     for robots, tasks, world_size in cells:
+        print(
+            "V20_OOD_GENERATE_START "
+            + json.dumps(
+                {
+                    "robots": robots,
+                    "tasks": tasks,
+                    "tasks_per_robot": float(tasks) / float(robots),
+                    "world_size": world_size,
+                    "seed_count": args.seeds,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
         generation_started = time.perf_counter()
         config, worlds = _worlds_for_cell(
             robots,
@@ -344,6 +358,19 @@ def run(args: argparse.Namespace) -> Path:
         )
         world_generation_runtime_s = (
             time.perf_counter() - generation_started
+        )
+        print(
+            "V20_OOD_GENERATE_DONE "
+            + json.dumps(
+                {
+                    "robots": robots,
+                    "tasks": tasks,
+                    "world_size": world_size,
+                    "runtime_s": world_generation_runtime_s,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
         )
 
         started = time.perf_counter()
