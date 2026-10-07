@@ -79,21 +79,30 @@ elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" ]]; then
   echo "V20_OOD_SEEDS=$V20_OOD_SEEDS"
   echo "V20_OOD_SEED=$V20_OOD_SEED"
   echo "V20_OOD_CELLS=$V20_OOD_CELLS"
-  EXTRA_ARGS=()
-  if [[ -n "${V20_OOD_TOTAL_TIME_GENE_ID:-}" ]]; then
-    EXTRA_ARGS+=(--total-time-gene-id "$V20_OOD_TOTAL_TIME_GENE_ID")
+  run_v20_ood() {
+    python -m marl2d.gene_mrta_v20.ood_generalization \
+      --checkpoint "$V20_OOD_CHECKPOINT" \
+      --run-dir "$V20_OOD_RUN_DIR" \
+      --seeds "$V20_OOD_SEEDS" \
+      --seed "$V20_OOD_SEED" \
+      --cells "$V20_OOD_CELLS" \
+      --device auto \
+      "$@"
+  }
+
+  if [[ -n "${V20_OOD_TOTAL_TIME_GENE_ID:-}" && -n "${V20_OOD_ONTIME_GENE_ID:-}" ]]; then
+    run_v20_ood \
+      --total-time-gene-id "$V20_OOD_TOTAL_TIME_GENE_ID" \
+      --on-time-gene-id "$V20_OOD_ONTIME_GENE_ID"
+  elif [[ -n "${V20_OOD_TOTAL_TIME_GENE_ID:-}" ]]; then
+    run_v20_ood \
+      --total-time-gene-id "$V20_OOD_TOTAL_TIME_GENE_ID"
+  elif [[ -n "${V20_OOD_ONTIME_GENE_ID:-}" ]]; then
+    run_v20_ood \
+      --on-time-gene-id "$V20_OOD_ONTIME_GENE_ID"
+  else
+    run_v20_ood
   fi
-  if [[ -n "${V20_OOD_ONTIME_GENE_ID:-}" ]]; then
-    EXTRA_ARGS+=(--on-time-gene-id "$V20_OOD_ONTIME_GENE_ID")
-  fi
-  python -m marl2d.gene_mrta_v20.ood_generalization \
-    --checkpoint "$V20_OOD_CHECKPOINT" \
-    --run-dir "$V20_OOD_RUN_DIR" \
-    --seeds "$V20_OOD_SEEDS" \
-    --seed "$V20_OOD_SEED" \
-    --cells "$V20_OOD_CELLS" \
-    --device auto \
-    "${EXTRA_ARGS[@]}"
 else
   echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50|ood-smoke|ood-formal]" >&2
   exit 2
