@@ -22,7 +22,7 @@ print("V20_MPS_AVAILABLE", torch.backends.mps.is_available())
 PY
 
 if [[ "$MODE" == "tests" ]]; then
-  pytest -q tests/test_gene_mrta_v20.py tests/test_gene_mrta_v20_ood_generalization.py
+  pytest -q tests/test_gene_mrta_v20.py tests/test_gene_mrta_v20_ood_generalization.py tests/test_gene_mrta_v20_public_benchmark.py
 elif [[ "$MODE" == "smoke" ]]; then
   python -m marl2d.gene_mrta_v20.train \
     --run-dir "${V20_RUN_DIR:-$ROOT/smoke_8g_10s_2r_seed200_epsgrid_v2}" \
@@ -62,6 +62,30 @@ elif [[ "$MODE" == "train-50" ]]; then
     --total-time-resolution "$V20_TIME_RESOLUTION" \
     --priority-resolution "$V20_PRIORITY_RESOLUTION" \
     --on-time-completed-tasks-resolution "$V20_ONTIME_RESOLUTION" \
+    --device auto
+elif [[ "$MODE" == "public-benchmark" || "$MODE" == "public-tt" || "$MODE" == "public-ontime" ]]; then
+  V20_PUBLIC_CHECKPOINT="${V20_PUBLIC_CHECKPOINT:-$ROOT/longrun_1024g_200r_seed200/checkpoint.json}"
+  V20_PUBLIC_STAMP="$(date +%Y%m%d_%H%M%S)"
+  V20_PUBLIC_RUN_DIR="${V20_PUBLIC_RUN_DIR:-$ROOT/public_benchmark_${MODE}_${V20_PUBLIC_STAMP}}"
+  V20_PUBLIC_CACHE_DIR="${V20_PUBLIC_CACHE_DIR:-$ROOT/public_benchmark_cache}"
+  V20_PUBLIC_TWPC_SAMPLES="${V20_PUBLIC_TWPC_SAMPLES:-10}"
+  if [[ "$MODE" == "public-tt" ]]; then
+    V20_PUBLIC_SUBMODE="tt"
+  elif [[ "$MODE" == "public-ontime" ]]; then
+    V20_PUBLIC_SUBMODE="ontime"
+  else
+    V20_PUBLIC_SUBMODE="all"
+  fi
+  echo "V20_PUBLIC_CHECKPOINT=$V20_PUBLIC_CHECKPOINT"
+  echo "V20_PUBLIC_RUN_DIR=$V20_PUBLIC_RUN_DIR"
+  echo "V20_PUBLIC_MODE=$V20_PUBLIC_SUBMODE"
+  echo "V20_PUBLIC_TWPC_SAMPLES=$V20_PUBLIC_TWPC_SAMPLES"
+  python -m marl2d.gene_mrta_v20.public_benchmark \
+    --checkpoint "$V20_PUBLIC_CHECKPOINT" \
+    --run-dir "$V20_PUBLIC_RUN_DIR" \
+    --cache-dir "$V20_PUBLIC_CACHE_DIR" \
+    --mode "$V20_PUBLIC_SUBMODE" \
+    --twpc-samples "$V20_PUBLIC_TWPC_SAMPLES" \
     --device auto
 elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" || "$MODE" == "ood-load-smoke" || "$MODE" == "ood-load-formal" || "$MODE" == "ood-density-smoke" || "$MODE" == "ood-density-extreme" ]]; then
   V20_OOD_CHECKPOINT="${V20_OOD_CHECKPOINT:-$ROOT/longrun_1024g_200r_seed200/checkpoint.json}"
@@ -117,6 +141,6 @@ elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" || "$MODE" == "ood-loa
     run_v20_ood
   fi
 else
-  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50|ood-smoke|ood-formal|ood-load-smoke|ood-load-formal|ood-density-smoke|ood-density-extreme]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50|public-benchmark|public-tt|public-ontime|ood-smoke|ood-formal|ood-load-smoke|ood-load-formal|ood-density-smoke|ood-density-extreme]" >&2
   exit 2
 fi
