@@ -543,87 +543,116 @@ def run_mtsplib(args, genes, run_dir: Path, cache_dir: Path, device: str):
 
 def run_twpc(args, genes, run_dir: Path, cache_dir: Path, device: str):
     rows = []
-    robot_count = 5
-    task_count = 18
-    reference_dirs = {
-        "mip": "MIP",
-        "bmrta": "Batch",
-        "tepssi": "AuctionO",
-    }
-    for sample in range(args.twpc_samples):
-        stem = f"r5_t18_m0_{sample}"
-        data_text = _download_text(
-            f"{TWPC_BASE}/Data/RL5/{stem}.csv",
-            cache_dir / "twpc" / "Data" / f"{stem}.csv",
-        )
-        info, precedence, distances = _parse_twpc_csv(
-            data_text, robot_count, task_count
-        )
+    cases = [
+        {
+            "robot_count": 5,
+            "task_count": 18,
+            "map_id": 0,
+            "references": {
+                "mip": "MIP",
+                "bmrta": "Batch",
+                "tepssi": "AuctionO",
+            },
+        },
+        {
+            "robot_count": 10,
+            "task_count": 36,
+            "map_id": 0,
+            "references": {
+                "bmrta": "Batch",
+                "tepssi": "AuctionO",
+            },
+        },
+    ]
 
-        published: dict[str, dict[str, float | int]] = {}
-        for method, directory in reference_dirs.items():
-            sol_text = _download_text(
-                f"{TWPC_BASE}/Sol/{directory}/RL5/{stem}.sol",
-                cache_dir / "twpc" / directory / f"{stem}.sol",
-            )
-            published[method] = _parse_twpc_solution(sol_text)
+    def ref_value(
+        published: dict[str, dict[str, float | int]],
+        method: str,
+        key: str,
+    ):
+        result = published.get(method)
+        return None if result is None else result[key]
 
-        best_published_completed = max(
-            int(result["finished"]) for result in published.values()
-        )
-        best_completion_methods = [
-            method
-            for method, result in published.items()
-            if int(result["finished"]) == best_published_completed
-        ]
+    for case in cases:
+        robot_count = int(case["robot_count"])
+        task_count = int(case["task_count"])
+        map_id = int(case["map_id"])
+        reference_dirs = dict(case["references"])
 
-        for gene_name, gene in genes:
-            result = evaluate_twpc_gene(
-                gene,
-                info,
-                precedence,
-                distances,
-                robot_count,
-                task_count,
-                device,
+        for sample in range(args.twpc_samples):
+            stem = f"r{robot_count}_t{task_count}_m{map_id}_{sample}"
+            data_text = _download_text(
+                f"{TWPC_BASE}/Data/RL{robot_count}/{stem}.csv",
+                cache_dir / "twpc" / "Data" / f"{stem}.csv",
             )
-            completed = int(result["completed"])
-            row = {
-                "benchmark": "TWPC-MRTA",
-                "instance": stem,
-                "robots": robot_count,
-                "tasks": task_count,
-                "gene": gene_name,
-                "gene_completed": completed,
-                "gene_completion_rate": float(result["completion_rate"]),
-                "best_published_completed": best_published_completed,
-                "best_published_completion_methods": best_completion_methods,
-                "completion_gap_vs_best_published_tasks": (
-                    completed - best_published_completed
-                ),
-                "gene_primary_optimal": completed == task_count,
-                "primary_optimum_value": task_count,
-                "mip_finished": int(published["mip"]["finished"]),
-                "mip_makespan": float(published["mip"]["makespan"]),
-                "mip_distance": float(published["mip"]["distance"]),
-                "mip_runtime_s": float(published["mip"]["runtime_s"]),
-                "bmrta_finished": int(published["bmrta"]["finished"]),
-                "bmrta_makespan": float(published["bmrta"]["makespan"]),
-                "bmrta_distance": float(published["bmrta"]["distance"]),
-                "bmrta_runtime_s": float(published["bmrta"]["runtime_s"]),
-                "tepssi_finished": int(published["tepssi"]["finished"]),
-                "tepssi_makespan": float(published["tepssi"]["makespan"]),
-                "tepssi_distance": float(published["tepssi"]["distance"]),
-                "tepssi_runtime_s": float(published["tepssi"]["runtime_s"]),
-                "gene_makespan": result["makespan"],
-                "gene_distance": result["distance"],
-                "gene_runtime_s": result["runtime_s"],
-            }
-            rows.append(row)
-            print(
-                "V20_PUBLIC_ONTIME " + json.dumps(row, ensure_ascii=False),
-                flush=True,
+            info, precedence, distances = _parse_twpc_csv(
+                data_text, robot_count, task_count
             )
+
+            published: dict[str, dict[str, float | int]] = {}
+            for method, directory in reference_dirs.items():
+                sol_text = _download_text(
+                    f"{TWPC_BASE}/Sol/{directory}/RL{robot_count}/{stem}.sol",
+                    cache_dir / "twpc" / directory / f"{stem}.sol",
+                )
+                published[method] = _parse_twpc_solution(sol_text)
+
+            best_published_completed = max(
+                int(result["finished"]) for result in published.values()
+            )
+            best_completion_methods = [
+                method
+                for method, result in published.items()
+                if int(result["finished"]) == best_published_completed
+            ]
+
+            for gene_name, gene in genes:
+                result = evaluate_twpc_gene(
+                    gene,
+                    info,
+                    precedence,
+                    distances,
+                    robot_count,
+                    task_count,
+                    device,
+                )
+                completed = int(result["completed"])
+                row = {
+                    "benchmark": "TWPC-MRTA",
+                    "instance": stem,
+                    "robots": robot_count,
+                    "tasks": task_count,
+                    "gene": gene_name,
+                    "gene_completed": completed,
+                    "gene_completion_rate": float(result["completion_rate"]),
+                    "best_published_completed": best_published_completed,
+                    "best_published_completion_methods": best_completion_methods,
+                    "completion_gap_vs_best_published_tasks": (
+                        completed - best_published_completed
+                    ),
+                    "gene_primary_optimal": completed == task_count,
+                    "primary_optimum_value": task_count,
+                    "mip_finished": ref_value(published, "mip", "finished"),
+                    "mip_makespan": ref_value(published, "mip", "makespan"),
+                    "mip_distance": ref_value(published, "mip", "distance"),
+                    "mip_runtime_s": ref_value(published, "mip", "runtime_s"),
+                    "bmrta_finished": ref_value(published, "bmrta", "finished"),
+                    "bmrta_makespan": ref_value(published, "bmrta", "makespan"),
+                    "bmrta_distance": ref_value(published, "bmrta", "distance"),
+                    "bmrta_runtime_s": ref_value(published, "bmrta", "runtime_s"),
+                    "tepssi_finished": ref_value(published, "tepssi", "finished"),
+                    "tepssi_makespan": ref_value(published, "tepssi", "makespan"),
+                    "tepssi_distance": ref_value(published, "tepssi", "distance"),
+                    "tepssi_runtime_s": ref_value(published, "tepssi", "runtime_s"),
+                    "gene_makespan": result["makespan"],
+                    "gene_distance": result["distance"],
+                    "gene_runtime_s": result["runtime_s"],
+                }
+                rows.append(row)
+                print(
+                    "V20_PUBLIC_ONTIME " + json.dumps(row, ensure_ascii=False),
+                    flush=True,
+                )
     return rows
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -678,7 +707,7 @@ def run(args) -> Path:
         },
         "TWPC_MRTA": {
             "objective": "maximize tasks completed within hard time windows",
-            "public_reference": "BMRTA + MIP + TePSSI/AuctionO public solutions",
+            "public_reference": "5R/18T: MIP+BMRTA+TePSSI; 10R/36T: BMRTA+TePSSI public solutions",
             "constraints_enforced": [
                 "robot starts",
                 "published distance matrix",
