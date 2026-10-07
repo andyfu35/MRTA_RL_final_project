@@ -3854,3 +3854,66 @@ Primary interpretation:
 - at fixed Tasks/Robot, compare 20R vs 40R vs 60R for absolute-size degradation;
 - at fixed Robot count, compare Tasks/Robot 2.5/5/10/15 for load degradation;
 - primary cross-size metrics are TotalTime/BaselineTime and exact On-time %.
+
+
+## V2.0 density-controlled OOD scaling
+
+Implemented after the workload-ratio OOD smoke.
+
+Purpose:
+test cardinality extrapolation while keeping physical robot/task density fixed
+within each workload ladder.
+
+Important rollout property:
+V2.0 already normalizes task/robot x-y by world_size, pair distance by world
+diagonal, deadline/service/finish-time quantities by baseline time scale, and
+accumulated distance by a scale derived from time/speed/diagonal. Therefore
+larger physical maps do not simply push raw coordinate features outside the
+training 0..100 numerical range.
+
+Cell syntax now accepts:
+`ROBOTSxTASKS@WORLD_SIZE`.
+
+Density anchor:
+- 20R;
+- world_size=100;
+- robot density = 0.002 / unit^2.
+
+Map scaling:
+`world_size = 100 * sqrt(R/20)`.
+
+Stage-1 smoke:
+- workload 5 Tasks/Robot:
+  20R/100T@100,
+  40R/200T@141.421356,
+  60R/300T@173.205081,
+  80R/400T@200;
+- workload 15 Tasks/Robot:
+  20R/300T@100,
+  40R/600T@141.421356,
+  60R/900T@173.205081,
+  80R/1200T@200;
+- 20 unseen seeds/cell;
+- seed namespace 20110001;
+- command: `bash tools/run_gene_mrta_v20_mac.sh ood-density-smoke`.
+
+Stage-2 extreme:
+- 100R/500T@223.606798;
+- 100R/1500T@223.606798;
+- 5 unseen seeds/cell;
+- seed namespace 20120001;
+- command: `bash tools/run_gene_mrta_v20_mac.sh ood-density-extreme`.
+
+Evaluator now records:
+- world_size;
+- world_area;
+- robot_density;
+- task_density;
+- world_generation_runtime_s;
+- Gene cell_runtime_s.
+
+World generation timing is separated from Gene evaluation because feasible
+baseline/deadline construction may become the first infrastructure bottleneck
+at very large task counts.
+
+Frozen Genes and no-feedback rule remain unchanged.
