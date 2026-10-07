@@ -185,6 +185,7 @@ def _summary_row(
         "record_id": record.record_id,
         "robots": robots,
         "tasks": tasks,
+        "tasks_per_robot": float(tasks) / float(robots),
         "regime": _regime(robots, tasks),
         "seed_count": seed_count,
         "total_time_s": evaluation.total_time,
@@ -215,6 +216,7 @@ def _per_seed_rows(
                 "record_id": record.record_id,
                 "robots": robots,
                 "tasks": tasks,
+                "tasks_per_robot": float(tasks) / float(robots),
                 "regime": _regime(robots, tasks),
                 "seed": metric.seed,
                 "total_time_s": metric.total_time,
@@ -270,7 +272,15 @@ def run(args: argparse.Namespace) -> Path:
         "device": device,
         "training_robot_range": list(TRAIN_ROBOT_RANGE),
         "training_task_range": list(TRAIN_TASK_RANGE),
-        "cells": [{"robots": r, "tasks": t, "regime": _regime(r, t)} for r, t in cells],
+        "cells": [
+            {
+                "robots": r,
+                "tasks": t,
+                "tasks_per_robot": float(t) / float(r),
+                "regime": _regime(r, t),
+            }
+            for r, t in cells
+        ],
         "unseen_seed_base": args.seed,
         "unseen_seeds": seeds,
         "seed_count_per_cell": args.seeds,
