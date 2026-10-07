@@ -65,6 +65,7 @@ No Gene parameter is changed.
 The comparison table follows the ScheduleNet mTSPLib benchmark table:
 
 - CPLEX;
+- LKH3;
 - OR-Tools;
 - ScheduleNet;
 - SOM;
@@ -85,16 +86,16 @@ Gap_{OPT} =
 100\frac{M_{Gene}-M^*}{M^*}
 ]
 
-For all other cases, the CPLEX number in the ScheduleNet table is not treated
-as a feasible optimum because that table reports the average of CPLEX lower
-and upper bounds when the optimum is unknown.
+In the final published ScheduleNet/AAMAS benchmark table, non-starred CPLEX
+entries are reported as known-best upper bounds, not proven optima. LKH3 is
+also reported as a feasible reference.
 
 Therefore non-optimal cases report:
 
-- comparison to each published feasible method;
-- gap to the best published feasible result among OR-Tools, ScheduleNet,
-  SOM, ACO, EA;
-- CPLEX midpoint only as a reference field, never as BKS or OPT.
+- comparison to every published feasible method;
+- gap to the best published feasible result among CPLEX/LKH3, OR-Tools,
+  ScheduleNet, SOM, ACO and EA;
+- no OPT claim unless the reference is explicitly marked with `*`.
 
 This distinction is mandatory for any paper claim.
 
@@ -275,7 +276,7 @@ Allowed:
 
 Not allowed:
 
-- calling a CPLEX lower/upper midpoint an optimum;
+- calling a non-starred CPLEX/LKH3 upper bound a proven optimum;
 - comparing native V2.0 seconds directly to public benchmark seconds;
 - claiming TWPC makespan optimality from task-count optimality;
 - using public benchmark results to update the Gene Bank and still calling the
