@@ -2416,10 +2416,10 @@ Track A — Total-Time / MinMax mTSP:
 - m = 2 and 5;
 - common depot and mandatory closed tours;
 - objective = minimum longest route;
-- published baselines = CPLEX, OR-Tools, ScheduleNet, SOM, ACO, EA;
+- published baselines = CPLEX, LKH3, OR-Tools, ScheduleNet, SOM, ACO, EA;
 - only explicitly starred CPLEX values are called proven optimum;
 - selected exact OPT cases: eil51/m2 = 222.73, eil76/m2 = 280.85;
-- non-optimal CPLEX entries are midpoint references only, never BKS/OPT;
+- non-starred CPLEX entries are final-published known-best upper bounds; they are feasible references/BKS but not proven OPT;
 - TT Gene is primary; On-Time Gene is cross-specialist control.
 
 Track B — On-Time / TWPC-MRTA:
