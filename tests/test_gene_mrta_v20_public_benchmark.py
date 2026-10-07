@@ -31,7 +31,8 @@ def test_published_mtsplib_reference_marks_only_supported_true_optima():
     assert MTSPLIB_REFERENCE[("eil51", 2)]["cplex_proven_optimal"] is True
     assert MTSPLIB_REFERENCE[("eil76", 2)]["cplex_proven_optimal"] is True
     assert MTSPLIB_REFERENCE[("eil51", 5)]["cplex_proven_optimal"] is False
-    assert np.isclose(MTSPLIB_REFERENCE[("eil51", 5)]["cplex"], 110.43)
+    assert np.isclose(MTSPLIB_REFERENCE[("eil51", 5)]["cplex"], 123.96)
+    assert np.isclose(MTSPLIB_REFERENCE[("eil51", 5)]["lkh3"], 123.96)
     method, value = _best_feasible_reference(MTSPLIB_REFERENCE[("eil51", 5)])
     assert method == "schedulenet"
     assert np.isclose(value, 118.94)
