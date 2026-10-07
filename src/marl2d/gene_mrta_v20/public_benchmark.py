@@ -28,41 +28,49 @@ TWPC_BASE = "https://raw.githubusercontent.com/zhanglixuan0720/TWPC-MRTA/main"
 MTSPLIB_REFERENCE = {
     ("eil51", 2): {
         "cplex": 222.73, "cplex_proven_optimal": True,
+        "lkh3": 222.73,
         "ortools": 243.02, "schedulenet": 259.67,
         "som": 278.44, "aco": 248.76, "ea": 276.62,
     },
     ("eil51", 5): {
-        "cplex": 110.43, "cplex_proven_optimal": False,
+        "cplex": 123.96, "cplex_proven_optimal": False,
+        "lkh3": 123.96,
         "ortools": 127.50, "schedulenet": 118.94,
         "som": 157.68, "aco": 135.09, "ea": 151.21,
     },
     ("berlin52", 2): {
-        "cplex": 4079.63, "cplex_proven_optimal": False,
+        "cplex": 4110.21, "cplex_proven_optimal": False,
+        "lkh3": 4110.21,
         "ortools": 4665.47, "schedulenet": 4816.30,
         "som": 5350.83, "aco": 4388.99, "ea": 5038.33,
     },
     ("berlin52", 5): {
-        "cplex": 2056.54, "cplex_proven_optimal": False,
+        "cplex": 2441.39, "cplex_proven_optimal": False,
+        "lkh3": 2441.39,
         "ortools": 2482.57, "schedulenet": 2615.57,
         "som": 3461.93, "aco": 2733.56, "ea": 2853.63,
     },
     ("eil76", 2): {
         "cplex": 280.85, "cplex_proven_optimal": True,
+        "lkh3": 280.85,
         "ortools": 318.00, "schedulenet": 334.10,
         "som": 364.02, "aco": 308.53, "ea": 365.72,
     },
     ("eil76", 5): {
-        "cplex": 133.95, "cplex_proven_optimal": False,
+        "cplex": 150.30, "cplex_proven_optimal": False,
+        "lkh3": 150.30,
         "ortools": 143.38, "schedulenet": 168.03,
         "som": 210.69, "aco": 163.93, "ea": 211.91,
     },
     ("rat99", 2): {
-        "cplex": 674.85, "cplex_proven_optimal": False,
+        "cplex": 728.75, "cplex_proven_optimal": False,
+        "lkh3": 728.75,
         "ortools": 762.19, "schedulenet": 789.98,
         "som": 927.36, "aco": 767.15, "ea": 896.72,
     },
     ("rat99", 5): {
-        "cplex": 402.71, "cplex_proven_optimal": False,
+        "cplex": 469.25, "cplex_proven_optimal": False,
+        "lkh3": 469.25,
         "ortools": 473.66, "schedulenet": 502.49,
         "som": 624.38, "aco": 525.54, "ea": 596.87,
     },
@@ -472,10 +480,8 @@ def _best_feasible_reference(
     values = {
         k: float(v)
         for k, v in reference.items()
-        if k in {"ortools", "schedulenet", "som", "aco", "ea"}
+        if k in {"cplex", "lkh3", "ortools", "schedulenet", "som", "aco", "ea"}
     }
-    if bool(reference["cplex_proven_optimal"]):
-        values["cplex_opt"] = float(reference["cplex"])
     method = min(values, key=values.get)
     return method, values[method]
 
@@ -512,7 +518,8 @@ def run_mtsplib(args, genes, run_dir: Path, cache_dir: Path, device: str):
                 "gap_to_published_best_feasible_pct": (
                     100.0 * (value - best_value) / best_value
                 ),
-                "cplex_reference_midpoint_or_optimum": reference["cplex"],
+                "cplex_best_known_upper_bound_or_optimum": reference["cplex"],
+                "lkh3": reference["lkh3"],
                 "cplex_proven_optimal": reference["cplex_proven_optimal"],
                 "gap_to_proven_optimum_pct": (
                     100.0
