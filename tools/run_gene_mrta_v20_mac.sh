@@ -63,11 +63,16 @@ elif [[ "$MODE" == "train-50" ]]; then
     --priority-resolution "$V20_PRIORITY_RESOLUTION" \
     --on-time-completed-tasks-resolution "$V20_ONTIME_RESOLUTION" \
     --device auto
-elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" ]]; then
+elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" || "$MODE" == "ood-load-smoke" || "$MODE" == "ood-load-formal" ]]; then
   V20_OOD_CHECKPOINT="${V20_OOD_CHECKPOINT:-$ROOT/longrun_1024g_200r_seed200/checkpoint.json}"
-  V20_OOD_SEED="${V20_OOD_SEED:-20070001}"
-  V20_OOD_CELLS="${V20_OOD_CELLS:-10x50,20x100,25x100,40x100,60x100,20x125,20x150,20x200,20x300,25x125,40x200,60x300}"
-  if [[ "$MODE" == "ood-formal" ]]; then
+  if [[ "$MODE" == "ood-load-smoke" || "$MODE" == "ood-load-formal" ]]; then
+    V20_OOD_SEED="${V20_OOD_SEED:-20100001}"
+    V20_OOD_CELLS="${V20_OOD_CELLS:-20x50,20x100,20x200,20x300,40x100,40x200,40x400,40x600,60x150,60x300,60x600,60x900}"
+  else
+    V20_OOD_SEED="${V20_OOD_SEED:-20070001}"
+    V20_OOD_CELLS="${V20_OOD_CELLS:-10x50,20x100,25x100,40x100,60x100,20x125,20x150,20x200,20x300,25x125,40x200,60x300}"
+  fi
+  if [[ "$MODE" == "ood-formal" || "$MODE" == "ood-load-formal" ]]; then
     V20_OOD_SEEDS="${V20_OOD_SEEDS:-100}"
   else
     V20_OOD_SEEDS="${V20_OOD_SEEDS:-20}"
@@ -104,6 +109,6 @@ elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" ]]; then
     run_v20_ood
   fi
 else
-  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50|ood-smoke|ood-formal]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50|ood-smoke|ood-formal|ood-load-smoke|ood-load-formal]" >&2
   exit 2
 fi
