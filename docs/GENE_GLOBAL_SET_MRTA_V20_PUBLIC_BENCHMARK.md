@@ -121,13 +121,21 @@ Public repository:
 
 `zhanglixuan0720/TWPC-MRTA`
 
-Selected public subset:
+Selected public subsets:
 
-- Uniform Distribution RL5
-- 5 robots
-- 18 tasks
-- map m0
-- samples 0..9
+- Uniform Distribution RL5:
+  - 5 robots
+  - 18 tasks
+  - map m0
+  - samples 0..9
+  - public references: MIP, BMRTA/Batch, TePSSI/AuctionO
+- Uniform Distribution RL10:
+  - 10 robots
+  - 36 tasks
+  - map m0
+  - samples 0..9
+  - public references: BMRTA/Batch, TePSSI/AuctionO
+  - no MIP solution is published for this selected size
 
 For every exact public instance, the evaluator loads:
 
@@ -170,9 +178,20 @@ count as incomplete.
 
 ### Published baselines loaded on the exact same instances
 
+For 5R/18T:
+
 - MIP
 - BMRTA / Batch
 - TePSSI / AuctionO
+
+For 10R/36T:
+
+- BMRTA / Batch
+- TePSSI / AuctionO
+
+The absence of a public MIP file at 10R/36T does not prevent certification of
+the primary completion optimum when a feasible public method or the Gene itself
+completes all 36 tasks, because 36 is the absolute task-count upper bound.
 
 For every method the public solution provides:
 
