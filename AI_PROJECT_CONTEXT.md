@@ -2423,12 +2423,13 @@ Track A — Total-Time / MinMax mTSP:
 - TT Gene is primary; On-Time Gene is cross-specialist control.
 
 Track B — On-Time / TWPC-MRTA:
-- public RL5, 5 robots, 18 tasks, map m0, samples 0..9;
+- public RL5 5R/18T and RL10 10R/36T, map m0, samples 0..9;
 - exact public robot starts, x/y, EST, TWL, DUR, precedence and distance matrix;
 - V2.0 Task mapping = [x,y,priority=1,deadline=EST+TWL,service=DUR];
 - EST and precedence stay external hard constraints, not new learned inputs;
 - published baselines loaded on the same instances:
-  MIP, BMRTA/Batch, TePSSI/AuctionO;
+  5R/18T uses MIP+BMRTA/Batch+TePSSI/AuctionO;
+  10R/36T uses BMRTA/Batch+TePSSI/AuctionO (no public MIP file at this size);
 - completion count is the primary aligned metric;
 - a constraint-valid Gene N/N completion is globally optimal on that primary
   count objective because N is the absolute upper bound;
