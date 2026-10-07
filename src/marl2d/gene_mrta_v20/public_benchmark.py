@@ -310,6 +310,23 @@ def _parse_twpc_solution(text: str) -> dict[str, float | int]:
     }
 
 
+def _twpc_precedence_state(
+    completed: np.ndarray,
+    task_finish: np.ndarray,
+    predecessors: list[list[int]],
+) -> tuple[np.ndarray, np.ndarray]:
+    available = np.asarray([
+        (not bool(completed[t]))
+        and all(bool(completed[p]) for p in predecessors[t])
+        for t in range(len(predecessors))
+    ], dtype=bool)
+    release = np.zeros(len(predecessors), dtype=np.float64)
+    for t, pred in enumerate(predecessors):
+        if pred and all(bool(completed[p]) for p in pred):
+            release[t] = max(float(task_finish[p]) for p in pred)
+    return available, release
+
+
 def evaluate_twpc_gene(
     gene: SetAssignmentGene,
     info: np.ndarray,
@@ -367,20 +384,13 @@ def evaluate_twpc_gene(
 
     started = time.perf_counter()
     while True:
-        available = np.asarray([
-            (not completed[t])
-            and all(completed[p] for p in predecessors[t])
-            for t in range(task_count)
-        ], dtype=bool)
+        available, precedence_release = _twpc_precedence_state(
+            completed,
+            task_finish,
+            predecessors,
+        )
         if not np.any(available):
             break
-
-        precedence_release = np.zeros(task_count, dtype=np.float64)
-        for t in range(task_count):
-            if predecessors[t]:
-                precedence_release[t] = max(
-                    float(task_finish[p]) for p in predecessors[t]
-                )
 
         robot_xy = normalized[robot_nodes]
         robot_input = np.column_stack([
