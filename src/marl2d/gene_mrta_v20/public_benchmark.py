@@ -32,17 +32,17 @@ MTSPLIB_REFERENCE = {
         "som": 278.44, "aco": 248.76, "ea": 276.62,
     },
     ("eil51", 5): {
-        "cplex": 123.96, "cplex_proven_optimal": False,
+        "cplex": 110.43, "cplex_proven_optimal": False,
         "ortools": 127.50, "schedulenet": 118.94,
         "som": 157.68, "aco": 135.09, "ea": 151.21,
     },
     ("berlin52", 2): {
-        "cplex": 4110.21, "cplex_proven_optimal": False,
+        "cplex": 4079.63, "cplex_proven_optimal": False,
         "ortools": 4665.47, "schedulenet": 4816.30,
         "som": 5350.83, "aco": 4388.99, "ea": 5038.33,
     },
     ("berlin52", 5): {
-        "cplex": 2441.39, "cplex_proven_optimal": False,
+        "cplex": 2056.54, "cplex_proven_optimal": False,
         "ortools": 2482.57, "schedulenet": 2615.57,
         "som": 3461.93, "aco": 2733.56, "ea": 2853.63,
     },
@@ -52,17 +52,17 @@ MTSPLIB_REFERENCE = {
         "som": 364.02, "aco": 308.53, "ea": 365.72,
     },
     ("eil76", 5): {
-        "cplex": 150.30, "cplex_proven_optimal": False,
+        "cplex": 133.95, "cplex_proven_optimal": False,
         "ortools": 143.38, "schedulenet": 168.03,
         "som": 210.69, "aco": 163.93, "ea": 211.91,
     },
     ("rat99", 2): {
-        "cplex": 728.75, "cplex_proven_optimal": False,
+        "cplex": 674.85, "cplex_proven_optimal": False,
         "ortools": 762.19, "schedulenet": 789.98,
         "som": 927.36, "aco": 767.15, "ea": 896.72,
     },
     ("rat99", 5): {
-        "cplex": 469.25, "cplex_proven_optimal": False,
+        "cplex": 402.71, "cplex_proven_optimal": False,
         "ortools": 473.66, "schedulenet": 502.49,
         "som": 624.38, "aco": 525.54, "ea": 596.87,
     },
@@ -466,12 +466,16 @@ def evaluate_twpc_gene(
     }
 
 
-def _best_reference(reference: dict[str, object]) -> tuple[str, float]:
+def _best_feasible_reference(
+    reference: dict[str, object],
+) -> tuple[str, float]:
     values = {
         k: float(v)
         for k, v in reference.items()
-        if k in {"cplex", "ortools", "schedulenet", "som", "aco", "ea"}
+        if k in {"ortools", "schedulenet", "som", "aco", "ea"}
     }
+    if bool(reference["cplex_proven_optimal"]):
+        values["cplex_opt"] = float(reference["cplex"])
     method = min(values, key=values.get)
     return method, values[method]
 
@@ -491,7 +495,7 @@ def run_mtsplib(args, genes, run_dir: Path, cache_dir: Path, device: str):
         )
         parsed_name, coords = _parse_tsplib(text)
         reference = MTSPLIB_REFERENCE[(name, robots)]
-        best_method, best_value = _best_reference(reference)
+        best_method, best_value = _best_feasible_reference(reference)
 
         for gene_name, gene in genes:
             result = evaluate_mtsplib_gene(gene, coords, robots, device)
@@ -503,14 +507,20 @@ def run_mtsplib(args, genes, run_dir: Path, cache_dir: Path, device: str):
                 "tasks": len(coords) - 1,
                 "gene": gene_name,
                 "gene_value": value,
-                "published_best_method": best_method,
-                "published_best_value": best_value,
-                "gap_to_published_best_pct": 100.0 * (value - best_value) / best_value,
-                "cplex_value": reference["cplex"],
+                "published_best_feasible_method": best_method,
+                "published_best_feasible_value": best_value,
+                "gap_to_published_best_feasible_pct": (
+                    100.0 * (value - best_value) / best_value
+                ),
+                "cplex_reference_midpoint_or_optimum": reference["cplex"],
                 "cplex_proven_optimal": reference["cplex_proven_optimal"],
-                "gap_to_cplex_pct": 100.0 * (
-                    value - float(reference["cplex"])
-                ) / float(reference["cplex"]),
+                "gap_to_proven_optimum_pct": (
+                    100.0
+                    * (value - float(reference["cplex"]))
+                    / float(reference["cplex"])
+                    if bool(reference["cplex_proven_optimal"])
+                    else None
+                ),
                 "ortools": reference["ortools"],
                 "schedulenet": reference["schedulenet"],
                 "som": reference["som"],
