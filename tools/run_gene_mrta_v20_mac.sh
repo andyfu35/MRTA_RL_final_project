@@ -22,7 +22,7 @@ print("V20_MPS_AVAILABLE", torch.backends.mps.is_available())
 PY
 
 if [[ "$MODE" == "tests" ]]; then
-  pytest -q tests/test_gene_mrta_v20.py
+  pytest -q tests/test_gene_mrta_v20.py tests/test_gene_mrta_v20_ood_generalization.py
 elif [[ "$MODE" == "smoke" ]]; then
   python -m marl2d.gene_mrta_v20.train \
     --run-dir "${V20_RUN_DIR:-$ROOT/smoke_8g_10s_2r_seed200_epsgrid_v2}" \
@@ -63,7 +63,38 @@ elif [[ "$MODE" == "train-50" ]]; then
     --priority-resolution "$V20_PRIORITY_RESOLUTION" \
     --on-time-completed-tasks-resolution "$V20_ONTIME_RESOLUTION" \
     --device auto
+elif [[ "$MODE" == "ood-smoke" || "$MODE" == "ood-formal" ]]; then
+  V20_OOD_CHECKPOINT="${V20_OOD_CHECKPOINT:-$ROOT/longrun_1024g_200r_seed200/checkpoint.json}"
+  V20_OOD_SEED="${V20_OOD_SEED:-20070001}"
+  V20_OOD_CELLS="${V20_OOD_CELLS:-10x50,20x100,25x100,40x100,60x100,20x125,20x150,20x200,20x300,25x125,40x200,60x300}"
+  if [[ "$MODE" == "ood-formal" ]]; then
+    V20_OOD_SEEDS="${V20_OOD_SEEDS:-100}"
+  else
+    V20_OOD_SEEDS="${V20_OOD_SEEDS:-20}"
+  fi
+  V20_OOD_STAMP="$(date +%Y%m%d_%H%M%S)"
+  V20_OOD_RUN_DIR="${V20_OOD_RUN_DIR:-$ROOT/zero_shot_size_ood_${MODE}_${V20_OOD_STAMP}_seed${V20_OOD_SEED}}"
+  echo "V20_OOD_CHECKPOINT=$V20_OOD_CHECKPOINT"
+  echo "V20_OOD_RUN_DIR=$V20_OOD_RUN_DIR"
+  echo "V20_OOD_SEEDS=$V20_OOD_SEEDS"
+  echo "V20_OOD_SEED=$V20_OOD_SEED"
+  echo "V20_OOD_CELLS=$V20_OOD_CELLS"
+  EXTRA_ARGS=()
+  if [[ -n "${V20_OOD_TOTAL_TIME_GENE_ID:-}" ]]; then
+    EXTRA_ARGS+=(--total-time-gene-id "$V20_OOD_TOTAL_TIME_GENE_ID")
+  fi
+  if [[ -n "${V20_OOD_ONTIME_GENE_ID:-}" ]]; then
+    EXTRA_ARGS+=(--on-time-gene-id "$V20_OOD_ONTIME_GENE_ID")
+  fi
+  python -m marl2d.gene_mrta_v20.ood_generalization \
+    --checkpoint "$V20_OOD_CHECKPOINT" \
+    --run-dir "$V20_OOD_RUN_DIR" \
+    --seeds "$V20_OOD_SEEDS" \
+    --seed "$V20_OOD_SEED" \
+    --cells "$V20_OOD_CELLS" \
+    --device auto \
+    "${EXTRA_ARGS[@]}"
 else
-  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50]" >&2
+  echo "Usage: bash tools/run_gene_mrta_v20_mac.sh [tests|smoke|analyze-grid|train-50|ood-smoke|ood-formal]" >&2
   exit 2
 fi
