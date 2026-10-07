@@ -438,3 +438,51 @@ The canonical static Task record is:
 
 Robot battery is a hard feasibility constraint; A* paths and consequence
 features remain derived state rather than static Task fields.
+
+
+## V2.0 zero-shot size generalization
+
+A new evaluation-only OOD protocol is implemented on
+`experiment/gene-global-set-mrta-v2`.
+
+Source run:
+
+- `runs/gene_mrta_v20/longrun_1024g_200r_seed200/checkpoint.json`;
+- 200 rounds indexed 0..199;
+- 1024 Genes/round;
+- fixed 100 training worlds;
+- training cardinality range 5..20 robots and 10..100 tasks;
+- final Round-199 Bank size = 222.
+
+Frozen specialists at the end of the current run:
+
+- Total-Time: `5b448ba2073a90eba8d5`, total_time 58.07686007499695 s;
+- On-Time: `ba1efa666ac266786b69`, on_time_completed_tasks 55.09 and total_time 62.88902631759643 s.
+
+New experiment:
+
+- `src/marl2d/gene_mrta_v20/ood_generalization.py`;
+- `tests/test_gene_mrta_v20_ood_generalization.py`;
+- `docs/GENE_GLOBAL_SET_MRTA_V20_OOD_GENERALIZATION.md`;
+- launcher modes `ood-smoke` and `ood-formal`.
+
+Default OOD grid contains in-distribution control, training boundary, robot-only
+OOD, task-only OOD, and both-axis OOD up to 60R/300T.
+
+Primary metrics:
+
+- raw Total Time;
+- mean per-world TotalTime/BaselineTime;
+- raw Priority rank;
+- exact mean per-world On-time percentage;
+- evaluation runtime.
+
+OOD seeds are deterministic and disjoint from all 100 training seeds.
+Both frozen Genes see the same worlds. OOD results never feed back into
+training, mutation, parent selection, or the Gene Bank.
+
+Next frozen action:
+
+1. run `bash tools/run_gene_mrta_v20_mac.sh tests`;
+2. run `bash tools/run_gene_mrta_v20_mac.sh ood-smoke`;
+3. inspect 20-seed/cell results before starting `ood-formal`.
