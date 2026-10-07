@@ -183,3 +183,65 @@ Primary size-generalization evidence is:
 Only after the default grid is measured should an extreme 100R/500T cell be
 added. The extreme test is descriptive unless repeated over enough unseen
 seeds.
+
+
+## Workload-ratio OOD matrix
+
+A second preset isolates whether zero-shot behavior depends mainly on absolute
+cardinality or on task load per robot.
+
+Robots:
+
+- 20
+- 40
+- 60
+
+Tasks per Robot:
+
+- 2.5
+- 5
+- 10
+- 15
+
+Default matrix:
+
+| Robots | Tasks | Tasks/Robot |
+|---:|---:|---:|
+| 20 | 50 | 2.5 |
+| 20 | 100 | 5 |
+| 20 | 200 | 10 |
+| 20 | 300 | 15 |
+| 40 | 100 | 2.5 |
+| 40 | 200 | 5 |
+| 40 | 400 | 10 |
+| 40 | 600 | 15 |
+| 60 | 150 | 2.5 |
+| 60 | 300 | 5 |
+| 60 | 600 | 10 |
+| 60 | 900 | 15 |
+
+The evaluator now records `tasks_per_robot` directly in protocol, summary,
+and per-seed outputs.
+
+The smoke run uses 20 unseen seeds per cell from seed namespace `20100001`,
+which is separate from the earlier size-OOD smoke namespace.
+
+Smoke command:
+
+```bash
+bash tools/run_gene_mrta_v20_mac.sh ood-load-smoke
+```
+
+Formal 100-seed command:
+
+```bash
+bash tools/run_gene_mrta_v20_mac.sh ood-load-formal
+```
+
+Interpretation:
+
+- compare rows at fixed Tasks/Robot to measure absolute-size degradation;
+- compare columns at fixed Robot count to measure load degradation;
+- do not treat larger raw Total Time as failure by itself;
+- use TotalTime/BaselineTime and exact On-time percentage as the primary
+  cross-scale indicators.
