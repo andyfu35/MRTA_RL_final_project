@@ -2,7 +2,7 @@ import numpy as np
 
 from marl2d.gene_mrta_v20.public_benchmark import (
     MTSPLIB_REFERENCE,
-    _best_reference,
+    _best_feasible_reference,
     _parse_tsplib,
     _parse_twpc_csv,
     _parse_twpc_solution,
@@ -31,7 +31,8 @@ def test_published_mtsplib_reference_marks_only_supported_true_optima():
     assert MTSPLIB_REFERENCE[("eil51", 2)]["cplex_proven_optimal"] is True
     assert MTSPLIB_REFERENCE[("eil76", 2)]["cplex_proven_optimal"] is True
     assert MTSPLIB_REFERENCE[("eil51", 5)]["cplex_proven_optimal"] is False
-    method, value = _best_reference(MTSPLIB_REFERENCE[("eil51", 5)])
+    assert np.isclose(MTSPLIB_REFERENCE[("eil51", 5)]["cplex"], 110.43)
+    method, value = _best_feasible_reference(MTSPLIB_REFERENCE[("eil51", 5)])
     assert method == "schedulenet"
     assert np.isclose(value, 118.94)
 
